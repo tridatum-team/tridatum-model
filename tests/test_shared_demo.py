@@ -451,6 +451,34 @@ class AskBackAnnexTests(WorkspaceTests.__base__):
         self.assertEqual(titles, ['가기관 여비 규정', '가기관 여비 규정 [별표 2] 국내 여비 지급표', '나기관 여비 규칙'])
 
 
+class DomainContractTests(WorkspaceTests.__base__):
+    """RETRIEVAL-ROOT-008: a blank form is evidence only for a question asking for a form; an everyday word counts as
+    covered by its official term only inside the rules B cited for that relation (DATA-CONTINUE-007 T01)."""
+    TEXTS = {'a': ('가기관 여비 규정', '제1조(여비) 공무로 여행하는 직원의 여비는 운임, 일비, 숙박비 및 식비로 한다.'),
+             'b': ('나기관 국외출장 규정', '[별지 제1호 서식] 국외출장 계획서 출장비 출장경비 금액 부담기관 출장기간')}
+
+    def setUp(self):
+        WorkspaceTests.setUp(self)
+        self.ws.form_mask = self.ws.passage_doc == 'b'  # b's passages stand for the index path "서식 1"
+
+    def test_form_passages_are_evidence_only_when_a_form_is_asked(self):
+        asked = self.ws.select('국외출장 계획서 서식')
+        self.assertEqual(asked['retrieval']['form_passages'], 'included (form asked)')
+        self.assertIn('b', {asked.get('applied')} | {c['doc_id'] for c in asked.get('candidates', [])})
+        paid = self.ws.select('출장비 금액 부담')
+        self.assertEqual(paid['retrieval']['form_passages'], 'not evidence')
+        self.assertNotIn('b', {paid.get('applied')} | {o['doc_id'] for o in paid.get('others', [])})
+
+    def test_everyday_word_is_covered_by_the_official_term_only_in_the_cited_rule(self):
+        topical = {'출장비': 10.0}
+        a = [i for i, d in enumerate(self.ws.passage_doc) if d == 'a']
+        self.assertFalse(self.ws.relevant(a, None, topical))  # the rule text says 여비, never 출장비
+        self.ws.term_equivalents = {'출장비': {'a': ['여비']}}
+        self.assertTrue(self.ws.relevant(a, None, topical))
+        self.ws.term_equivalents = {'출장비': {'b': ['여비']}}  # cited elsewhere: a stays uncovered
+        self.assertFalse(self.ws.relevant(a, None, topical))
+
+
 class ConversationScopeTests(unittest.TestCase):
     def test_recall_markers(self):
         from scripts.shared_demo import request_type

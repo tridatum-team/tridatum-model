@@ -580,6 +580,30 @@ TABLE_ROWS = [(ROOT / 'data/law-byl/v2-structure-003-rows-001/queryable-rows.jso
                ROOT / 'reports/coordination/B-030/byl-index-links.jsonl'),
               (ROOT / 'reports/coordination/B-029/reb-yeobi-reviewed-rows.jsonl', None)]
 REVIEWED = 'ai_visual_review_match'
+# B's DATA-CONTINUE-007 domain contract, pinned by sha256 (a changed file stops the service at startup): every term
+# relation and applicability record carries verbatim source quotes that B's scripts/check_topic_sources.py located.
+#   term-map.jsonl: an everyday word and the official term it equals under a stated condition ("equivalent_when",
+#     e.g. 출장비 → 여비: 공무 여행의 운임·일비·숙박비·식비) or the cases where it does not (not_equivalent …).
+#   applies-to-backfill.jsonl: applies_to of documents whose own record is missing (a rule's 별표 without its body).
+DOMAIN_CONTRACT = ROOT / 'reports/coordination/DATA-CONTINUE-007'
+TERM_MAP = (DOMAIN_CONTRACT / 'term-map.jsonl', '531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897')
+APPLIES_BACKFILL = (DOMAIN_CONTRACT / 'applies-to-backfill.jsonl',
+                    'f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4')
+# A form (서식) passage — the index path's last part is "서식 N" (B: the index's own structure, not a word list) — is a
+# blank template: what to fill in, never a rule, an amount or a standard. It is evidence only for a question asking
+# for a form; otherwise documents are judged by their rule text (DATA-CONTINUE-007 T04).
+FORM_PATH = re.compile(r'서식\s*\d+(?:\s*의\s*\d+)?')
+FORM_ASKED = re.compile(r'양식|서식|별지|신청서|계획서')
+
+
+def pinned_jsonl(spec):
+    """Rows of a pinned B file, [] when the file is absent (the feature is then off and Workspace.domain says so)."""
+    if not spec or not Path(spec[0]).exists():
+        return []
+    data = Path(spec[0]).read_bytes()
+    if hashlib.sha256(data).hexdigest() != spec[1]:
+        raise ValueError(f'{spec[0]}: sha256 differs from the pinned contract; refusing to serve')
+    return [json.loads(line) for line in data.decode().splitlines() if line.strip()]
 
 
 NORMALIZE = re.compile(r'[\s·ㆍ・「」『』()（）\[\]〈〉<>,.\-]')
@@ -682,7 +706,7 @@ class Workspace:
     TOPICAL_DF = 0.02  # a question noun in at most this share of passages is topical (not 출장·공무원·기준 …)
 
     def __init__(self, directory, embedder=None, institutions=ROOT / 'data/corpus-inventory/alio-agencies.json',
-                 review=None, table_rows=TABLE_ROWS):
+                 review=None, table_rows=TABLE_ROWS, term_map=TERM_MAP, applies_backfill=APPLIES_BACKFILL):
         from trid.service.index import Index
         root = Path(directory)
         self.index = Index.load(root)
@@ -704,6 +728,28 @@ class Workspace:
                 self.title_grams.setdefault(t[i:i + self.TITLE_MIN], set()).add(doc_id)
         self.qa_docs = {d for d, m in self.meta.items() if any(x in (m['kind'] or '') for x in ('FAQ', '질의응답', '질의회신'))}
         self.authority = np.array([self.authority_of(self.meta[str(d)]['kind']) for d in self.passage_doc], np.float32)
+        self.form_mask = np.array([bool(p.path) and bool(FORM_PATH.fullmatch(p.path[-1] or '')) for p in self.index.passages])
+        # B's term relations (DATA-CONTINUE-007): only "equivalent_when" counts, one way (everyday → official term), and
+        # only inside the rules B cited as its source (their whole rule family, set below): there the official term is
+        # what the everyday word means (공무원 여비 규정: 여비 = 공무 여행의 운임·일비·숙박비·식비). Elsewhere the same
+        # word may mean something else (B's not_equivalent cases: 평가위원 출장비, 업무추진비 …), so it is not widened
+        # there, and the question itself is never rewritten.
+        terms = pinned_jsonl(term_map)
+        mine = 'inst:' if self.manifest.get('separate') else f'{self.name}:'
+        cited = {}
+        for t in terms:
+            if t.get('relation') == 'equivalent_when':
+                docs = {e['source'][len(mine):] for e in t.get('evidence', []) if e['source'].startswith(mine)}
+                cited.setdefault(t['everyday_term'], {}).setdefault(t['official_term'], set()).update(d for d in docs if d in self.meta)
+        # B's applicability records for documents without one of their own (never replacing an existing record).
+        backfill = pinned_jsonl(applies_backfill)
+        filled = 0
+        for entry in backfill:
+            for d in entry['doc_ids']:
+                if d in self.meta and not isinstance(self.meta[d].get('applies_to'), dict):
+                    self.meta[d]['applies_to'] = dict(entry['applies_to'], source='B DATA-CONTINUE-007 backfill')
+                    filled += 1
+        self.domain = {'term_map': len(terms), 'applies_backfilled': filled, 'form_passages': int(self.form_mask.sum())}
         # B's per-passage review (search-corpus-v4 metadata; texts and ids unchanged, so vectors stay valid): a
         # privacy-review passage is never retrieved (no model context, answer or source text); a value-hold passage's
         # numbers are not answer values (the reply points to the original page instead).
@@ -757,6 +803,14 @@ class Workspace:
                 if d in self.annex_id:
                     self.rule_tables.setdefault(base, {})[self.annex_id[d]] = d
         self.rule_of = {d: base for base, docs in self.rule_names.items() for d in docs}
+        # each cited rule with all its documents (body and 별표): {everyday word: {doc id: [official terms]}}
+        self.term_equivalents = {}
+        for word, officials in cited.items():
+            for official, docs in officials.items():
+                for d in docs:
+                    for f in self.rule_names.get(self.rule_of.get(d), {d}):
+                        self.term_equivalents.setdefault(word, {}).setdefault(f, []).append(official)
+        self.domain['term_scope'] = {w: sorted(self.meta[d]['title'][:40] for d in docs) for w, docs in self.term_equivalents.items()}
         self._link_table_rows(table_rows or [])
         self.dense, self.dense_info, self.embedder = None, None, embedder
         if (root / 'dense.f16.npy').exists():
@@ -1044,8 +1098,12 @@ class Workspace:
         if (best is not None and best >= self.STRONG_COS) or not topical:
             return True
         texts = ' '.join(self.index.passages[i].text for i in indices)
-        # A city named in the question is covered by its legal category in a rule table (부산 → 광역시).
-        present = lambda t: t in texts or (t in self.area_category and self.area_category[t] in texts)
+        # A city named in the question is covered by its legal category in a rule table (부산 → 광역시); an everyday word
+        # by the official term B's contract equates it with, inside the rules B cited for that relation (출장비 → 여비 in
+        # 공무원 여비 규정: its text says 여비, never 출장비). The passages here are one document's.
+        doc = str(self.passage_doc[indices[0]])
+        present = lambda t: (t in texts or (t in self.area_category and self.area_category[t] in texts)
+                             or any(o in texts for o in self.term_equivalents.get(t, {}).get(doc, ())))
         return sum(w for t, w in topical.items() if present(t)) >= self.COVERAGE * sum(topical.values())
 
     INSTITUTION_SUFFIX = re.compile(r'(공사|공단|위원회|재단|진흥원|연구원|은행|센터|청|처|부)$')
@@ -1188,6 +1246,13 @@ class Workspace:
         scores = everywhere
         if restrict is not None:
             scores = np.where(np.isin(self.passage_doc, list(restrict)), everywhere, -np.inf)
+        # A blank form says what to fill in, not what is paid or required: for a question not asking for a form, form
+        # passages are not evidence and documents are judged by their rule text (a 공무국외출장계획서 "출장경비" blank
+        # outscored the 여비 rule for "공공기관 출장비"). A question asking for a form keeps them.
+        forms = bool(FORM_ASKED.search(question))
+        if not forms and self.form_mask.any():
+            scores = np.where(self.form_mask, -np.inf, scores)
+        result['retrieval']['form_passages'] = 'included (form asked)' if forms else 'not evidence'
         order = [int(i) for i in np.argsort(-scores, kind='stable')[:60] if scores[i] > 0]
         by_doc = {}
         for i in order:
@@ -1219,8 +1284,9 @@ class Workspace:
         general = not (pinned or titled or named or result.get('continued'))
         subject = self.civil_service_subject(question)
         if general and subject:
-            # "지방공무원 …" is not answered from a rule whose own 제1조 limits it to 국가공무원 (B applies_to), and back.
-            kept = {d: s for d, s in best.items() if self.applies(d).get('scope') not in
+            # "지방공무원 …" is not answered from a rule whose own 제1조 limits it to 국가공무원 (B applies_to), and back;
+            # its 별표 carry the rule's record.
+            kept = {d: s for d, s in best.items() if rule_scope(self, d) not in
                     {'central_government', 'local_government'} - {subject}}
             if kept:
                 best = kept
@@ -2065,7 +2131,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                     result['scope'] += ' 자료 한계: ' + note
                                 if m.get('limitations'):
                                     result['source_limits'] = list(m['limitations'])  # for a visible warning (UI: B)
-                                applies = ws.applies(selection['applied']).get('scope')
+                                # a 별표 has no record of its own: its rule's applicability (공무원 여비 규정 [별표 8] → 국가공무원)
+                                applies = rule_scope(ws, selection['applied'])
                                 central = (applies == 'central_government' and selection['institutions']
                                            and all(n in ws.central_bodies for n in selection['institutions']))
                                 if central and '공무원' not in question:

@@ -1,0 +1,3911 @@
+{
+ "conditions": {
+  "before": "scripts/shared_demo.py at 2eb61db",
+  "after": "working tree of this commit",
+  "indexes": [
+   "runs/workspace-index/v5",
+   "runs/workspace-index/inst-reb-002"
+  ],
+  "embedder": "bge-m3 CPU",
+  "router": "not executed (search branch traced)",
+  "answer_model": "not executed",
+  "B_contract": {
+   "term-map.jsonl": "531b654b…",
+   "applies-to-backfill.jsonl": "f649524b…",
+   "form criterion": "index path last part 서식 N (5,273 passages, equals B form-passages.jsonl count)"
+  }
+ },
+ "questions": [
+  "공공기관 출장비",
+  "그러면 공공기관의 출장비",
+  "공공기관 출장비 지급 기준",
+  "출장비",
+  "출장비 기준",
+  "국내 출장비",
+  "출장비는 얼마야?",
+  "공무원 출장비",
+  "여비",
+  "공무원 여비",
+  "이전비 지급 기준",
+  "평가위원 출장비",
+  "출장비 업무추진비",
+  "공무국외출장계획서 양식",
+  "출장 신청서 서식",
+  "국외출장 계획서 작성 방법",
+  "문화체육관광부 출장비",
+  "법제처 공무국외출장 경비",
+  "부동산원 출장비",
+  "부동산원 출장 식비 기준은?",
+  "부동산원 평균 식비",
+  "공공기관 직원 국내 출장 식비는 하루 얼마야?",
+  "준정부기관 숙박비 기준",
+  "공공기관 임원 업무추진비는 직위별로 얼마야?",
+  "공기업 출장 일비",
+  "공공기관 출장 여비",
+  "공공기관 여비",
+  "지방공무원 출장 식비",
+  "국가공무원 국내 출장 숙박비",
+  "지방공무원 여비 기준"
+ ],
+ "before": {
+  "공공기관 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "공공기관",
+    "출장비"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "문화체육관광부",
+     "문화체육관광부 공무국외출장규정"
+    ],
+    [
+     "고위공직자범죄수사처",
+     "고위공직자범죄수사처 공무국외출장 운영 지침"
+    ],
+    [
+     "법제처",
+     "법제처 공무국외출장규정"
+    ],
+    [
+     "국가데이터처",
+     "국가데이터처 공무국외출장규정"
+    ]
+   ],
+   "notice": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   }
+  },
+  "그러면 공공기관의 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "출장비",
+    "공공기관"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "국방부",
+     "국방부 공무국외출장 훈령"
+    ],
+    [
+     "헌법재판소",
+     "헌법재판소 공무국외출장 내규"
+    ]
+   ],
+   "notice": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   }
+  },
+  "공공기관 출장비 지급 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비",
+    "공공기관"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.828,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.792,
+     "■ 공무원 여비 규정 [별표 8]  상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)  구분 지급 대상 지급 방법  "
+    ],
+    [
+     0.772,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "한국산업기술기획평가원",
+    "참여연구원의 출장비 집행 방법이 알고싶어요",
+    "FAQ"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.714,
+     "질문: 참여연구원의 출장비 집행 방법이 알고싶어요 답변: 참여연구원의 출장비를 연구비로 집행 원하는 경우내부규정에 따라 정해진"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "출장비 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "대법원",
+     "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+    ],
+    [
+     "방위사업청",
+     "공무국외출장 및 사적 국외여행 관리규정"
+    ]
+   ],
+   "notice": null
+  },
+  "국내 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "국내",
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.938,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.775,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.72,
+     "제21조(국내 가족여비) ① 국내 가족여비는 국내 이전자로서 이전할 때 가족(배우자, 본인 및 배우자의 직계존속ㆍ직계비속으로서"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "출장비는 얼마야?": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.887,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.728,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.724,
+     "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "공무원 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.918,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.772,
+     "■ 공무원 여비 규정 [별표 8]  상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)  구분 지급 대상 지급 방법  "
+    ],
+    [
+     0.766,
+     "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "not_found",
+   "reason": "irrelevant",
+   "topical": [
+    "여비"
+   ],
+   "form_passages": null,
+   "notice": null
+  },
+  "공무원 여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "여비"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급"
+    ]
+   ],
+   "notice": null
+  },
+  "이전비 지급 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "전비",
+    "이전비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.93,
+     "제20조(이전비의 지급) ① 이전비(移轉費)는 별표 5에 따라 지급한다. ② 이전비를 지급받으려는 공무원은 이전한 날의 다음 "
+    ],
+    [
+     0.921,
+     "제19조(이전비의 지급 대상) ① 국내 이전비는 다음 각 호의 어느 하나에 해당하는 공무원(이하 \"국내 이전자\"라 한다)으로서"
+    ],
+    [
+     0.903,
+     "■ 공무원 여비 규정 [별표 5]  이전비 지급 기준표(제20조 관련)  구분 지급 기준 지급액  국내 이전비 1. 5톤 이하"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "평가위원 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "방위사업청",
+    "방위력개선사업 협상에 의한 계약체결기준",
+    "행정규칙"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.9,
+     "제22조(평가수당 지급) ① 통합사업관리팀장은 제안서 평가 종료일로부터 5근무일 이내에 다음 각 호에 따라 예산범위 내에서 평"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "출장비 업무추진비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비",
+    "추진비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "교육부",
+    "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회계 세출예산 집행기",
+    "행정규칙 첨부(예규)"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.806,
+     "3. 업무추진비(230)  "
+    ],
+    [
+     0.769,
+     "4. 업무추진비(230목) \t 60 "
+    ],
+    [
+     0.727,
+     " ① 기관운영업무추진비(230-01), 사업추진업무추진비(230-02)  - 1) 집행원칙 - ○ ｢지방교육행정기관 업무추진비"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "공무국외출장계획서 양식": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "국외",
+    "계획서",
+    "양식"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ],
+    [
+     "방위사업청",
+     "공무국외출장 및 사적 국외여행 관리규정"
+    ]
+   ],
+   "notice": null
+  },
+  "출장 신청서 서식": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "신청서"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "국가공무원 복무규칙 [서식 0003] 출장신청서",
+    "법령 서식"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.947,
+     "■ 국가공무원 복무규칙 [별지 제3호서식]  출장신청서  20 . . .  <table> <tr><th rowspan=\"2\">"
+    ],
+    [
+     0.898,
+     "<tr><td colspan=\"15\">이동사항 :</td></tr> <tr><td colspan=\"3\">여비</td><td c"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "국외출장 계획서 작성 방법": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "국외",
+    "계획서"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "방위사업청",
+     "공무국외출장 및 사적 국외여행 관리규정"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ]
+   ],
+   "notice": null
+  },
+  "문화체육관광부 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "문화체육관광부",
+    "문화체육관광부 공무국외출장규정",
+    "행정규칙"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.81,
+     "[별지 제1호 서식]  공무국외출장계획서  1. 출장개요  출장목적  출장기간  출 장 국  방문기관  출 장 자 소속 직급 "
+    ],
+    [
+     0.764,
+     "제6조(출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하거나 동행하는 공무국"
+    ],
+    [
+     0.724,
+     "문화체육관광부 공무국외출장규정"
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "법제처 공무국외출장 경비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "국외"
+   ],
+   "form_passages": null,
+   "applied": [
+    "법제처",
+    "법제처 공무국외출장규정",
+    "행정규칙"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.873,
+     "[별지 제1호서식]  공무국외출장계획서  1. 출장개요  출장목적  출장 동기  및 배경  출장기간  출장국  출 장 자 소 "
+    ],
+    [
+     0.822,
+     "제10조(공무국외출장 대행사의 선정) 공무국외출장 대행사를 선정하려는 경우로서 「공무원 여비 규정」에 따라 산출한 출장금액 중"
+    ],
+    [
+     0.809,
+     "제8조(공무국외출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인(이하 \"직무상 이해관계자\"라 한다)이 출장경비의 "
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "부동산원 출장비": {
+   "path": "search",
+   "index": "inst-reb-002",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)",
+    "기관 내규(게시본)"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.836,
+     "- 왕복 2km 이내의 근거리 출장이고, 출장시간이 4시간 미만이므로 일비 미지급  ○ 직원이 개별주택검증 업무 수행을 위해 "
+    ],
+    [
+     0.702,
+     "- ① 운임 : 거주여건상 비록 출장일이 아닌 날에 이동하였지만, 이와 별도로 운임은 당연히 발생하는 비용이므로 운임 지급. "
+    ],
+    [
+     0.648,
+     "제7조(일비 지급기준) ① 시내출장의 출장시간 중 휴식시간이 포함되어 있는 경우에는 이를 출장시간에서 제외하지 않는다.  - "
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "부동산원 출장 식비 기준은?": {
+   "path": "search",
+   "index": "inst-reb-002",
+   "status": "answer",
+   "reason": null,
+   "topical": [],
+   "form_passages": null,
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+    "기관 내규(게시본)"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.672,
+     "제9조(국내출장) ① 국내출장 시 여비는 운임, 일비, 숙박비 및 식비를 지급한다.  ② 시내지역의 경우 식비는 별도로 지급 "
+    ],
+    [
+     0.586,
+     "제29조(여비의 조정) 직급을 달리하는 2명 이상의 임직원이 같은 목적으로 동행하여 출장 가는 경우에 출장목적 수행상 필요하다"
+    ],
+    [
+     0.579,
+     "| --- | --- | --- | --- | --- | --- | --- | | 금액 | 390,000 | 430,000 |"
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "부동산원 평균 식비": {
+   "path": "statistic",
+   "status": "not_found",
+   "answer": "한국부동산원에 대해 이 질문에 맞는 계산된 통계 값(직원 평균 등)은 검색 자료에 없습니다. 있는 자료: 기관 내규 게시본 3건(규정상 기준: 여비규정, 여비업무 처리지침, 예산요강), 임원 업무추진비 집행내역 9건"
+  },
+  "공공기관 직원 국내 출장 식비는 하루 얼마야?": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "국내",
+    "하루",
+    "공공기관",
+    "식비"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제"
+    ]
+   ],
+   "notice": null
+  },
+  "준정부기관 숙박비 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "준정부기관",
+    "숙박비"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+    ]
+   ],
+   "notice": null
+  },
+  "공공기관 임원 업무추진비는 직위별로 얼마야?": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "임원",
+    "추진비",
+    "공공기관"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0009] 특수업무수당 지급 구분"
+    ],
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정 [별표 0011] 특수업무수당 지급 구분표(제"
+    ]
+   ],
+   "notice": null
+  },
+  "공기업 출장 일비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "공기업",
+    "일비"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.942,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.778,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.767,
+     "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "공공기관 출장 여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "여비",
+    "공공기관"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+    "법령 별표"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.792,
+     "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "공공기관 여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "여비",
+    "공공기관"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+    "법령 별표"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.91,
+     "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+    ],
+    [
+     0.0,
+     "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] ■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "지방공무원 출장 식비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "식비",
+    "지방공무원"
+   ],
+   "form_passages": null,
+   "options": [
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0014] 직급보조비 지급구분표("
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 정액급식비는 월 13만원을 초과하여 지급될 수 있는지 여부(「"
+    ]
+   ],
+   "notice": null
+  },
+  "국가공무원 국내 출장 숙박비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "국내",
+    "숙박비",
+    "국가공무원"
+   ],
+   "form_passages": null,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.987,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.934,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.811,
+     "■ 공무원 여비 규정 [별표 4]  국외 여비 지급표(제16조제1항 관련)  (단위: 미 달러화($))  구분 등급 일비 숙박"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "지방공무원 여비 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "여비",
+    "지방공무원"
+   ],
+   "form_passages": null,
+   "applied": [
+    "행정안전부",
+    "지방공무원 수당 등에 관한 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.858,
+     "제18조의8(가산징수 등) ① 지방자치단체의 장과 지방의회의 의장은 「지방공무원법」 제46조제3항에 따라 소속 공무원이 거짓이"
+    ],
+    [
+     0.778,
+     "■ 지방공무원 수당 등에 관한 규정 [별표 11]  시간외근무수당 기준호봉표(제15조제3항 관련)  지급대상 기준호봉  1. "
+    ],
+    [
+     0.745,
+     "■ 지방공무원 수당 등에 관한 규정 [별표 14]  직급보조비 지급구분표(제18조의6 관련)  구분 월 지급액  모든 공무원("
+    ]
+   ],
+   "applies": "local_government",
+   "notice": null
+  }
+ },
+ "after": {
+  "공공기관 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "공공기관",
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ],
+    [
+     "행정안전부",
+     "지방자치단체 복식부기·재무회계 운영규정 - 지방자치단체 복식부기·재무회계"
+    ]
+   ],
+   "notice": null
+  },
+  "그러면 공공기관의 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "출장비",
+    "공공기관"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ]
+   ],
+   "notice": null
+  },
+  "공공기관 출장비 지급 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비",
+    "공공기관"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표(제29조제2항 관",
+    "법령 별표"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.869,
+     "■ 공무원 여비 규정 [별표 8] <개정 2025. 10. 1.>  <u>상시 출장 공무원의 여비 지급 기준표(제29조제2항 "
+    ],
+    [
+     0.0,
+     "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] 상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련) 단"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ],
+    [
+     "한국산업기술기획평가원",
+     "참여연구원의 출장비 집행 방법이 알고싶어요"
+    ]
+   ],
+   "notice": null
+  },
+  "출장비 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ],
+    [
+     "대법원",
+     "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+    ],
+    [
+     "방위사업청",
+     "공무국외출장 및 사적 국외여행 관리규정"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ]
+   ],
+   "notice": null
+  },
+  "국내 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "국내",
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.938,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.775,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.72,
+     "제21조(국내 가족여비) ① 국내 가족여비는 국내 이전자로서 이전할 때 가족(배우자, 본인 및 배우자의 직계존속ㆍ직계비속으로서"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "출장비는 얼마야?": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.887,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.728,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.724,
+     "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "공무원 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.918,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.772,
+     "■ 공무원 여비 규정 [별표 8]  상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)  구분 지급 대상 지급 방법  "
+    ],
+    [
+     0.766,
+     "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "not_found",
+   "reason": "irrelevant",
+   "topical": [
+    "여비"
+   ],
+   "form_passages": "not evidence",
+   "notice": null
+  },
+  "공무원 여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "여비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급"
+    ]
+   ],
+   "notice": null
+  },
+  "이전비 지급 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "전비",
+    "이전비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.93,
+     "제20조(이전비의 지급) ① 이전비(移轉費)는 별표 5에 따라 지급한다. ② 이전비를 지급받으려는 공무원은 이전한 날의 다음 "
+    ],
+    [
+     0.921,
+     "제19조(이전비의 지급 대상) ① 국내 이전비는 다음 각 호의 어느 하나에 해당하는 공무원(이하 \"국내 이전자\"라 한다)으로서"
+    ],
+    [
+     0.903,
+     "■ 공무원 여비 규정 [별표 5]  이전비 지급 기준표(제20조 관련)  구분 지급 기준 지급액  국내 이전비 1. 5톤 이하"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "평가위원 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "방위사업청",
+    "방위력개선사업 협상에 의한 계약체결기준",
+    "행정규칙"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.9,
+     "제22조(평가수당 지급) ① 통합사업관리팀장은 제안서 평가 종료일로부터 5근무일 이내에 다음 각 호에 따라 예산범위 내에서 평"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "출장비 업무추진비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "출장비",
+    "추진비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+    ]
+   ],
+   "notice": null
+  },
+  "공무국외출장계획서 양식": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "국외",
+    "계획서",
+    "양식"
+   ],
+   "form_passages": "included (form asked)",
+   "options": [
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ],
+    [
+     "방위사업청",
+     "공무국외출장 및 사적 국외여행 관리규정"
+    ]
+   ],
+   "notice": null
+  },
+  "출장 신청서 서식": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "신청서"
+   ],
+   "form_passages": "included (form asked)",
+   "applied": [
+    "인사혁신처",
+    "국가공무원 복무규칙 [서식 0003] 출장신청서",
+    "법령 서식"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.947,
+     "■ 국가공무원 복무규칙 [별지 제3호서식]  출장신청서  20 . . .  <table> <tr><th rowspan=\"2\">"
+    ],
+    [
+     0.898,
+     "<tr><td colspan=\"15\">이동사항 :</td></tr> <tr><td colspan=\"3\">여비</td><td c"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "국외출장 계획서 작성 방법": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "국외",
+    "계획서"
+   ],
+   "form_passages": "included (form asked)",
+   "options": [
+    [
+     "방위사업청",
+     "공무국외출장 및 사적 국외여행 관리규정"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ]
+   ],
+   "notice": null
+  },
+  "문화체육관광부 출장비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "문화체육관광부",
+    "문화체육관광부 공무국외출장규정",
+    "행정규칙"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.764,
+     "제6조(출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하거나 동행하는 공무국"
+    ],
+    [
+     0.724,
+     "문화체육관광부 공무국외출장규정"
+    ],
+    [
+     0.722,
+     "제4조(심사위원회의 설치 및 운영) ① 문화체육관광부장관은 다음 각 호의 어느 하나에 해당하는 공무국외출장의 타당성을 심사하기"
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "법제처 공무국외출장 경비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "국외"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "법제처",
+    "법제처 공무국외출장규정",
+    "행정규칙"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.822,
+     "제10조(공무국외출장 대행사의 선정) 공무국외출장 대행사를 선정하려는 경우로서 「공무원 여비 규정」에 따라 산출한 출장금액 중"
+    ],
+    [
+     0.809,
+     "제8조(공무국외출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인(이하 \"직무상 이해관계자\"라 한다)이 출장경비의 "
+    ],
+    [
+     0.771,
+     "검토한 후 출장목적을 효율적으로 수행할 수 있  는 시기를 선택하였는지 검토  ㆍ과ㆍ국별 업무 추진 계획 및 상황 등을 고려하"
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "부동산원 출장비": {
+   "path": "search",
+   "index": "inst-reb-002",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "출장비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)",
+    "기관 내규(게시본)"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.836,
+     "- 왕복 2km 이내의 근거리 출장이고, 출장시간이 4시간 미만이므로 일비 미지급  ○ 직원이 개별주택검증 업무 수행을 위해 "
+    ],
+    [
+     0.702,
+     "- ① 운임 : 거주여건상 비록 출장일이 아닌 날에 이동하였지만, 이와 별도로 운임은 당연히 발생하는 비용이므로 운임 지급. "
+    ],
+    [
+     0.648,
+     "제7조(일비 지급기준) ① 시내출장의 출장시간 중 휴식시간이 포함되어 있는 경우에는 이를 출장시간에서 제외하지 않는다.  - "
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "부동산원 출장 식비 기준은?": {
+   "path": "search",
+   "index": "inst-reb-002",
+   "status": "answer",
+   "reason": null,
+   "topical": [],
+   "form_passages": "not evidence",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+    "기관 내규(게시본)"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.672,
+     "제9조(국내출장) ① 국내출장 시 여비는 운임, 일비, 숙박비 및 식비를 지급한다.  ② 시내지역의 경우 식비는 별도로 지급 "
+    ],
+    [
+     0.586,
+     "제29조(여비의 조정) 직급을 달리하는 2명 이상의 임직원이 같은 목적으로 동행하여 출장 가는 경우에 출장목적 수행상 필요하다"
+    ],
+    [
+     0.579,
+     "| --- | --- | --- | --- | --- | --- | --- | | 금액 | 390,000 | 430,000 |"
+    ]
+   ],
+   "applies": "institution",
+   "notice": null
+  },
+  "부동산원 평균 식비": {
+   "path": "statistic",
+   "status": "not_found",
+   "answer": "한국부동산원에 대해 이 질문에 맞는 계산된 통계 값(직원 평균 등)은 검색 자료에 없습니다. 있는 자료: 기관 내규 게시본 3건(규정상 기준: 여비규정, 여비업무 처리지침, 예산요강), 임원 업무추진비 집행내역 9건"
+  },
+  "공공기관 직원 국내 출장 식비는 하루 얼마야?": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "국내",
+    "하루",
+    "공공기관",
+    "식비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제"
+    ]
+   ],
+   "notice": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   }
+  },
+  "준정부기관 숙박비 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "준정부기관",
+    "숙박비"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+    ]
+   ],
+   "notice": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   }
+  },
+  "공공기관 임원 업무추진비는 직위별로 얼마야?": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "임원",
+    "추진비",
+    "공공기관"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0009] 특수업무수당 지급 구분"
+    ],
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정 [별표 0011] 특수업무수당 지급 구분표(제"
+    ]
+   ],
+   "notice": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   }
+  },
+  "공기업 출장 일비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "공기업",
+    "일비"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.942,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.778,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.767,
+     "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "공공기관 출장 여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "여비",
+    "공공기관"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+    "법령 별표"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.792,
+     "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "공공기관 여비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "여비",
+    "공공기관"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+    "법령 별표"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.91,
+     "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+    ],
+    [
+     0.0,
+     "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] ■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25"
+    ]
+   ],
+   "applies": null,
+   "notice": null
+  },
+  "지방공무원 출장 식비": {
+   "path": "search",
+   "index": "v5",
+   "status": "clarify",
+   "reason": null,
+   "topical": [
+    "식비",
+    "지방공무원"
+   ],
+   "form_passages": "not evidence",
+   "options": [
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0014] 직급보조비 지급구분표("
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 정액급식비는 월 13만원을 초과하여 지급될 수 있는지 여부(「"
+    ]
+   ],
+   "notice": null
+  },
+  "국가공무원 국내 출장 숙박비": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "국내",
+    "숙박비",
+    "국가공무원"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.987,
+     "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+    ],
+    [
+     0.934,
+     "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+    ],
+    [
+     0.811,
+     "■ 공무원 여비 규정 [별표 4]  국외 여비 지급표(제16조제1항 관련)  (단위: 미 달러화($))  구분 등급 일비 숙박"
+    ]
+   ],
+   "applies": "central_government",
+   "notice": null
+  },
+  "지방공무원 여비 기준": {
+   "path": "search",
+   "index": "v5",
+   "status": "answer",
+   "reason": null,
+   "topical": [
+    "여비",
+    "지방공무원"
+   ],
+   "form_passages": "not evidence",
+   "applied": [
+    "행정안전부",
+    "지방공무원 수당 등에 관한 규정",
+    "법령"
+   ],
+   "scope_note": null,
+   "chunks": [
+    [
+     0.858,
+     "제18조의8(가산징수 등) ① 지방자치단체의 장과 지방의회의 의장은 「지방공무원법」 제46조제3항에 따라 소속 공무원이 거짓이"
+    ],
+    [
+     0.778,
+     "■ 지방공무원 수당 등에 관한 규정 [별표 11]  시간외근무수당 기준호봉표(제15조제3항 관련)  지급대상 기준호봉  1. "
+    ],
+    [
+     0.745,
+     "■ 지방공무원 수당 등에 관한 규정 [별표 14]  직급보조비 지급구분표(제18조의6 관련)  구분 월 지급액  모든 공무원("
+    ]
+   ],
+   "applies": "local_government",
+   "notice": null
+  }
+ },
+ "rejected_variants": {
+  "query widening (출장비 → +여비 in BM25/dense query) + unscoped coverage": {
+   "공공기관 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "공공기관",
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ],
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ]
+    ],
+    "notice": null
+   },
+   "그러면 공공기관의 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ],
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ]
+    ],
+    "notice": null
+   },
+   "공공기관 출장비 지급 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ],
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ]
+    ],
+    "notice": null
+   },
+   "국내 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국내",
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비는 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제"
+     ]
+    ],
+    "notice": null
+   },
+   "공무원 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표(제29조제2항 관",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.954,
+      "■ 공무원 여비 규정 [별표 8] <개정 2025. 10. 1.>  <u>상시 출장 공무원의 여비 지급 기준표(제29조제2항 "
+     ],
+     [
+      0.0,
+      "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] 상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련) 단"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "not_found",
+    "reason": "irrelevant",
+    "topical": [
+     "여비"
+    ],
+    "form_passages": "not evidence",
+    "notice": null
+   },
+   "공무원 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "여비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급"
+     ]
+    ],
+    "notice": null
+   },
+   "이전비 지급 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "전비",
+     "이전비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.93,
+      "제20조(이전비의 지급) ① 이전비(移轉費)는 별표 5에 따라 지급한다. ② 이전비를 지급받으려는 공무원은 이전한 날의 다음 "
+     ],
+     [
+      0.921,
+      "제19조(이전비의 지급 대상) ① 국내 이전비는 다음 각 호의 어느 하나에 해당하는 공무원(이하 \"국내 이전자\"라 한다)으로서"
+     ],
+     [
+      0.903,
+      "■ 공무원 여비 규정 [별표 5]  이전비 지급 기준표(제20조 관련)  구분 지급 기준 지급액  국내 이전비 1. 5톤 이하"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "평가위원 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ],
+     [
+      "조달청",
+      "품질보증조달물품 지정 및 관리규정"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비 업무추진비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "추진비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ]
+    ],
+    "notice": null
+   },
+   "공무국외출장계획서 양식": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국외",
+     "계획서",
+     "양식"
+    ],
+    "form_passages": "included (form asked)",
+    "options": [
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ],
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장 신청서 서식": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "신청서"
+    ],
+    "form_passages": "included (form asked)",
+    "applied": [
+     "인사혁신처",
+     "국가공무원 복무규칙 [서식 0003] 출장신청서",
+     "법령 서식"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.947,
+      "■ 국가공무원 복무규칙 [별지 제3호서식]  출장신청서  20 . . .  <table> <tr><th rowspan=\"2\">"
+     ],
+     [
+      0.898,
+      "<tr><td colspan=\"15\">이동사항 :</td></tr> <tr><td colspan=\"3\">여비</td><td c"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "국외출장 계획서 작성 방법": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국외",
+     "계획서"
+    ],
+    "form_passages": "included (form asked)",
+    "options": [
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ]
+    ],
+    "notice": null
+   },
+   "문화체육관광부 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "문화체육관광부",
+     "문화체육관광부 공무국외출장규정",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.756,
+      "출장등은 연간운영계획과 예산에 사전 반영되도록 함  (나) 출장경비는 공무원여비규정에 의하여 산출?지급함  (다)타 기관으로부"
+     ],
+     [
+      0.744,
+      "제6조(출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하거나 동행하는 공무국"
+     ],
+     [
+      0.689,
+      "문화체육관광부 공무국외출장규정"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "법제처 공무국외출장 경비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "국외"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "법제처",
+     "법제처 공무국외출장규정",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.822,
+      "제10조(공무국외출장 대행사의 선정) 공무국외출장 대행사를 선정하려는 경우로서 「공무원 여비 규정」에 따라 산출한 출장금액 중"
+     ],
+     [
+      0.809,
+      "제8조(공무국외출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인(이하 \"직무상 이해관계자\"라 한다)이 출장경비의 "
+     ],
+     [
+      0.771,
+      "검토한 후 출장목적을 효율적으로 수행할 수 있  는 시기를 선택하였는지 검토  ㆍ과ㆍ국별 업무 추진 계획 및 상황 등을 고려하"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 출장비": {
+    "path": "search",
+    "index": "inst-reb-002",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국부동산원",
+     "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+     "기관 내규(게시본)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.84,
+      "제1조(목적) 이 규정은 상임이사, 감사 및 직원이 업무로 국내외를 출장할 때에 지급할 여비의 내용과 그 지급기준 등을 정함을"
+     ],
+     [
+      0.818,
+      "제2조(적용범위) ① 상임이사, 감사 및 직원(이하 “임직원”이라 한다)의 여비는 따로 정함이 없는 경우에는 이 규정에 의한다"
+     ],
+     [
+      0.804,
+      "제6조(여비의 계산) ① 여비는 일반적인 경로 및 방법에 의하여 계산한다. 다만, 업무의 형편상 또는 천재지변이나 그 밖의 부"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 출장 식비 기준은?": {
+    "path": "search",
+    "index": "inst-reb-002",
+    "status": "answer",
+    "reason": null,
+    "topical": [],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국부동산원",
+     "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+     "기관 내규(게시본)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.672,
+      "제9조(국내출장) ① 국내출장 시 여비는 운임, 일비, 숙박비 및 식비를 지급한다.  ② 시내지역의 경우 식비는 별도로 지급 "
+     ],
+     [
+      0.586,
+      "제29조(여비의 조정) 직급을 달리하는 2명 이상의 임직원이 같은 목적으로 동행하여 출장 가는 경우에 출장목적 수행상 필요하다"
+     ],
+     [
+      0.579,
+      "| --- | --- | --- | --- | --- | --- | --- | | 금액 | 390,000 | 430,000 |"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 평균 식비": {
+    "path": "statistic",
+    "status": "not_found",
+    "answer": "한국부동산원에 대해 이 질문에 맞는 계산된 통계 값(직원 평균 등)은 검색 자료에 없습니다. 있는 자료: 기관 내규 게시본 3건(규정상 기준: 여비규정, 여비업무 처리지침, 예산요강), 임원 업무추진비 집행내역 9건"
+   },
+   "공공기관 직원 국내 출장 식비는 하루 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국내",
+     "하루",
+     "공공기관",
+     "식비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "준정부기관 숙박비 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "준정부기관",
+     "숙박비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공공기관 임원 업무추진비는 직위별로 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "임원",
+     "추진비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ],
+     [
+      "행정안전부",
+      "지방공무원 수당 등에 관한 규정 [별표 0009] 특수업무수당 지급 구분"
+     ],
+     [
+      "인사혁신처",
+      "공무원수당 등에 관한 규정 [별표 0011] 특수업무수당 지급 구분표(제"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공기업 출장 일비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "공기업",
+     "일비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.942,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.778,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ],
+     [
+      0.767,
+      "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "공공기관 출장 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "여비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.792,
+      "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "공공기관 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "여비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.91,
+      "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+     ],
+     [
+      0.0,
+      "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] ■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   }
+  },
+  "coverage equivalence everywhere, no widening": {
+   "공공기관 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "공공기관",
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ],
+     [
+      "보건복지부",
+      "보건복지상담센터 계약직상담사 인사관리규정"
+     ],
+     [
+      "행정안전부",
+      "지방자치단체 복식부기·재무회계 운영규정 - 지방자치단체 복식부기·재무회계"
+     ]
+    ],
+    "notice": null
+   },
+   "그러면 공공기관의 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "국가공무원 복무·징계 관련 예규 - 「국가공무원 복무·징계 관련 예규」("
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ],
+     [
+      "보건복지부",
+      "보건복지상담센터 계약직상담사 인사관리규정"
+     ]
+    ],
+    "notice": null
+   },
+   "공공기관 출장비 지급 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "보건복지부",
+      "보건복지상담센터 계약직상담사 인사관리규정"
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ],
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ]
+    ],
+    "notice": null
+   },
+   "국내 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "국내",
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.938,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.775,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ],
+     [
+      0.72,
+      "제21조(국내 가족여비) ① 국내 가족여비는 국내 이전자로서 이전할 때 가족(배우자, 본인 및 배우자의 직계존속ㆍ직계비속으로서"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "출장비는 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ]
+    ],
+    "notice": null
+   },
+   "공무원 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.918,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.772,
+      "■ 공무원 여비 규정 [별표 8]  상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)  구분 지급 대상 지급 방법  "
+     ],
+     [
+      0.766,
+      "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "not_found",
+    "reason": "irrelevant",
+    "topical": [
+     "여비"
+    ],
+    "form_passages": "not evidence",
+    "notice": null
+   },
+   "공무원 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "여비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급"
+     ]
+    ],
+    "notice": null
+   },
+   "이전비 지급 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "전비",
+     "이전비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.93,
+      "제20조(이전비의 지급) ① 이전비(移轉費)는 별표 5에 따라 지급한다. ② 이전비를 지급받으려는 공무원은 이전한 날의 다음 "
+     ],
+     [
+      0.921,
+      "제19조(이전비의 지급 대상) ① 국내 이전비는 다음 각 호의 어느 하나에 해당하는 공무원(이하 \"국내 이전자\"라 한다)으로서"
+     ],
+     [
+      0.903,
+      "■ 공무원 여비 규정 [별표 5]  이전비 지급 기준표(제20조 관련)  구분 지급 기준 지급액  국내 이전비 1. 5톤 이하"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "평가위원 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "방위사업청",
+      "방위력개선사업 협상에 의한 계약체결기준"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ]
+    ],
+    "notice": null
+   },
+   "출장비 업무추진비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "추진비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ],
+     [
+      "방위사업청",
+      "국제계약지원단 운영규정"
+     ]
+    ],
+    "notice": null
+   },
+   "공무국외출장계획서 양식": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국외",
+     "계획서",
+     "양식"
+    ],
+    "form_passages": "included (form asked)",
+    "options": [
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ],
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장 신청서 서식": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "신청서"
+    ],
+    "form_passages": "included (form asked)",
+    "applied": [
+     "인사혁신처",
+     "국가공무원 복무규칙 [서식 0003] 출장신청서",
+     "법령 서식"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.947,
+      "■ 국가공무원 복무규칙 [별지 제3호서식]  출장신청서  20 . . .  <table> <tr><th rowspan=\"2\">"
+     ],
+     [
+      0.898,
+      "<tr><td colspan=\"15\">이동사항 :</td></tr> <tr><td colspan=\"3\">여비</td><td c"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "국외출장 계획서 작성 방법": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국외",
+     "계획서"
+    ],
+    "form_passages": "included (form asked)",
+    "options": [
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ]
+    ],
+    "notice": null
+   },
+   "문화체육관광부 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "문화체육관광부",
+     "문화체육관광부 공무국외출장규정",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.764,
+      "제6조(출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하거나 동행하는 공무국"
+     ],
+     [
+      0.724,
+      "문화체육관광부 공무국외출장규정"
+     ],
+     [
+      0.722,
+      "제4조(심사위원회의 설치 및 운영) ① 문화체육관광부장관은 다음 각 호의 어느 하나에 해당하는 공무국외출장의 타당성을 심사하기"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "법제처 공무국외출장 경비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "국외"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "법제처",
+     "법제처 공무국외출장규정",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.822,
+      "제10조(공무국외출장 대행사의 선정) 공무국외출장 대행사를 선정하려는 경우로서 「공무원 여비 규정」에 따라 산출한 출장금액 중"
+     ],
+     [
+      0.809,
+      "제8조(공무국외출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인(이하 \"직무상 이해관계자\"라 한다)이 출장경비의 "
+     ],
+     [
+      0.771,
+      "검토한 후 출장목적을 효율적으로 수행할 수 있  는 시기를 선택하였는지 검토  ㆍ과ㆍ국별 업무 추진 계획 및 상황 등을 고려하"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 출장비": {
+    "path": "search",
+    "index": "inst-reb-002",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국부동산원",
+     "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)",
+     "기관 내규(게시본)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.836,
+      "- 왕복 2km 이내의 근거리 출장이고, 출장시간이 4시간 미만이므로 일비 미지급  ○ 직원이 개별주택검증 업무 수행을 위해 "
+     ],
+     [
+      0.702,
+      "- ① 운임 : 거주여건상 비록 출장일이 아닌 날에 이동하였지만, 이와 별도로 운임은 당연히 발생하는 비용이므로 운임 지급. "
+     ],
+     [
+      0.648,
+      "제7조(일비 지급기준) ① 시내출장의 출장시간 중 휴식시간이 포함되어 있는 경우에는 이를 출장시간에서 제외하지 않는다.  - "
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 출장 식비 기준은?": {
+    "path": "search",
+    "index": "inst-reb-002",
+    "status": "answer",
+    "reason": null,
+    "topical": [],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국부동산원",
+     "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+     "기관 내규(게시본)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.672,
+      "제9조(국내출장) ① 국내출장 시 여비는 운임, 일비, 숙박비 및 식비를 지급한다.  ② 시내지역의 경우 식비는 별도로 지급 "
+     ],
+     [
+      0.586,
+      "제29조(여비의 조정) 직급을 달리하는 2명 이상의 임직원이 같은 목적으로 동행하여 출장 가는 경우에 출장목적 수행상 필요하다"
+     ],
+     [
+      0.579,
+      "| --- | --- | --- | --- | --- | --- | --- | | 금액 | 390,000 | 430,000 |"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 평균 식비": {
+    "path": "statistic",
+    "status": "not_found",
+    "answer": "한국부동산원에 대해 이 질문에 맞는 계산된 통계 값(직원 평균 등)은 검색 자료에 없습니다. 있는 자료: 기관 내규 게시본 3건(규정상 기준: 여비규정, 여비업무 처리지침, 예산요강), 임원 업무추진비 집행내역 9건"
+   },
+   "공공기관 직원 국내 출장 식비는 하루 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국내",
+     "하루",
+     "공공기관",
+     "식비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "준정부기관 숙박비 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "준정부기관",
+     "숙박비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공공기관 임원 업무추진비는 직위별로 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "임원",
+     "추진비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ],
+     [
+      "행정안전부",
+      "지방공무원 수당 등에 관한 규정 [별표 0009] 특수업무수당 지급 구분"
+     ],
+     [
+      "인사혁신처",
+      "공무원수당 등에 관한 규정 [별표 0011] 특수업무수당 지급 구분표(제"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공기업 출장 일비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "공기업",
+     "일비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.942,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.778,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ],
+     [
+      0.767,
+      "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "공공기관 출장 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "여비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.792,
+      "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "공공기관 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "여비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.91,
+      "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+     ],
+     [
+      0.0,
+      "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] ■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   }
+  },
+  "forms only, no equivalence": {
+   "공공기관 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "공공기관",
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "행정안전부",
+     "지방자치단체 복식부기·재무회계 운영규정 - 지방자치단체 복식부기·재무회계 운영규정(행정안전",
+     "행정규칙 첨부(훈령)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.715,
+      "<tr><td></td><td></td><td></td><td></td><td></td><td></td><td>5213-03<"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "그러면 공공기관의 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "국방부",
+      "국방부 공무국외출장 훈령"
+     ],
+     [
+      "헌법재판소",
+      "헌법재판소 공무국외출장 내규"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공공기관 출장비 지급 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.828,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.792,
+      "■ 공무원 여비 규정 [별표 8]  상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)  구분 지급 대상 지급 방법  "
+     ],
+     [
+      0.772,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국산업기술기획평가원",
+     "참여연구원의 출장비 집행 방법이 알고싶어요",
+     "FAQ"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.714,
+      "질문: 참여연구원의 출장비 집행 방법이 알고싶어요 답변: 참여연구원의 출장비를 연구비로 집행 원하는 경우내부규정에 따라 정해진"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "출장비 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "대법원",
+      "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2"
+     ],
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ],
+     [
+      "중소벤처기업부",
+      "중소기업기술개발제품 우선구매제도 운영 등에 관한 시행세칙"
+     ]
+    ],
+    "notice": null
+   },
+   "국내 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "국내",
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.938,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.775,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ],
+     [
+      0.72,
+      "제21조(국내 가족여비) ① 국내 가족여비는 국내 이전자로서 이전할 때 가족(배우자, 본인 및 배우자의 직계존속ㆍ직계비속으로서"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "출장비는 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.887,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.728,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ],
+     [
+      0.724,
+      "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "공무원 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.918,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.772,
+      "■ 공무원 여비 규정 [별표 8]  상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)  구분 지급 대상 지급 방법  "
+     ],
+     [
+      0.766,
+      "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "not_found",
+    "reason": "irrelevant",
+    "topical": [
+     "여비"
+    ],
+    "form_passages": "not evidence",
+    "notice": null
+   },
+   "공무원 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "여비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급"
+     ]
+    ],
+    "notice": null
+   },
+   "이전비 지급 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "전비",
+     "이전비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.93,
+      "제20조(이전비의 지급) ① 이전비(移轉費)는 별표 5에 따라 지급한다. ② 이전비를 지급받으려는 공무원은 이전한 날의 다음 "
+     ],
+     [
+      0.921,
+      "제19조(이전비의 지급 대상) ① 국내 이전비는 다음 각 호의 어느 하나에 해당하는 공무원(이하 \"국내 이전자\"라 한다)으로서"
+     ],
+     [
+      0.903,
+      "■ 공무원 여비 규정 [별표 5]  이전비 지급 기준표(제20조 관련)  구분 지급 기준 지급액  국내 이전비 1. 5톤 이하"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "평가위원 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "방위사업청",
+     "방위력개선사업 협상에 의한 계약체결기준",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.9,
+      "제22조(평가수당 지급) ① 통합사업관리팀장은 제안서 평가 종료일로부터 5근무일 이내에 다음 각 호에 따라 예산범위 내에서 평"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "출장비 업무추진비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비",
+     "추진비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회계 세출예산 집행기",
+     "행정규칙 첨부(예규)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.806,
+      "3. 업무추진비(230)  "
+     ],
+     [
+      0.769,
+      "4. 업무추진비(230목) \t 60 "
+     ],
+     [
+      0.727,
+      " ① 기관운영업무추진비(230-01), 사업추진업무추진비(230-02)  - 1) 집행원칙 - ○ ｢지방교육행정기관 업무추진비"
+     ]
+    ],
+    "applies": "local_government",
+    "notice": null
+   },
+   "공무국외출장계획서 양식": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국외",
+     "계획서",
+     "양식"
+    ],
+    "form_passages": "included (form asked)",
+    "options": [
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ],
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ]
+    ],
+    "notice": null
+   },
+   "출장 신청서 서식": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "신청서"
+    ],
+    "form_passages": "included (form asked)",
+    "applied": [
+     "인사혁신처",
+     "국가공무원 복무규칙 [서식 0003] 출장신청서",
+     "법령 서식"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.947,
+      "■ 국가공무원 복무규칙 [별지 제3호서식]  출장신청서  20 . . .  <table> <tr><th rowspan=\"2\">"
+     ],
+     [
+      0.898,
+      "<tr><td colspan=\"15\">이동사항 :</td></tr> <tr><td colspan=\"3\">여비</td><td c"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "국외출장 계획서 작성 방법": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국외",
+     "계획서"
+    ],
+    "form_passages": "included (form asked)",
+    "options": [
+     [
+      "방위사업청",
+      "공무국외출장 및 사적 국외여행 관리규정"
+     ],
+     [
+      "중앙선거관리위원회",
+      "선거관리위원회 공무국외출장 규정"
+     ]
+    ],
+    "notice": null
+   },
+   "문화체육관광부 출장비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "문화체육관광부",
+     "문화체육관광부 공무국외출장규정",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.764,
+      "제6조(출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하거나 동행하는 공무국"
+     ],
+     [
+      0.724,
+      "문화체육관광부 공무국외출장규정"
+     ],
+     [
+      0.722,
+      "제4조(심사위원회의 설치 및 운영) ① 문화체육관광부장관은 다음 각 호의 어느 하나에 해당하는 공무국외출장의 타당성을 심사하기"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "법제처 공무국외출장 경비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "국외"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "법제처",
+     "법제처 공무국외출장규정",
+     "행정규칙"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.822,
+      "제10조(공무국외출장 대행사의 선정) 공무국외출장 대행사를 선정하려는 경우로서 「공무원 여비 규정」에 따라 산출한 출장금액 중"
+     ],
+     [
+      0.809,
+      "제8조(공무국외출장의 제한) ① 직무상 이해관계가 있는 기관·단체 또는 개인(이하 \"직무상 이해관계자\"라 한다)이 출장경비의 "
+     ],
+     [
+      0.771,
+      "검토한 후 출장목적을 효율적으로 수행할 수 있  는 시기를 선택하였는지 검토  ㆍ과ㆍ국별 업무 추진 계획 및 상황 등을 고려하"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 출장비": {
+    "path": "search",
+    "index": "inst-reb-002",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "출장비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국부동산원",
+     "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)",
+     "기관 내규(게시본)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.836,
+      "- 왕복 2km 이내의 근거리 출장이고, 출장시간이 4시간 미만이므로 일비 미지급  ○ 직원이 개별주택검증 업무 수행을 위해 "
+     ],
+     [
+      0.702,
+      "- ① 운임 : 거주여건상 비록 출장일이 아닌 날에 이동하였지만, 이와 별도로 운임은 당연히 발생하는 비용이므로 운임 지급. "
+     ],
+     [
+      0.648,
+      "제7조(일비 지급기준) ① 시내출장의 출장시간 중 휴식시간이 포함되어 있는 경우에는 이를 출장시간에서 제외하지 않는다.  - "
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 출장 식비 기준은?": {
+    "path": "search",
+    "index": "inst-reb-002",
+    "status": "answer",
+    "reason": null,
+    "topical": [],
+    "form_passages": "not evidence",
+    "applied": [
+     "한국부동산원",
+     "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+     "기관 내규(게시본)"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.672,
+      "제9조(국내출장) ① 국내출장 시 여비는 운임, 일비, 숙박비 및 식비를 지급한다.  ② 시내지역의 경우 식비는 별도로 지급 "
+     ],
+     [
+      0.586,
+      "제29조(여비의 조정) 직급을 달리하는 2명 이상의 임직원이 같은 목적으로 동행하여 출장 가는 경우에 출장목적 수행상 필요하다"
+     ],
+     [
+      0.579,
+      "| --- | --- | --- | --- | --- | --- | --- | | 금액 | 390,000 | 430,000 |"
+     ]
+    ],
+    "applies": "institution",
+    "notice": null
+   },
+   "부동산원 평균 식비": {
+    "path": "statistic",
+    "status": "not_found",
+    "answer": "한국부동산원에 대해 이 질문에 맞는 계산된 통계 값(직원 평균 등)은 검색 자료에 없습니다. 있는 자료: 기관 내규 게시본 3건(규정상 기준: 여비규정, 여비업무 처리지침, 예산요강), 임원 업무추진비 집행내역 9건"
+   },
+   "공공기관 직원 국내 출장 식비는 하루 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "국내",
+     "하루",
+     "공공기관",
+     "식비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "인사혁신처",
+      "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13"
+     ],
+     [
+      "법원행정처",
+      "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "준정부기관 숙박비 기준": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "준정부기관",
+     "숙박비"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공공기관 임원 업무추진비는 직위별로 얼마야?": {
+    "path": "search",
+    "index": "v5",
+    "status": "clarify",
+    "reason": null,
+    "topical": [
+     "임원",
+     "추진비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "options": [
+     [
+      "교육부",
+      "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회"
+     ],
+     [
+      "행정안전부",
+      "지방공무원 수당 등에 관한 규정 [별표 0009] 특수업무수당 지급 구분"
+     ],
+     [
+      "인사혁신처",
+      "공무원수당 등에 관한 규정 [별표 0011] 특수업무수당 지급 구분표(제"
+     ]
+    ],
+    "notice": {
+     "asked": "public_institutions",
+     "common_rule_found": false
+    }
+   },
+   "공기업 출장 일비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "공기업",
+     "일비"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정",
+     "법령"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.942,
+      "제18조(근무지 내 국내 출장 시의 여비) ① 근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이"
+     ],
+     [
+      0.778,
+      "제16조(일비ㆍ숙박비ㆍ식비의 지급) ① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 "
+     ],
+     [
+      0.767,
+      "■ 공무원 여비 규정 [별표 2]  국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)  (단위: 원)  구분"
+     ]
+    ],
+    "applies": "central_government",
+    "notice": null
+   },
+   "공공기관 출장 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "여비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.792,
+      "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   },
+   "공공기관 여비": {
+    "path": "search",
+    "index": "v5",
+    "status": "answer",
+    "reason": null,
+    "topical": [
+     "여비",
+     "공공기관"
+    ],
+    "form_passages": "not evidence",
+    "applied": [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 ",
+     "법령 별표"
+    ],
+    "scope_note": null,
+    "chunks": [
+     [
+      0.91,
+      "■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25.>  <u>공무원이 아닌 사람에 대한 여비 지급 구분표(제30조"
+     ],
+     [
+      0.0,
+      "[검토된 표 행 · B AI 시각 대조, 승인·법률 자문 아님] ■ 공무원 여비 규정 [별표 9] <개정 2021. 5. 25"
+     ]
+    ],
+    "applies": null,
+    "notice": null
+   }
+  }
+ },
+ "tests": "PYTHONPATH=tests:. .venv/bin/python -m unittest test_shared_demo → 63 OK"
+}
