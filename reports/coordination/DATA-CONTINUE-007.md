@@ -13,9 +13,9 @@
   - 공통 금액을 만들지 않았다. 어느 자료도 "현행"으로 표시하지 않았다.
 
 ## 1. 결론
-  - 한국부동산원 사전정보공표 목록(2026-10-30 저장, 공개업무 132개)에 "식비" 항목이 없다.
+
 - **한국부동산원 평균 식비 자료는 확인한 공식 공개 범위에 없다.**
-  - 한국부동산원 사전정보공표 목록(2026-10-30 저장, 공개업무 100여 개)에 "식비" 항목이 없다.
+  - 한국부동산원 사전정보공표 목록(2026-10-30 저장, 공개업무 132개)에 "식비" 항목이 없다.
   - 평균형 항목은 "직원 초과근무수당 지급내역(1인당 평균 초과근무시간·수당)"과 "연간평균보상단가"뿐이다.
   - "1인당 복리후생비"(복리후생)·인건비·국외출장 내역은 ALIO로만 연결된다(접속 금지라 미확인).
   - 이미 있는 임원 업무추진비 집행내역 9건은 임원 실지출이다. 직원 평균이나 출장 식비 기준이 아니다(B-028 not_for 유지).
@@ -102,12 +102,12 @@
 
 ## 7. 실행 증거
 
+- **빌드:** `python3 scripts/check_topic_sources.py --index runs/workspace-index/v5 --inst-index runs/workspace-index/inst-reb-002 --ledger …/ledger-input.json --contract …/contract-input.json --out reports/coordination/DATA-CONTINUE-007`
   - 근거 인용 52개(원문 장부 30, 용어 대응 18, 적용 범위 4)를 모두 원문에서 위치를 찾았다. 하나라도 없으면 멈추는 구조다.
-  - 근거 인용 30 + 18개 전부 원문에서 위치를 찾았다. 하나라도 없으면 멈추는 구조다.
   - `summary.json`: code sha `3caabc5e…`, v5 manifest `1c9540ca…`, inst manifest `f2239545…`. 모든 출력 파일의 sha도 들어 있다.
 - **추출:**
   - PDF는 `pdftotext -layout`으로 추출했다.
   - HWP·HWPX는 기존 `collect_admrul_attachments.extract_text`로 추출했다.
-- **테스트:** 전체 단위 테스트를 커밋 게이트로 실행했다(아래 커밋 기록).
+- **테스트:** 커밋 전에 전체 단위 테스트를 게이트로 실행했다(OK).
 
 SUPERVISION_REPORT_READY DATA-CONTINUE-007
