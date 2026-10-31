@@ -1,0 +1,128 @@
+{
+ "task": "DATA-CONTINUE-007 (RETRIEVAL-CONTINUE-007 연결)",
+ "reviewer": "B (AI). Each quote is located verbatim (whitespace-insensitive) by scripts/check_topic_sources.py; the reading of each quote is B's, not a legal review.",
+ "term_map": [
+  {
+   "id": "T01",
+   "everyday_term": "출장비",
+   "official_term": "여비",
+   "relation": "equivalent_when",
+   "condition": "공무원(국가·법원)이나 공공기관 임직원이 공무로 여행(출장)할 때 지급하는 운임·일비·숙박비·식비를 묻는 경우",
+   "evidence": [
+    {"source": "v5:law-go-kr:law:290313", "quote": "이 영은 국가공무원이 공무(公務)로 여행을 하는 경우에 지급하는 여비에 관한 사항을 규정함으로써", "what": "여비 = 공무 여행 시 지급"},
+    {"source": "v5:law-go-kr:admrul:1106031000", "quote": "국외출장에 소요되는 비용의 지급 및 정산은 「공무원여비규정」에 따른다.", "what": "공식 규정이 '출장 비용'을 여비 규정으로 연결"},
+    {"source": "xml:data/law-ko-source/raw/law/273615.xml", "quote": "이 규칙은 법원공무원(법관을 포함한다)이 공무로 여행을 하는 경우에 지급하는 여비에 관한 사항을 규정함으로써", "what": "법원공무원도 같은 정의"},
+    {"source": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23", "quote": "여비는 운임, 일비, 숙박비, 식비, 부임여비 및 이전비 등으로 구분한다.", "what": "공공기관 내규도 '여비'라는 용어를 씀"}
+   ],
+   "retrieval_use": "'출장비' 질문의 검색어에 '여비'를 함께 넣는 근거. 단 아래 T02~T07의 비동일 경우는 넓히지 않는다."
+  },
+  {
+   "id": "T02",
+   "everyday_term": "출장비",
+   "official_term": "여비 중 이전비·가족여비·준비금",
+   "relation": "not_equivalent",
+   "condition": "여비에는 출장이 아닌 부임·이전에 따른 이전비·가족여비·준비금도 들어 있다. '출장비'로 이것까지 넓히지 않는다",
+   "evidence": [
+    {"source": "v5:law-go-kr:law:290313", "quote": "여비는 운임ㆍ일비ㆍ숙박비ㆍ식비ㆍ이전비ㆍ가족여비 및 준비금 등으로 구분한다.", "what": "여비의 범위가 출장보다 넓음"}
+   ]
+  },
+  {
+   "id": "T03",
+   "everyday_term": "출장비(근무지 안)",
+   "official_term": "근무지 내 국내 출장 시의 여비",
+   "relation": "equivalent_with_different_amount_rule",
+   "condition": "근무지 안 출장은 별표 2가 아니라 제18조의 정액(4시간 이상 2만원, 미만 1만원)이다. 별표 2 금액으로 답하지 않는다",
+   "evidence": [
+    {"source": "v5:law-go-kr:law:290313", "quote": "근무지 내 국내 출장의 경우에는 제16조에도 불구하고 출장 여행시간이 4시간 이상인 공무원에게는 2만원을 지급하고, 4시간 미만인 공무원에게는 1만원을 지급한다.", "what": "근무지 내 출장 정액"}
+   ]
+  },
+  {
+   "id": "T04",
+   "everyday_term": "출장비/출장경비/출장비용 (서식 칸)",
+   "official_term": "공무국외출장 서식의 기재 칸",
+   "relation": "not_equivalent",
+   "condition": "서식(별지)의 '출장경비', '출장비용'은 출장자가 적는 빈칸이다. 지급 기준이나 금액의 근거가 아니다",
+   "evidence": [
+    {"source": "v5:law-go-kr:admrul:2100000271734", "quote": "공무국외출장계획서\n\n1. 출장개요", "what": "path '서식 2' 구간(빈 서식)"},
+    {"source": "v5:law-go-kr:admrul:2100000271734", "quote": "출장자 출장비용 비고", "what": "path '서식 1' 구간(빈 서식)"}
+   ]
+  },
+  {
+   "id": "T05",
+   "everyday_term": "출장비",
+   "official_term": "(계약 평가위원·민간 근로자 실비) 출장비",
+   "relation": "not_equivalent",
+   "condition": "다른 제도에서 '출장비'라는 낱말을 쓰는 경우다. 공무원·공공기관 여비 기준으로 읽지 않는다",
+   "evidence": [
+    {"source": "v5:law-go-kr:admrul:2100000283972", "quote": "단, 내부위원은 출장비만 지급한다.", "what": "방위력개선사업 협상 계약 평가위원 참석비 맥락"},
+    {"source": "v5:law-go-kr:admrul:2100000213844", "quote": "구입비, 임차료, 출장비 등의 비용에 대하여는 사용자의 부담으로 하며", "what": "공연예술 분야 표준계약서(민간 근로자 실비)"}
+   ]
+  },
+  {
+   "id": "T06",
+   "everyday_term": "식비·밥값(접대)",
+   "official_term": "음식물 가액 범위 (청탁금지법·행동강령)",
+   "relation": "not_equivalent",
+   "condition": "공직자가 '받을 수 있는' 음식물 상한이다. 출장 식비 지급(여비)이나 평균 식비가 아니다",
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/text/law-byl-166625225.extract.txt", "quote": "음식물(제공자와 공직자등이 함께 하는 식사, 다과, 주류, 음료, 그 밖에 이에 준하는 것을 말한다): 5만원", "what": "청탁금지법 시행령 별표 1"},
+    {"source": "file:data/source-checks/dc007/text/reb-1244-98560.pdftotext.txt", "quote": "일률적으로 제공하는 교통, 숙박, 음식물 등의 금품등", "what": "행동강령의 수수 허용 예외"}
+   ]
+  },
+  {
+   "id": "T07",
+   "everyday_term": "출장비",
+   "official_term": "업무추진비",
+   "relation": "not_equivalent",
+   "condition": "예산 비목에서 여비와 업무추진비는 서로 다른 목이다. 업무추진비 집행내역으로 출장비를 답하지 않는다",
+   "evidence": [
+    {"source": "v5:law-go-kr:admrul-file:143116119", "quote": "3. 여비(220목)", "what": "여비 비목"},
+    {"source": "v5:law-go-kr:admrul-file:143116119", "quote": "4. 업무추진비(230목)", "what": "업무추진비 비목"}
+   ]
+  },
+  {
+   "id": "T08",
+   "everyday_term": "식비 단위",
+   "official_term": "식비(1일당) / 식비(1식)",
+   "relation": "unit_differs",
+   "condition": "공무원 여비 규정 별표 2는 1일당, 한국부동산원 여비규정 별표1은 1식이다. 단위를 밝히지 않고 비교하거나 평균하지 않는다",
+   "evidence": [
+    {"source": "v5:law-go-kr:law-byl:169708641", "quote": "식비<br>(1일당)", "what": "공무원 여비 규정 별표 2"},
+    {"source": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23", "quote": "식비<br>(1식)", "what": "한국부동산원 여비규정 별표1"}
+   ]
+  },
+  {
+   "id": "T09",
+   "everyday_term": "연차",
+   "official_term": "연가(공무원) / 연차휴가(공공기관 내규)",
+   "relation": "not_equivalent_across_populations",
+   "condition": "공무원은 '연가'(국가공무원 복무규정), 공공기관 직원은 기관 내규의 '연차휴가'다. 서로 대신 답하지 않는다",
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/text/reb-1244-116253.pdftotext.txt", "quote": "휴가는 연차휴가, 청원휴가, 인병휴가, 공가, 특별휴가로 구분한", "what": "한국부동산원 직원 복무규정"},
+    {"source": "v5:law-go-kr:law:290349", "quote": "연가일수", "what": "국가공무원 복무규정"}
+   ]
+  }
+ ],
+ "applies_to_backfill": [
+  {
+   "doc_ids": ["law-go-kr:law-byl:155902171", "law-go-kr:law-byl:155902177", "law-go-kr:law-byl:155902183", "law-go-kr:law-byl:155902217"],
+   "statute": "법원공무원 여비 규칙",
+   "applies_to": {"scope": "central_government", "population": "법원공무원(법관 포함)", "ids": [], "basis": "제1조(목적)"},
+   "note": "v5에는 이 규칙의 본문이 없고 별표 4건만 있다. 그래서 A의 rule_scope()가 본문 기록을 물려받지 못한다. scope 값은 A 계약의 열거값 중 '공무원 신분에만 적용'에 해당하는 central_government를 썼다(사법부 포함 의미)",
+   "evidence": [
+    {"source": "xml:data/law-ko-source/raw/law/273615.xml", "quote": "이 규칙은 법원공무원(법관을 포함한다)이 공무로 여행을 하는 경우에 지급하는 여비에 관한 사항을 규정함으로써", "what": "적용 대상 = 법원공무원"}
+   ]
+  },
+  {
+   "doc_ids": ["law-go-kr:admrul-file:143116119"],
+   "statute": "지방자치단체 교육비특별회계 세출예산 집행기준 (교육부 예규 제91호)",
+   "applies_to": {"scope": "local_government", "population": "시·도 교육비특별회계(교육감·지방교육행정기관)의 예산집행부서와 담당공무원", "ids": [], "basis": "2. 기본방향, 3. 일반기준"},
+   "note": "현재 applies_to는 '교육부 행정규칙의 첨부(별표·서식·지침 등)'라는 문서 종류 설명뿐이다. 목차의 '1. 목적' 절은 추출본에 없다(추출 누락).",
+   "evidence": [
+    {"source": "v5:law-go-kr:admrul-file:143116119", "quote": "예산집행부서 및 담당공무원에게 세부적인 집행기준을 제시하여", "what": "대상 = 예산집행부서·담당공무원"},
+    {"source": "v5:law-go-kr:admrul-file:143116119", "quote": "교육감은 「지방자치법」 제137조의 건전재정 운영 원칙과", "what": "집행 주체 = 교육감"},
+    {"source": "v5:law-go-kr:admrul-file:143116119", "quote": "[교육부 예규 제91호, 2024. 8. 1. 시행]", "what": "판·시행일"}
+   ]
+  }
+ ]
+}

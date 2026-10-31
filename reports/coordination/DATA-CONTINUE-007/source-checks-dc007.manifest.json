@@ -1,0 +1,110 @@
+{
+ "id": "source-checks-dc007",
+ "task": "DATA-CONTINUE-007",
+ "retrieved_at": "2026-10-31",
+ "producer": "B",
+ "requests": {
+  "reb.or.kr": 11,
+  "law.go.kr": 1,
+  "note": "all through scripts/logged_get.py (logs/requests-<host>.jsonl); robots.txt of both hosts allows these paths (B-027 check for reb.or.kr, law.go.kr Allow: /)"
+ },
+ "status": "verification sources; not indexed; holds: evaluation, training (same as other institution rules)",
+ "files": [
+  {
+   "path": "raw/reb-1244-116253-직원복무규정.pdf",
+   "bytes": 444410,
+   "sha256": "60b3ce78755ba7dbc99ae81afd6a2b95332cfb39b8194eba856afb26a73945e4",
+   "download_url": "https://www.reb.or.kr/reb/common/nttFileDownload.do?fileKey=4d643de48c4541a80ec49ec81367e0e8",
+   "page": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=116253",
+   "title": "직원 복무규정 일부개정규정안.PDF (게시 2026.08.20)",
+   "license": "한국부동산원 저작권 정책: 저작권법 제24조의2에 따라 한국부동산원이 저작재산권 전부를 보유한 저작물은 별도 이용허락 없이 자유이용 가능 (https://www.reb.or.kr/reb/cm/cntnts/cntntsView.do?mi=9977&cntntsId=1293)",
+   "text": "text/reb-1244-116253.pdftotext.txt",
+   "text_sha256": "683e36961fa4bb521bf862b509967043eee4de8217d59acb728080cf7d5a32b2",
+   "pii_hint_hits": 0
+  },
+  {
+   "path": "raw/reb-1244-98560-임직원행동강령.pdf",
+   "bytes": 725573,
+   "sha256": "f8eafee96eda455e78998e61da66427ae162e34141e175a8b63c5bae58d0d766",
+   "download_url": "https://www.reb.or.kr/reb/common/nttFileDownload.do?fileKey=d055ea9f899188353bd11412c5ec114a",
+   "page": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=98560",
+   "title": "한국부동산원 임직원 행동강령 일부개정강령안.PDF (게시 2024.08.27)",
+   "license": "한국부동산원 저작권 정책: 저작권법 제24조의2에 따라 한국부동산원이 저작재산권 전부를 보유한 저작물은 별도 이용허락 없이 자유이용 가능 (https://www.reb.or.kr/reb/cm/cntnts/cntntsView.do?mi=9977&cntntsId=1293)",
+   "text": "text/reb-1244-98560.pdftotext.txt",
+   "text_sha256": "e91ae8646556cecea024fc2df2bc0a13365c8d236cee052ac3dbce4233646dfc",
+   "pii_hint_hits": 0
+  },
+  {
+   "path": "raw/reb-1248-116291-초과근무수당지급내역.hwpx",
+   "bytes": 34204,
+   "sha256": "0e8b61f106dae9fa7fcb6bb2a9560221bd8dadf669e5b7bc1f0a2cd888731838",
+   "download_url": "https://www.reb.or.kr/reb/common/nttFileDownload.do?fileKey=1d2b972aa909bf4628463dbee242f4fd",
+   "page": "https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9624&bbsId=1248&searchType=sj&searchValue=%EC%B4%88%EA%B3%BC%EA%B7%BC%EB%AC%B4",
+   "title": "직원 초과근무수당 지급내역(2025).hwpx (게시 2026.04.30; 본문 제목은 2024년도)",
+   "license": "한국부동산원 저작권 정책: 저작권법 제24조의2에 따라 한국부동산원이 저작재산권 전부를 보유한 저작물은 별도 이용허락 없이 자유이용 가능 (https://www.reb.or.kr/reb/cm/cntnts/cntntsView.do?mi=9977&cntntsId=1293)",
+   "text": "text/reb-1248-116291.extract.txt",
+   "text_sha256": "f63add4fe68fd5d46c0a60496f42e7a681afafeef9a474ce6a6d025a700e0e09",
+   "pii_hint_hits": 0
+  },
+  {
+   "path": "raw/law-byl-287511-166625225.hwp",
+   "bytes": 58880,
+   "sha256": "0189e15955e04f078f8d2a7f7cdd844ba50f2624b7209dc0bf8031b8105f7423",
+   "download_url": "https://www.law.go.kr/LSW/flDownload.do?flSeq=166625225",
+   "page": "https://www.law.go.kr/LSW/flDownload.do?flSeq=166625225",
+   "title": "부정청탁 및 금품등 수수의 금지에 관한 법률 시행령 [별표 1] (<개정 2024. 8. 27.>)",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "text": "text/law-byl-166625225.extract.txt",
+   "text_sha256": "b6cf0e57fb9864d5417f9659d7c6c6cec5316c4704809d4328c44e08b36c8710",
+   "pii_hint_hits": 0
+  }
+ ],
+ "pages": [
+  {
+   "path": "pages/reb-1244-116253-detail.html",
+   "bytes": 76873,
+   "sha256": "7c2b1b5b397b6b7f18e999af55667fca834134d16cc2292a4996255618181271"
+  },
+  {
+   "path": "pages/reb-1244-116253-filechk.json",
+   "bytes": 135,
+   "sha256": "85068356f2090df1cc909db62b1c9a8913492dc42c2570006f3ddca06c8d210d"
+  },
+  {
+   "path": "pages/reb-1244-98560-detail.html",
+   "bytes": 76882,
+   "sha256": "12b54adea8fd5e4aee445d2c9e6f2b8bfd9600733a276fdfdd32d22f71cc4677"
+  },
+  {
+   "path": "pages/reb-1244-98560-filechk.json",
+   "bytes": 157,
+   "sha256": "73837589b3048eeb6a00780af123a2bb04f5ad524ec398068b4442d502b964af"
+  },
+  {
+   "path": "pages/reb-1244-search-복무.html",
+   "bytes": 75724,
+   "sha256": "713ad401ab8fefa45bffa6fe0d0da8143593919ed3def11cb42905365978ce36"
+  },
+  {
+   "path": "pages/reb-1244-search-행동강령.html",
+   "bytes": 73929,
+   "sha256": "9a4662f606b554ff6f4caefea02eb7cdab002355abb41bf256a4341ae424a4e1"
+  },
+  {
+   "path": "pages/reb-1244-search-휴가.html",
+   "bytes": 66876,
+   "sha256": "fd492217f94a67ddba2019f11ac17386b69674a80e895a3a8b127209767ba10b"
+  },
+  {
+   "path": "pages/reb-1248-search-초과근무.html",
+   "bytes": 87778,
+   "sha256": "f968873fd52f7562fc618cccda01520ec029226c2abc826d703de424fa9a2286"
+  },
+  {
+   "path": "pages/reb-prior-info-list-20261030.html",
+   "bytes": 188802,
+   "sha256": "8e86e60c4d4dff193e330ea4fabfcf2b9ebae3cfce508983aec305a0a4303ad8"
+  }
+ ],
+ "bytes_total": 2046429
+}

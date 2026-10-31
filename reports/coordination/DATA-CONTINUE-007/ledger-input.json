@@ -1,0 +1,306 @@
+{
+ "task": "DATA-CONTINUE-007",
+ "reviewer": "B (AI). Each quote is located verbatim (whitespace-insensitive) in the named source by scripts/check_topic_sources.py; the rest of each entry is B's reading of that source, not a human or legal review.",
+ "entries": [
+  {
+   "id": "L01",
+   "topics": ["travel", "meal"],
+   "institution": {"name": "인사혁신처", "official_name": "인사혁신처 (공무원 여비 규정 소관)", "id": null},
+   "applies_to": "국가공무원 (지방공무원은 제29조의2에 따라 해당 지방자치단체 조례)",
+   "title": "공무원 여비 규정 (본문)",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "v5:law-go-kr:law:290313",
+   "source_uri": "http://www.law.go.kr/DRF/lawService.do?target=law&MST=290313&type=HTML",
+   "currency": {"stated": "공포 2026-09-29, 시행 2026-10-02 (v5 메타)", "verified": "law.go.kr 수집(2026-10-27~29) 시 현행 목록에 있었음. 그 뒤 재확인 안 함", "label_current": false},
+   "evidence": [
+    {"source": "v5:law-go-kr:law:290313", "quote": "① 국내 여행자의 일비(日費)ㆍ숙박비 및 식비는 별표 2에 따라 지급하고, 국외 여행자의 경우는 별표 4에 따라 지급한다.", "what": "국내는 별표 2, 국외는 별표 4"},
+    {"source": "v5:law-go-kr:law:290313", "quote": "이 영에도 불구하고 지방자치단체에 근무하는 공무원의 여비에 관하여는 해당 지방자치단체의 여비에 관한 조례를 적용한다.", "what": "지방공무원 적용 제외"}
+   ],
+   "table_conditions": "근무지 내 출장은 제18조(4시간 이상 2만원, 미만 1만원)가 별표 2보다 우선한다.",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "processing": "law.go.kr 본문 XML. v5 색인됨",
+   "status": "indexed_v5"
+  },
+  {
+   "id": "L02",
+   "topics": ["travel", "meal"],
+   "institution": {"name": "인사혁신처", "official_name": "인사혁신처", "id": null},
+   "applies_to": "국가공무원",
+   "title": "공무원 여비 규정 [별표 2] 국내 여비 지급표",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "v5:law-go-kr:law-byl:169708641",
+   "source_uri": "https://www.law.go.kr/LSW/flDownload.do?flSeq=169708641",
+   "currency": {"stated": "법령 공포 2026-09-29 (별표 파일, 법령 시행 2026-10-02)", "verified": "수집 시점 기준. 재확인 안 함", "label_current": false},
+   "evidence": [
+    {"source": "v5:law-go-kr:law-byl:169708641", "quote": "식비<br>(1일당)", "what": "식비 단위는 1일당"},
+    {"source": "v5:law-go-kr:law-byl:169708641", "quote": "그 밖의 지역은 70,000) | 25,000 |", "what": "제2호 식비 1일 25,000원"}
+   ],
+   "table_conditions": "단위가 1일당이다. 한국부동산원 여비규정 별표1의 '식비(1식)'과 단위가 다르므로 두 값을 같은 단위로 비교하거나 평균으로 섞으면 안 된다.",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "processing": "law-byl structure-003: structured. 표 행은 B-027~030에서 검토(이번에 재검증하지 않음)",
+   "status": "indexed_v5"
+  },
+  {
+   "id": "L03",
+   "topics": ["travel", "meal"],
+   "institution": {"name": "인사혁신처", "official_name": "인사혁신처", "id": null},
+   "applies_to": "국가공무원 국외 출장. 한국부동산원 여비규정 별표3이 체재비에 이 표를 준용한다",
+   "title": "공무원 여비 규정 [별표 4] 국외 여비 지급표",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "v5:law-go-kr:law:290313",
+   "source_uri": "https://www.law.go.kr/LSW/flDownload.do?flSeq=169708653",
+   "currency": {"stated": "별표 '개정 2021. 5. 25.', 법령 시행 2026-10-02 (law-byl structure-003)", "verified": "수집 시점 기준", "label_current": false},
+   "evidence": [
+    {"source": "v5:law-go-kr:law:290313", "quote": "국외 여행자의 경우는 별표 4에 따라 지급한다", "what": "국외 식비·일비·숙박비 근거가 별표 4"},
+    {"source": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23", "quote": "별표4를 준용하여 지급한다", "what": "한국부동산원 국외 체재비가 공무원 여비 규정 별표 4에 의존"}
+   ],
+   "table_conditions": "별표 4 파일(law-go-kr:law-byl:169708653)은 v5와 search-corpus-v2 문서에 없다(제외 사유 기록은 이번에 확인 못 함). 본문 290313의 [별표 4] 구간 연결로만 쓰인다(B-029). 단위는 미 달러화.",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "processing": "law-byl structure-003: structured (21행)",
+   "status": "not_in_v5_as_file"
+  },
+  {
+   "id": "L04",
+   "topics": ["travel", "meal"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150, 공기업(준시장형))", "id": "C0150"},
+   "applies_to": "한국부동산원 임직원",
+   "title": "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23",
+   "source_uri": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=115624",
+   "currency": {"stated": "마지막 부칙<2026.6.11> 시행 2026-07-01, 게시 2026-07-15", "verified": "게시본만. 이후 개정 미확인", "label_current": false},
+   "evidence": [
+    {"source": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23", "quote": "② 시내지역의 경우 식비는 별도로 지급 하지 아니한다.", "what": "제9조② 조건: 시내지역 식비 미지급"},
+    {"source": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23", "quote": "<th rowspan=\"2\">식비<br>(1식)</th>", "what": "식비 단위는 1식"},
+    {"source": "inst:reb.or.kr:1244:115624:file:329a8fd764b02d23", "quote": "<td>25,000</td><td>실비</td><td>12,500</td>", "what": "임원 행: 일비 25,000, 숙박비 실비, 식비 12,500"}
+   ],
+   "table_conditions": "별표1 식비는 1식 기준(12,500원). 공무원 여비 규정 별표 2(1일 25,000원)와 단위가 다르다. 시내지역 출장은 식비 미지급(제9조②).",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "kordoc·pdftotext 조문 대조, 별표 시각 대조와 검토 행(B-028/B-029)",
+   "status": "indexed_inst_reb_002"
+  },
+  {
+   "id": "L05",
+   "topics": ["travel", "meal"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150)", "id": "C0150"},
+   "applies_to": "한국부동산원 임직원",
+   "title": "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "inst:reb.or.kr:1244:111227:file:36360afa54d828fe",
+   "source_uri": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=111227",
+   "currency": {"stated": "부칙<2026.1.9>, 원문 시행일 표기 '2025년 1월 9일'", "verified": "게시본만. 시행일 오기 여부 미확인", "label_current": false},
+   "evidence": [
+    {"source": "inst:reb.or.kr:1244:111227:file:36360afa54d828fe", "quote": "식비는 규정 별표1에 따라 지급하되, 출장지에서 식사를 제공받아 실제 식비 지출이 발생하지 않는 경우에는 제공받는 1식당 규정 별표1에 따른 1식비를 감액하여 지급한다.", "what": "식사 제공 시 1식비 감액"}
+   ],
+   "table_conditions": "식비 감액 조건은 이 지침에 있고 여비규정 본문에는 없다. 두 문서를 함께 봐야 한다.",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "kordoc·pdftotext 조문 대조(B-027)",
+   "status": "indexed_inst_reb_002"
+  },
+  {
+   "id": "L06",
+   "topics": ["meal"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150)", "id": "C0150"},
+   "applies_to": "임원(원장·감사 등) 개인별 집행",
+   "title": "한국부동산원 임원 업무추진비 집행내역 2026-01~09 (9건)",
+   "source_type": "actual_spending",
+   "basis": "actual_spending",
+   "doc": "inst:reb.or.kr:1163:117863:file:63c8b23670547e39",
+   "source_uri": "https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9624&bbsId=1163",
+   "currency": {"stated": "집행월 2026-01~2026-09", "verified": "게시본 9건", "label_current": false},
+   "evidence": [
+    {"source": "meta:inst:reb.or.kr:1163:117863:file:63c8b23670547e39", "quote": "한국부동산원_2026년 9월 임원 업무추진비", "what": "임원 업무추진비 실지출"}
+   ],
+   "table_conditions": "임원의 업무추진비 실지출이다. 직원 평균 식비나 출장 식비 기준이 아니다(not_for 표시, B-028).",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "kordoc 표 행과 pdftotext 행 대조, 합계 일치(B-028)",
+   "status": "indexed_inst_reb_002"
+  },
+  {
+   "id": "L07",
+   "topics": ["meal", "service_leave"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150)", "id": "C0150"},
+   "applies_to": "공표 목록(자료 존재 여부 확인용)",
+   "title": "한국부동산원 사전정보공표 목록 (2026-10-30 저장본)",
+   "source_type": "disclosure_list",
+   "basis": null,
+   "doc": "file:data/source-checks/dc007/pages/reb-prior-info-list-20261030.html",
+   "source_uri": "https://www.reb.or.kr/reb/ad/bs/beffatinfosport/view/selectBeffatinfoList.do?mi=9624",
+   "currency": {"stated": "저장 2026-10-30 22:04 KST", "verified": "그 시점 목록", "label_current": false},
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/pages/reb-prior-info-list-20261030.html", "quote": "임원 업무추진비성 경비 사용내역", "what": "임원 실지출(1163 게시판)"},
+    {"source": "file:data/source-checks/dc007/pages/reb-prior-info-list-20261030.html", "quote": "1인당 평균 초과근무시간, 1인당 초과근무수당 지급액", "what": "직원 초과근무 평균(1248 게시판)"},
+    {"source": "file:data/source-checks/dc007/pages/reb-prior-info-list-20261030.html", "quote": "예산상 복리후생비, 사내근로복지기금, 항목별 복리후생비, 지급기준, 1인당 복리후생비", "what": "복리후생(링크는 ALIO, 금지라 미확인)"}
+   ],
+   "table_conditions": "목록 전체에 '식비' 공표 항목은 없다. '평균'이 들어간 항목은 초과근무(1인당 평균)와 보상단가뿐이다. 1인당 복리후생비·인건비·국외출장 내역은 ALIO로만 연결되어 확인하지 않았다.",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "HTML 표 파싱",
+   "status": "verification_page"
+  },
+  {
+   "id": "L08",
+   "topics": ["service_leave"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150)", "id": "C0150"},
+   "applies_to": "한국부동산원 직원",
+   "title": "한국부동산원 직원 복무규정 일부개정규정안(게시 2026.08.20)",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "file:data/source-checks/dc007/text/reb-1244-116253.pdftotext.txt",
+   "source_uri": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=116253",
+   "currency": {"stated": "부칙<2026.8.10> 시행 2026-08-20, 게시 2026-08-20", "verified": "게시본만. 이후 개정 미확인", "label_current": false},
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/text/reb-1244-116253.pdftotext.txt", "quote": "제28조(휴가의 종류) 휴가는 연차휴가, 청원휴가, 인병휴가, 공가, 특별휴가로 구분한", "what": "휴가 종류"},
+    {"source": "file:data/source-checks/dc007/text/reb-1244-116253.pdftotext.txt", "quote": "1. 전년도중 80% 이상 근무한 자 : 15일", "what": "연차휴가 기본 15일"},
+    {"source": "file:data/source-checks/dc007/text/reb-1244-116253.pdftotext.txt", "quote": "이 규정은 2026년 8월 20일부터 시행한다.", "what": "마지막 부칙 시행일"}
+   ],
+   "table_conditions": "공무원 '연가'가 아니라 '연차휴가'라는 용어를 쓰고, 근로기준법 체계(80% 출근 요건)를 따른다. 국가공무원 복무규정으로 대신 답하면 안 된다.",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "pdftotext 한 가지 판독기만(조문 대조 안 함). 32쪽, PII 힌트 0",
+   "status": "new_not_indexed"
+  },
+  {
+   "id": "L09",
+   "topics": ["meal"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150)", "id": "C0150"},
+   "applies_to": "한국부동산원 임직원(받는 쪽 제한)",
+   "title": "한국부동산원 임직원 행동강령 일부개정강령안(게시 2024.08.27)",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "file:data/source-checks/dc007/text/reb-1244-98560.pdftotext.txt",
+   "source_uri": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=98560",
+   "currency": {"stated": "부칙<2024.8.27> 시행 2024-08-27, 게시 2024-08-27", "verified": "게시본만. 2024.08.27 이후 게시본은 검색 목록에 없음(2026-10-31 조회)", "label_current": false},
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/text/reb-1244-98560.pdftotext.txt", "quote": "준하는 것을 말한다): 5만원", "what": "별표3 음식물 가액 5만원"},
+    {"source": "file:data/source-checks/dc007/text/reb-1244-98560.pdftotext.txt", "quote": "제1조(시행일) 이 강령은 2024 년 8 월 27 일부터 시행한다.", "what": "시행일"}
+   ],
+   "table_conditions": "직원이 '받을 수 있는' 음식물 가액(접대 상한)이다. 출장 식비 지급 기준이나 평균 식비가 아니다.",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "pdftotext 한 가지 판독기만. 44쪽, PII 힌트 0",
+   "status": "new_not_indexed"
+  },
+  {
+   "id": "L10",
+   "topics": ["service_leave"],
+   "institution": {"name": "한국부동산원", "official_name": "한국부동산원 (ALIO C0150)", "id": "C0150"},
+   "applies_to": "직원 전체 집계(1인당 평균)",
+   "title": "한국부동산원 직원 초과근무수당 지급내역 (게시판 표기 2025, 파일 내용 2024)",
+   "source_type": "statistic_average",
+   "basis": "actual_spending",
+   "doc": "file:data/source-checks/dc007/text/reb-1248-116291.extract.txt",
+   "source_uri": "https://www.reb.or.kr/reb/na/ntt/selectNttList.do?mi=9624&bbsId=1248&searchType=sj&searchValue=%EC%B4%88%EA%B3%BC%EA%B7%BC%EB%AC%B4",
+   "currency": {"stated": "게시 2026-04-30", "verified": "연도 표기 불일치: 게시판 2025, 파일 본문 2024", "label_current": false},
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/pages/reb-1248-search-초과근무.html", "quote": "직원 초과근무수당 지급내역(2025).hwpx", "what": "게시판 첨부 이름은 2025"},
+    {"source": "file:data/source-checks/dc007/text/reb-1248-116291.extract.txt", "quote": "2024년도 직원 초과근무수당 지급 내역", "what": "파일 본문 제목은 2024"},
+    {"source": "file:data/source-checks/dc007/text/reb-1248-116291.extract.txt", "quote": "| 2024 | 29.5 | 1,242 |", "what": "1인당 평균 연 29.5시간, 1,242천원"},
+    {"source": "file:data/source-checks/dc007/text/reb-1248-116291.extract.txt", "quote": "※ 수당이 아닌 보상휴가 받은 초과근무시간 제외", "what": "집계 조건"}
+   ],
+   "table_conditions": "단위: 시간, 천원. 보상휴가로 받은 초과근무시간은 제외된다. 어느 연도 자료인지 확인할 때까지 연도를 단정해 답하지 않는다.",
+   "license": "한국부동산원 저작권 정책(저작권법 제24조의2 자유이용)",
+   "processing": "hwpx 추출(collect_admrul_attachments.extract_text). 표 2개",
+   "status": "new_not_indexed"
+  },
+  {
+   "id": "L11",
+   "topics": ["meal"],
+   "institution": {"name": "국민권익위원회", "official_name": "국민권익위원회 (부정청탁 및 금품등 수수의 금지에 관한 법률 시행령 소관)", "id": null},
+   "applies_to": "청탁금지법상 공직자등(받는 쪽 상한)",
+   "title": "부정청탁 및 금품등 수수의 금지에 관한 법률 시행령 [별표 1] 음식물ㆍ경조사비ㆍ선물 등의 가액 범위",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "file:data/source-checks/dc007/text/law-byl-166625225.extract.txt",
+   "source_uri": "https://www.law.go.kr/LSW/flDownload.do?flSeq=166625225",
+   "currency": {"stated": "별표 '<개정 2024. 8. 27.>', 시행령 공포·시행 2026-06-30 (law.go.kr 본문 XML 287511, 2026-10-27 수집)", "verified": "수집 시점 기준. 재확인 안 함", "label_current": false},
+   "evidence": [
+    {"source": "file:data/source-checks/dc007/text/law-byl-166625225.extract.txt", "quote": "<개정 2024. 8. 27.>", "what": "별표 개정일"},
+    {"source": "file:data/source-checks/dc007/text/law-byl-166625225.extract.txt", "quote": "음식물(제공자와 공직자등이 함께 하는 식사, 다과, 주류, 음료, 그 밖에 이에 준하는 것을 말한다): 5만원", "what": "음식물 가액 5만원"}
+   ],
+   "table_conditions": "공직자가 '받을 수 있는' 음식물 상한이다. 출장 식비 지급액이 아니다. 2024-08-27 개정 전 질의응답의 '3만원'은 그 시점 기준이다.",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "processing": "HWP 추출(collect_admrul_attachments.extract_text). v5에는 이 시행령과 별표가 없다",
+   "status": "new_not_indexed"
+  },
+  {
+   "id": "L12",
+   "topics": ["meal", "travel", "service_leave"],
+   "institution": {"name": "국민권익위원회", "official_name": "국민권익위원회", "id": null},
+   "applies_to": "질의자 개별 사안(청탁금지법 해석)",
+   "title": "국민권익위원회 청탁금지법 질의응답 게시판 (data.go.kr 15144457)",
+   "source_type": "qa_interpretation",
+   "basis": null,
+   "doc": "v5:data.go.kr:15144457:42",
+   "source_uri": "https://www.data.go.kr/data/15144457/fileData.do",
+   "currency": {"stated": "답변 연도별(2016~2025). 연도만 있고 월일 없음", "verified": "개별 답변의 현재 유효성은 확인 안 함", "label_current": false},
+   "evidence": [
+    {"source": "v5:data.go.kr:15144457:42", "quote": "직무와 관련된 음식물에 해당하는 것으로3만원의 기준을 잡아야하나요?", "what": "2016년 질의: 당시 음식물 3만원 기준"}
+   ],
+   "table_conditions": "청탁금지법상 '받는 것'의 허용 여부 해석이다. 기관 여비규정(출장 식비 지급)이나 기관 평균 식비를 대신하지 않는다. '3만원'을 말하는 답변 대부분이 2024-08-27 개정(5만원) 이전 연도다(qa-currency-flags.jsonl).",
+   "license": "이용허락범위 제한 없음 (data.go.kr)",
+   "processing": "질의·답변 텍스트, v5 색인됨",
+   "status": "indexed_v5"
+  },
+  {
+   "id": "L13",
+   "topics": ["meal"],
+   "institution": {"name": "국민권익위원회", "official_name": "국민권익위원회", "id": null},
+   "applies_to": "청탁금지법 일반 안내",
+   "title": "국민권익위원회 청탁금지법 질의응답 (data.go.kr 15169354)",
+   "source_type": "qa_interpretation",
+   "basis": null,
+   "doc": "meta:v5:data.go.kr:15169354:101",
+   "source_uri": "https://www.data.go.kr/data/15169354/fileData.do",
+   "currency": {"stated": "연도 2024~2026", "verified": "개별 현재 유효성 확인 안 함", "label_current": false},
+   "evidence": [
+    {"source": "meta:v5:data.go.kr:15169354:101", "quote": "청탁금지법(부정청탁 및 금품등 수수의 금지에 관한 법률)의 적용 대상 기관은 어디인가요?", "what": "일반 안내형 Q&A"}
+   ],
+   "table_conditions": "L12와 같이 청탁금지법 해석이다. 기관 규정을 대신하지 않는다.",
+   "license": "공공저작물 : 출처표시 (제 1유형)",
+   "processing": "v5 색인됨",
+   "status": "indexed_v5"
+  },
+  {
+   "id": "L14",
+   "topics": ["service_leave"],
+   "institution": {"name": "인사혁신처", "official_name": "인사혁신처", "id": null},
+   "applies_to": "국가공무원",
+   "title": "국가공무원 복무규정 (본문·별표) / 국가공무원 복무·징계 관련 예규(인사혁신처 예규 제225호)",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "v5:law-go-kr:admrul-file:170001959",
+   "source_uri": "http://www.law.go.kr/DRF/lawService.do?target=law&MST=290349&type=HTML",
+   "currency": {"stated": "복무규정 시행 2026-10-02, 예규 첨부 2026-10-01 (v5 메타)", "verified": "수집 시점 기준", "label_current": false},
+   "evidence": [
+    {"source": "meta:v5:law-go-kr:admrul-file:170001959", "quote": "「국가공무원 복무·징계 관련 예규」(인사혁신처 예규 제225호)", "what": "예규 판"},
+    {"source": "v5:law-go-kr:admrul-file:170001959", "quote": "근무장소로 복귀할 계획이 없는 경우에는 반일연가 또는 조퇴로 처리함", "what": "예규의 연가 처리 예"}
+   ],
+   "table_conditions": "국가공무원에만 적용된다. 공공기관(공기업·준정부기관) 직원은 기관 복무규정(예: L08)을 봐야 한다. 본문 290349의 수식 부분은 추출 시 줄이 끊겨 있다(연가 시간 계산식).",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "processing": "v5 색인됨",
+   "status": "indexed_v5"
+  },
+  {
+   "id": "L15",
+   "topics": ["service_leave"],
+   "institution": {"name": "행정안전부", "official_name": "행정안전부", "id": null},
+   "applies_to": "지방공무원",
+   "title": "지방공무원 복무규정",
+   "source_type": "rule_text",
+   "basis": "regulation_limit",
+   "doc": "meta:v5:law-go-kr:law:290493",
+   "source_uri": "http://www.law.go.kr/DRF/lawService.do?target=law&MST=290493&type=HTML",
+   "currency": {"stated": "시행 2026-10-02 (v5 메타)", "verified": "수집 시점 기준", "label_current": false},
+   "evidence": [
+    {"source": "meta:v5:law-go-kr:law:290493", "quote": "지방공무원 복무규정", "what": "v5 색인 확인"}
+   ],
+   "table_conditions": "지방공무원에만 적용된다.",
+   "license": "저작권법 제7조 (law.go.kr)",
+   "processing": "v5 색인됨",
+   "status": "indexed_v5"
+  }
+ ]
+}

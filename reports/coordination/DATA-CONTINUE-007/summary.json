@@ -1,0 +1,87 @@
+{
+ "code_sha256": "3caabc5e9f3c2e5cf5e1905ee393c559d96a386aebb34691d05de0ed009941f4",
+ "inputs": {
+  "index_manifest": "1c9540cab9a0a94f809e3d1de63bd7a9b6356d9d6f16857fb3e351d25cb9ba21",
+  "inst_manifest": "f2239545471bb95a8522532743b0e903ba6652d763d2faafb7efa45c3c1d1b0f",
+  "ledger": "51d4a8d0b95a71df3aca1478e53d623d8bebc0d097bba17c22af676b4c40dc7f",
+  "contract": "93efad615e813c65f2bae774c7df0a6c0596083780178ccc8457e2fdb2ea938a"
+ },
+ "source_ledger": {
+  "entries": 15,
+  "evidence_located": 30,
+  "status": {
+   "indexed_v5": 6,
+   "not_in_v5_as_file": 1,
+   "indexed_inst_reb_002": 3,
+   "verification_page": 1,
+   "new_not_indexed": 4
+  }
+ },
+ "term_map": {
+  "entries": 9,
+  "relations": {
+   "equivalent_when": 1,
+   "not_equivalent": 5,
+   "equivalent_with_different_amount_rule": 1,
+   "unit_differs": 1,
+   "not_equivalent_across_populations": 1
+  }
+ },
+ "applies_to_backfill": {
+  "entries": 2,
+  "documents": 5
+ },
+ "form_passages": {
+  "passages": 5273,
+  "starts_with_form_marker": 1771,
+  "continuation_without_marker": 3502
+ },
+ "topic_coverage": {
+  "documents": 1394,
+  "by_topic_class": {
+   "travel": {
+    "rule_text": 96,
+    "interpretation": 6,
+    "qa": 306
+   },
+   "meal": {
+    "interpretation": 4,
+    "qa": 652,
+    "actual_spending": 9
+   },
+   "service_leave": {
+    "rule_text": 233,
+    "interpretation": 41,
+    "press": 1,
+    "qa": 148
+   }
+  }
+ },
+ "qa_currency_flags": {
+  "documents": 1174,
+  "by_flag": {
+   "before_2024_limit_change": 1136,
+   "year_2024_or_later_check_date": 38
+  },
+  "by_year": {
+   "2016": 274,
+   "2017": 304,
+   "2018": 376,
+   "2019": 70,
+   "2020": 45,
+   "2021": 30,
+   "2022": 11,
+   "2023": 26,
+   "2024": 32,
+   "2025": 6
+  }
+ },
+ "outputs": {
+  "source-ledger.jsonl": "afdf1648703f3a23a16ddd429f3488b81300ba343a689893c97ff63e8012bce7",
+  "term-map.jsonl": "531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897",
+  "applies-to-backfill.jsonl": "f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4",
+  "form-passages.jsonl": "1ceb8eaaced561944bc1143b1134f47ac623d55b64e2770a15f585ba0390137d",
+  "topic-coverage.jsonl": "aa43152398e12f0d22bbc0a8269de0e7480bcf02648eb7e69f7e7f096a5674ea",
+  "qa-currency-flags.jsonl": "762b97ead44fffa1eb23c9c0ecbd570576df582a69d91303e0a5b168005301d2"
+ }
+}
