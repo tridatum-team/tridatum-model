@@ -1,0 +1,1310 @@
+{
+ "checkout": "/Users/eomgyuhyeon/사업/trid-model-024",
+ "sha": "e6848ebceeea4569d830e331de07cc48dc0f6196",
+ "device": "cpu",
+ "env": {
+  "LLAMA_ARG_DEVICE": "none",
+  "LLAMA_ARG_N_GPU_LAYERS": "0"
+ },
+ "pressure_before": "1",
+ "llama_device_lines": [],
+ "S1": [
+  {
+   "tag": "S1.1 REB",
+   "q": "한국부동산원 여비규정에서 국내 출장 일비는 얼마인가요?",
+   "http": 200,
+   "sec": 10.7,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": true,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+   ],
+   "others": [
+    [
+     "한국부동산원",
+     "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 7월 임원 업무추진비"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 5월 임원 업무추진비"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 3월 임원 업무추진비"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 9월 임원 업무추진비"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "1"
+   ],
+   "scope": "질문에 적힌 기관(한국부동산원)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 이 자료의 적용 범위(B 기록): 한국부동산원 임직원. 다른 기관에 그대로 적용되지 않음. 출처 메모(B): 내규공개 게시판(bbsId 1244)에 제목 \"…개정…안\"으로 게시됨. 파일은 개정이 반영된 전문(개정 이력·부칙 포함)이나, 확정·시행 여부를 따로 알리는 공고는 확인하지 않음. 사전예고 게시판(1245)과는 별개 게시판 출처 메모(B): 첫 쪽 개정 이력은 2026.01.12까지이나 부칙<2026.6.11>(2026.7.1 시행)이 있음. 개정 이력 갱신 누락 여부 미확인 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 1의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 row_source_span)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 질문이 금액·기준을 물었고, 처음 고른 「한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)」의 구간이 그 금액을 「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」의 별표에 따르도록 정하고 있어 같은 기관의 그 규정을 근거로 골랐습니다. 처리지침의 사례·공제 예시는 사례를 묻는 질문에 씁니다.",
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S1.2 true follow-up",
+   "q": "그 규정에서 숙박비는요?",
+   "http": 200,
+   "sec": 10.1,
+   "status": "quoted",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": true,
+   "pinned": false,
+   "continued": true,
+   "selection": "answer",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "1"
+   ],
+   "scope": "앞선 대화에서 쓴 문서(질문에 기관·문서명이 없어 이어서 찾음)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 이 자료의 적용 범위(B 기록): 한국부동산원 임직원. 다른 기관에 그대로 적용되지 않음. 출처 메모(B): 내규공개 게시판(bbsId 1244)에 제목 \"…개정…안\"으로 게시됨. 파일은 개정이 반영된 전문(개정 이력·부칙 포함)이나, 확정·시행 여부를 따로 알리는 공고는 확인하지 않음. 사전예고 게시판(1245)과는 별개 게시판 출처 메모(B): 첫 쪽 개정 이력은 2026.01.12까지이나 부칙<2026.6.11>(2026.7.1 시행)이 있음. 개정 이력 갱신 누락 여부 미확인 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 1의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 row_source_span)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다.",
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자가 일치하는 문장 1건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S1.3 explicit rule switch (국내/국외 unstated)",
+   "q": "공무원 여비 규정에서는 숙박비가 어떻게 되나요?",
+   "http": 200,
+   "sec": 10.1,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0003] 국외 항공운임 지급 기준표(제12조제2항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0001] 여비 지급 구분표(제3조 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": [
+    {
+     "annex": "2",
+     "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+     "unstated": [
+      "국내"
+     ]
+    },
+    {
+     "annex": "4",
+     "table": "국외 여비 지급표(제16조제1항 관련)",
+     "unstated": [
+      "국외"
+     ]
+    }
+   ],
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "answer": "「공무원 여비 규정」은 경우에 따라 다른 표를 씁니다: 별표 2(국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)), 별표 4(국외 여비 지급표(제16조제1항 관련)). 질문에 어느 경우인지(국내, 국외 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S1.4 follow-up after switch",
+   "q": "그럼 식비는?",
+   "http": 200,
+   "sec": 10.3,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": true,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": [
+    {
+     "annex": "2",
+     "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+     "unstated": [
+      "국내"
+     ]
+    },
+    {
+     "annex": "4",
+     "table": "국외 여비 지급표(제16조제1항 관련)",
+     "unstated": [
+      "국외"
+     ]
+    }
+   ],
+   "applicability": {
+    "rule_scope": "central_government",
+    "question_names_civil_servants": false,
+    "status": "not_confirmed"
+   },
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "앞선 대화에서 쓴 문서(질문에 기관·문서명이 없어 이어서 찾음)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "answer": "「공무원 여비 규정」은 경우에 따라 다른 표를 씁니다: 별표 2(국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)), 별표 4(국외 여비 지급표(제16조제1항 관련)). 질문에 어느 경우인지(국내, 국외 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 「공무원 여비 규정」은 국가공무원에게 적용되는 규정입니다(제1조 목적). 질문한 대상(예: 공공기관 직원)에게 적용되는지는 확인되지 않았으므로, 아래 원문의 금액·기준을 그 기관의 지급액으로 보지 말고 기관 자체 규정을 확인하세요. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S1.5 explicit switch back",
+   "q": "한국부동산원 기준으로 다시, 식비는요?",
+   "http": 200,
+   "sec": 13.1,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": true,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)"
+   ],
+   "others": [
+    [
+     "한국부동산원",
+     "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 5월 임원 업무추진비"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 8월 임원 업무추진비"
+    ],
+    [
+     "한국부동산원",
+     "한국부동산원_2026년 7월 임원 업무추진비"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "질문에 적힌 기관(한국부동산원)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 이 자료의 적용 범위(B 기록): 한국부동산원 임직원. 다른 기관에 그대로 적용되지 않음. 출처 메모(B): 내규공개 게시판(bbsId 1244)에 제목 \"…개정…안\"으로 게시됨. 파일은 개정이 반영된 전문(개정 이력·부칙 포함)이나, 확정·시행 여부를 따로 알리는 공고는 확인하지 않음. 사전예고 게시판(1245)과는 별개 게시판 출처 메모(B): 부칙<2026.1.9>의 본문이 \"이 지침은 2025년 1월 9일부터 시행한다\"로 되어 있음. 원문 그대로 두었고 오기 여부는 확인하지 않음",
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)」, 2025-01-09 · 2025-01-09 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문 부칙의 시행일 표기를 그대로 옮겼으며 오기 여부는 확인하지 않았습니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S1.6 rule not in corpus",
+   "q": "지방공무원 여비 규정에서 일비는?",
+   "http": 200,
+   "sec": 1.4,
+   "status": "not_found",
+   "reason": "rule_not_found",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "질문한 「지방공무원 여비 규정」을(를) 이 서비스의 검색 자료(공개 자료 색인)에서 찾지 못했습니다. 그런 규정이 없다는 뜻은 아니며, 검색 자료에 들어 있지 않을 수 있습니다. 다른 규정으로 대신 답하지 않습니다. 정확한 규정명이나 소관 기관명을 넣어 다시 물어봐 주세요."
+  }
+ ],
+ "S2": [
+  {
+   "tag": "S2.1 other session no context",
+   "q": "그럼 식비는?",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정"
+    ],
+    [
+     "대법원",
+     "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2)"
+    ],
+    [
+     "조달청",
+     "공공조달역량개발원 운영규정"
+    ],
+    [
+     "농림축산검역본부",
+     "농림축산검역본부 소속 상시출장공무원 여비지급 규정"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 대법원: 국외여비업무 처리지침\n- 인사혁신처: 공무원 여비 규정\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  }
+ ],
+ "S3": [
+  {
+   "tag": "S3.1 general",
+   "q": "출장비 기준",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "법제처",
+     "법제처 공무국외출장규정"
+    ],
+    [
+     "국방부",
+     "국방부 공무국외출장 훈령"
+    ],
+    [
+     "대법원",
+     "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2)"
+    ],
+    [
+     "경인지방국가데이터처",
+     "경인지방통계청 유연근무자 상시출장 거리산정 규정"
+    ],
+    [
+     "법무부",
+     "법무부 공무국외출장 운영지침"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 대법원: 증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2)\n- 방위사업청: 공무국외출장 및 사적 국외여행 관리규정\n- 중소벤처기업부: 중소기업기술개발제품 우선구매제도 운영 등에 관한 시행세칙\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "S3.2 pin 1",
+   "pin_choice": 1,
+   "http": 200,
+   "result": {
+    "pinned": {
+     "doc_id": "law-go-kr:admrul:2100000186033",
+     "title": "법제처 공무국외출장규정",
+     "institution": "법제처",
+     "kind": "행정규칙",
+     "date": "2020-01-13",
+     "date_type": "발령일자",
+     "effective_date": "20200113",
+     "currency": "listed as current (nw=1) when collected 2026-10-27~29; not re-checked",
+     "source": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000186033&type=HTML",
+     "license": "KR-Copyright-Act-Art7 (law.go.kr)",
+     "source_id": "law-go-kr:admrul:10912",
+     "issuer_id": "1170000",
+     "issuer_id_scheme": "행정기관코드"
+    }
+   }
+  },
+  {
+   "tag": "S3.3 ask under pin",
+   "q": "일비는 얼마예요?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "not_found",
+   "reason": "irrelevant",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": true,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "검색 자료에서 이 질문에 답할 만큼 관련된 구간을 찾지 못했습니다(핵심어 '일비'을 충분히 다루는 구간 없음). 관련 없는 문서로 대신 답하지 않습니다. 기관명이나 규정명을 넣거나 다른 표현으로 물어 주세요."
+  },
+  {
+   "tag": "S3.4 unpin",
+   "pin_choice": null,
+   "http": 200,
+   "result": {
+    "pinned": null
+   }
+  },
+  {
+   "tag": "S3.5 ask after unpin",
+   "q": "일비는 얼마예요?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "대법원",
+     "국외여비업무 처리지침"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 대법원: 국외여비업무 처리지침\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "S3.6 general again",
+   "q": "출장비 기준",
+   "http": 200,
+   "sec": 1.3,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "법제처",
+     "법제처 공무국외출장규정"
+    ],
+    [
+     "국방부",
+     "국방부 공무국외출장 훈령"
+    ],
+    [
+     "대법원",
+     "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2)"
+    ],
+    [
+     "경인지방국가데이터처",
+     "경인지방통계청 유연근무자 상시출장 거리산정 규정"
+    ],
+    [
+     "법무부",
+     "법무부 공무국외출장 운영지침"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 대법원: 증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2)\n- 방위사업청: 공무국외출장 및 사적 국외여행 관리규정\n- 중소벤처기업부: 중소기업기술개발제품 우선구매제도 운영 등에 관한 시행세칙\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "S3.7 pin 1 again",
+   "pin_choice": 1,
+   "http": 200,
+   "result": {
+    "pinned": {
+     "doc_id": "law-go-kr:admrul:2100000186033",
+     "title": "법제처 공무국외출장규정",
+     "institution": "법제처",
+     "kind": "행정규칙",
+     "date": "2020-01-13",
+     "date_type": "발령일자",
+     "effective_date": "20200113",
+     "currency": "listed as current (nw=1) when collected 2026-10-27~29; not re-checked",
+     "source": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000186033&type=HTML",
+     "license": "KR-Copyright-Act-Art7 (law.go.kr)",
+     "source_id": "law-go-kr:admrul:10912",
+     "issuer_id": "1170000",
+     "issuer_id_scheme": "행정기관코드"
+    }
+   }
+  },
+  {
+   "tag": "S3.8 clear",
+   "clear_http": 200,
+   "result": {
+    "cleared": true
+   }
+  },
+  {
+   "tag": "S3.9 ask after clear",
+   "q": "일비는 얼마예요?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "대법원",
+     "국외여비업무 처리지침"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 대법원: 국외여비업무 처리지침\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  }
+ ],
+ "S4": [
+  {
+   "tag": "S4.a 상시 stated",
+   "q": "상시 출장 공무원의 일비는 어떻게 지급되나요?",
+   "http": 200,
+   "sec": 19.0,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정 [별표 0008] 상시 출장 공무원의 여비 지급 기준표(제29조제2항 관련)"
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "8"
+   ],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 8의 표 행(단위·비고·시점 포함, 8행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다.",
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S4.b 국외 stated",
+   "q": "공무원 국외 출장 숙박비 기준은?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "국제협력담당관",
+     "해양경찰청 공무국외출장 관리에 관한 규칙"
+    ],
+    [
+     "인사혁신처",
+     "국가공무원 복무·징계 관련 예규 - 「국가공무원 복무·징계 관련 예규」(인사혁신처 예규 제225호).pdf"
+    ],
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회계 세출예산 집행기준 일부개정예규(전"
+    ],
+    [
+     "성평등가족부",
+     "성평등가족부 공무국외출장 관리규정"
+    ],
+    [
+     "법제처",
+     "법제처 공무국외출장규정"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 인사혁신처: 공무원 여비 규정 [별표 0003] 국외 항공운임 지급 기준표(제12조제2항 관련)\n- 교육부: 지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회계 세출예산 집행기준 일부개정예규(전문).pdf\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "S4.c 국내 stated",
+   "q": "공무원 국내 출장 숙박비는 얼마인가요?",
+   "http": 200,
+   "sec": 19.7,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "법제처(질의: 민원인)",
+     "행정안전부ㆍ민원인 - 대통령령 제33312호 「공무원 여비 규정」 시행 전에 국내 교육훈련이 시작된 공무원에"
+    ],
+    [
+     "농림축산검역본부",
+     "농림축산검역본부 소속 상시출장공무원 여비지급 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ],
+    [
+     "국제협력담당관",
+     "해양경찰청 공무국외출장 관리에 관한 규칙"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "scope": "관련도 판정으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 2의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(2건).",
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "S4.d class",
+   "q": "공공기관 출장비 지급 기준",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "reason": "population",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "국방부",
+     "국방부 공무국외출장 훈령"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   },
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "질문은 공공기관 전반에 관한 것이지만, 검색 자료에서 공공기관 공통 기준을 찾지 못했습니다. 아래 후보는 각 기관의 자체 규정이거나 공무원에게 적용되는 규정이며, 공공기관 전체의 기준이 아닙니다. 검색 자료에서 찾은 후보는 다음과 같습니다.\n- 인사혁신처: 공무원 여비 규정\n소속 기관의 기준이 필요하면 기관명을 넣어 묻거나 그 기관의 규정 문서를 첨부(＋)해 주세요."
+  },
+  {
+   "tag": "S4.e class",
+   "q": "그러면 공공기관의 출장비",
+   "http": 200,
+   "sec": 1.2,
+   "status": "clarify",
+   "reason": "population",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "국방부",
+     "국방부 공무국외출장 훈령"
+    ],
+    [
+     "중앙선거관리위원회",
+     "선거관리위원회 공무국외출장 규정"
+    ],
+    [
+     "헌법재판소",
+     "헌법재판소 공무국외출장 내규"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": {
+    "asked": "public_institutions",
+    "common_rule_found": false
+   },
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "질문은 공공기관 전반에 관한 것이지만, 검색 자료에서 공공기관 공통 기준을 찾지 못했습니다. 아래 후보는 각 기관의 자체 규정이거나 공무원에게 적용되는 규정이며, 공공기관 전체의 기준이 아닙니다. 검색 자료에서 찾은 후보는 다음과 같습니다.\n- 인사혁신처: 공무원 여비 규정\n소속 기관의 기준이 필요하면 기관명을 넣어 묻거나 그 기관의 규정 문서를 첨부(＋)해 주세요."
+  },
+  {
+   "tag": "S4.f 공무원 아닌 stated",
+   "q": "공무원이 아닌 위원의 출장 여비는 어떻게 주나요?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 관련)"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급구분표[제29조관련]"
+    ],
+    [
+     "농림축산검역본부",
+     "농림축산검역본부 소속 상시출장공무원 여비지급 규정"
+    ],
+    [
+     "국립해양조사원",
+     "국립해양조사원 공무국외출장 및 국외파견 등의 업무 규정"
+    ],
+    [
+     "방위사업청",
+     "국제계약지원단 운영규정"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 인사혁신처: 공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 관련)\n- 법원행정처: 법원공무원 여비 규칙 [별표 0008] 공무원이 아닌 자에 대한 여비지급구분표[제29조관련]\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "S4.g class",
+   "q": "공기업 직원 출장비 기준",
+   "http": 200,
+   "sec": 1.2,
+   "status": "clarify",
+   "reason": "population",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "중소벤처기업부",
+     "중소기업기술개발제품 우선구매제도 운영 등에 관한 시행세칙"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "검색 자료에서 찾은 후보는 다음과 같습니다.\n- 인사혁신처: 공무원 여비 규정\n- 중소벤처기업부: 중소기업기술개발제품 우선구매제도 운영 등에 관한 시행세칙\n소속 기관의 기준이 필요하면 기관명을 넣어 묻거나 그 기관의 규정 문서를 첨부(＋)해 주세요."
+  }
+ ],
+ "P": [
+  {
+   "tag": "P1 국내/국외 unstated",
+   "q": "공무원 여비 규정에서는 숙박비가 어떻게 되나요?",
+   "http": 200,
+   "sec": 10.0,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0003] 국외 항공운임 지급 기준표(제12조제2항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0001] 여비 지급 구분표(제3조 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": [
+    {
+     "annex": "2",
+     "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+     "unstated": [
+      "국내"
+     ]
+    },
+    {
+     "annex": "4",
+     "table": "국외 여비 지급표(제16조제1항 관련)",
+     "unstated": [
+      "국외"
+     ]
+    }
+   ],
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "answer": "「공무원 여비 규정」은 경우에 따라 다른 표를 씁니다: 별표 2(국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)), 별표 4(국외 여비 지급표(제16조제1항 관련)). 질문에 어느 경우인지(국내, 국외 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "P2 국내",
+   "q": "공무원 여비 규정에서 국내 출장 숙박비는 얼마인가요?",
+   "http": 200,
+   "sec": 18.1,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 2의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(2건).",
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "P3 국외",
+   "q": "공무원 여비 규정에서 국외 출장 숙박비는 어떻게 정하나요?",
+   "http": 200,
+   "sec": 28.2,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0003] 국외 항공운임 지급 기준표(제12조제2항 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "4"
+   ],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 4의 표 행(단위·비고·시점 포함, 21행; 원문 위치 확인 방식 statute_body_segment)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 모델 문맥 한도로 함께 넣으려던 다른 별표 구간 1개를 빼었습니다. 모델 문맥 한도로 검토된 표 행 6행을 빼었습니다. 이 답은 넣은 행에 한정됩니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(1건).",
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "P4 공무원 아닌",
+   "q": "공무원 여비 규정에서 공무원이 아닌 사람의 여비는 어떻게 지급하나요?",
+   "http": 200,
+   "sec": 18.3,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0009] 공무원이 아닌 사람에 대한 여비 지급 구분표(제30조 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0001] 여비 지급 구분표(제3조 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "9"
+   ],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 9의 표 행(단위·비고·시점 포함, 5행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(1건).",
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  }
+ ],
+ "R": [
+  {
+   "tag": "R1 abbreviated held (C-026 V6)",
+   "q": "공무원수당 규정에서 정근수당은 어떻게 주나요?",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 공무원수당 등에 관한 규정 제7조 등 관련"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정 [별표 0002] 정근수당 지급 구분표(제7조제1항 관련)"
+    ],
+    [
+     "국무조정실",
+     "국무조정실 및 국무총리비서실 공무직 등 근로자 인사관리규정"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 행정안전부: 지방공무원 수당 등에 관한 규정\n- 행정안전부: 지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)\n- 인사혁신처: 공무원수당 등에 관한 규정\n- 인사혁신처: 공무원수당 등에 관한 규정 [별표 0002] 정근수당 지급 구분표(제7조제1항 관련)\n- 법제처(질의: 민원인): 민원인 - 공무원수당 등에 관한 규정 제7조 등 관련\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "R2 abbreviated held (V8)",
+   "q": "공무원 복무규정 연가 일수",
+   "http": 200,
+   "sec": 1.2,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "행정안전부",
+     "지방공무원 복무규정"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 복무규정 [별표 0002] 시간선택제공무원등의 휴가 기준(제7조의9 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 보수규정"
+    ],
+    [
+     "행정안전부",
+     "행정안전부_지방공무원 인사실무_20251111"
+    ],
+    [
+     "인사혁신처",
+     "공무원보수규정"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 국가공무원 복무규정\n- 행정안전부: 지방공무원 복무규정\n- 행정안전부: 지방공무원 복무규정 [별표 0002] 시간선택제공무원등의 휴가 기준(제7조의9 관련)\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "R3 abbreviated held, scope fits",
+   "q": "지방공무원 수당 규정에서 정근수당은?",
+   "http": 200,
+   "sec": 11.6,
+   "status": "quoted",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "행정안전부",
+    "지방공무원 수당 등에 관한 규정"
+   ],
+   "others": [
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원보수업무 등 처리지침 - 지방공무원보수업무 등 처리지침(전문).pdf"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 공무원수당 등에 관한 규정 제7조 등 관련"
+    ],
+    [
+     "법원행정처",
+     "법관 및 법원공무원수당 등에 관한 규칙 [별표 0001] 정근수당 지급 구분표"
+    ],
+    [
+     "국무조정실",
+     "국무조정실 및 국무총리비서실 공무직 등 근로자 인사관리규정"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": [
+    {
+     "annex": "4",
+     "table": "대우공무원수당, 정근수당 가산금, 가족수당의 감액 지급 구분표(제5조의2, 제6조, 제10조 및 제19조 관련)",
+     "unstated": [
+      "감액",
+      "지급"
+     ]
+    }
+   ],
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "관련도 판정으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "answer": "「지방공무원 수당 등에 관한 규정」은 경우에 따라 다른 표를 씁니다: 별표 4(대우공무원수당, 정근수당 가산금, 가족수당의 감액 지급 구분표(제5조의2, 제6조, 제10조 및 제19조 관련)). 질문에 어느 경우인지(감액, 지급 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 원문과 글자가 일치하는 문장 1건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "R4 truly not held",
+   "q": "지방공무원 여비 규정에서 일비는?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "not_found",
+   "reason": "rule_not_found",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "질문한 「지방공무원 여비 규정」을(를) 이 서비스의 검색 자료(공개 자료 색인)에서 찾지 못했습니다. 그런 규정이 없다는 뜻은 아니며, 검색 자료에 들어 있지 않을 수 있습니다. 다른 규정으로 대신 답하지 않습니다. 정확한 규정명이나 소관 기관명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "R5 qualified form of a held rule",
+   "q": "국가공무원 여비 규정 숙박비",
+   "http": 200,
+   "sec": 9.9,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "법제처(질의: 민원인)",
+     "행정안전부ㆍ민원인 - 대통령령 제33312호 「공무원 여비 규정」 시행 전에 국내 교육훈련이 시작된 공무원에"
+    ],
+    [
+     "국제협력담당관",
+     "해양경찰청 공무국외출장 관리에 관한 규칙"
+    ],
+    [
+     "농림축산검역본부",
+     "농림축산검역본부 소속 상시출장공무원 여비지급 규정"
+    ],
+    [
+     "행정안전부",
+     "행정안전부_지방공무원 인사실무_20251111"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": [
+    {
+     "annex": "2",
+     "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+     "unstated": [
+      "국내"
+     ]
+    },
+    {
+     "annex": "4",
+     "table": "국외 여비 지급표(제16조제1항 관련)",
+     "unstated": [
+      "국외"
+     ]
+    }
+   ],
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "관련도 판정으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "answer": "「공무원 여비 규정」은 경우에 따라 다른 표를 씁니다: 별표 2(국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)), 별표 4(국외 여비 지급표(제16조제1항 관련)). 질문에 어느 경우인지(국내, 국외 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "R6.1 REB",
+   "q": "한국부동산원 여비규정에서 숙박비는 어떻게 정해져 있나요?",
+   "http": 200,
+   "sec": 16.3,
+   "status": "quoted",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": true,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+   ],
+   "others": [
+    [
+     "한국부동산원",
+     "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "1"
+   ],
+   "scope": "질문에 적힌 기관(한국부동산원)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 이 자료의 적용 범위(B 기록): 한국부동산원 임직원. 다른 기관에 그대로 적용되지 않음. 출처 메모(B): 내규공개 게시판(bbsId 1244)에 제목 \"…개정…안\"으로 게시됨. 파일은 개정이 반영된 전문(개정 이력·부칙 포함)이나, 확정·시행 여부를 따로 알리는 공고는 확인하지 않음. 사전예고 게시판(1245)과는 별개 게시판 출처 메모(B): 첫 쪽 개정 이력은 2026.01.12까지이나 부칙<2026.6.11>(2026.7.1 시행)이 있음. 개정 이력 갱신 누락 여부 미확인 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 1의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 row_source_span)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다.",
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자가 일치하는 문장 3건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "R6.2 truly not held after an institution turn",
+   "q": "지방공무원 여비 규정에서 숙박비는?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "not_found",
+   "reason": "rule_not_found",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "질문한 「지방공무원 여비 규정」을(를) 이 서비스의 검색 자료(공개 자료 색인)에서 찾지 못했습니다. 그런 규정이 없다는 뜻은 아니며, 검색 자료에 들어 있지 않을 수 있습니다. 다른 규정으로 대신 답하지 않습니다. 정확한 규정명이나 소관 기관명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "R6.3 abbreviated held after it",
+   "q": "공무원수당 규정에서 정근수당은?",
+   "http": 200,
+   "sec": 1.2,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정 [별표 0002] 정근수당 지급 구분표(제7조제1항 관련)"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 공무원수당 등에 관한 규정 제7조 등 관련"
+    ],
+    [
+     "법원행정처",
+     "법관 및 법원공무원수당 등에 관한 규칙 [별표 0001] 정근수당 지급 구분표"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 행정안전부: 지방공무원 수당 등에 관한 규정\n- 행정안전부: 지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)\n- 인사혁신처: 공무원수당 등에 관한 규정\n- 인사혁신처: 공무원수당 등에 관한 규정 [별표 0002] 정근수당 지급 구분표(제7조제1항 관련)\n- 법제처(질의: 민원인): 민원인 - 공무원수당 등에 관한 규정 제7조 등 관련\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  }
+ ],
+ "rss_kb": [
+  "2991344 /Users/eomgyuhyeon/사업/trid/.venv/bin/python scripts/shared_demo.py --secret-file /tmp/a026-realpath/secret --port 51990 --versions /tmp/a026-realpath/ve",
+  "6795600 /Users/eomgyuhyeon/사업/trid-model-024/runs/tools/llama.cpp-8ca4060-metal/llama-server -m /Users/eomgyuhyeon/사업/trid-model-024/runs/open-weight-base"
+ ],
+ "ports_free_after": true,
+ "pressure_after": "1"
+}

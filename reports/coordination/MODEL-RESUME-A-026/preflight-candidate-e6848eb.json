@@ -1,0 +1,603 @@
+{
+ "code": "/Users/eomgyuhyeon/사업/trid-model-024",
+ "commit": "e6848ebceeea4569d830e331de07cc48dc0f6196",
+ "index": "/Users/eomgyuhyeon/사업/trid-model-024/runs/workspace-index/v5",
+ "review": "/Users/eomgyuhyeon/사업/trid-model-024/data/search-corpus-v4/passages.jsonl",
+ "reference": "../trid",
+ "probes": [
+  "안녕하세요",
+  "출장 여비 지급 기준",
+  "연가 사용 원칙",
+  "별표 지급표 금액"
+ ],
+ "artifacts": [
+  {
+   "path": "/System/Library/CoreServices/SystemVersion.plist",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 599,
+   "sha256": "e233481029d77cb1e73c60afb8ad134f19fbfff6b04b0ab63f56c626e17a652a"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/refs/main",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 40,
+   "sha256": "1c872317cdcebed80d210377247bc1c88a4465bad572c465155cbd6a2275aa1d"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/1_Pooling/config.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 191,
+   "sha256": "e54c164a07274f2eb45bb724f54a79d1efcc90c41573887cd9a29aeee0597352"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/README.md",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 15822,
+   "sha256": "0b81ccf9134e5874d620a86e6905062ea999e779c34eb1a7e65eaeb7fe00e450"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/config.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 687,
+   "sha256": "26159e7ad065073448460117eb24b7a4572f6f4e78eadff65dc0a11c052449fa"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/config_sentence_transformers.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 123,
+   "sha256": "1eef72430e7194a1e59680e635aed81ffa083f05668dbc5bb1c56c04c0999c38"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/modules.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 349,
+   "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/pytorch_model.bin",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 2271145830,
+   "sha256": "b5e0ce3470abf5ef3831aa1bd5553b486803e83251590ab7ff35a117cf6aad38"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/sentence_bert_config.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "bytes": 54,
+   "sha256": "eb9b44b13c0f52a3b3685c3b1cbdea1ba8b04bea123b98f61610048940776eb1"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/special_tokens_map.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 964,
+   "sha256": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/tokenizer.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 17098108,
+   "sha256": "21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181/tokenizer_config.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 444,
+   "sha256": "a62b2b6784f990259fddef5f16388693a8043be4f69179e6a5257eeb3f9abac4"
+  },
+  {
+   "path": "/Users/eomgyuhyeon/.cache/huggingface/hub/models--BAAI--bge-m3/trees/5617a9f61b028005a4858fdac845db406aefb181.json",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 4956,
+   "sha256": "b50865eb6512d602c3532b32a1760024878730ac856ec8eec8bc879d333b68f2"
+  },
+  {
+   "path": "data/agency-aliases-v1/aliases.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 18273341,
+   "sha256": "4e75f11f50f240bc66e44ac9fcc8d3c43a8e5585aa6322b82b59a6622ed4fd73",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/agency-aliases-v1/manifest.json",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 1131,
+   "sha256": "947c2e55363097bcea4b9c2b80997c61869406327460a74cbbf14ecdc13f1f4e",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/corpus-inventory/alio-agencies.json",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 118510,
+   "sha256": "5e79c5339f9f59d0ca575f1c98936505539a7b89ae5902e0aec9d8df46ed1cb5",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/law-byl/v2-structure-003-rows-001/queryable-rows.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 2754048,
+   "sha256": "6413a1ccfbf321f33286ecfc622f17b08c6eddaca42ad37780598b4504e638e6",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/official-abbreviations/abbreviations.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 5572,
+   "sha256": "ae41cb3ccc64686ed2813aea69d731d444dc19d4f364cc1b15d728b452bd964d",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/official-abbreviations/manifest.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 2827,
+   "sha256": "6464d6f363deb24007e657bfd3bddc7ca55c954eeed0f1a8dab85f7015c1e47d",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/search-corpus-v4/manifest.json",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 2837,
+   "sha256": "1c59fb25b7ea4c08de3c9bddea3fc275ac98d17c54874eb2bd0b996e1cd0c394",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "data/search-corpus-v4/passages.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 76687416,
+   "sha256": "fe6987c947ab3c87a928c1b2be9194d9068a5daa1b0421d8209d3a284469441f",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "odr",
+   "scope": "code_root",
+   "kinds": [
+    "checked"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "absent_intentional",
+   "reference_exists": false
+  },
+  {
+   "path": "reports/coordination/B-029/reb-yeobi-reviewed-rows.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": true,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 20258,
+   "sha256": "830b07f4ef9ac1c92243f886434e48d7e14d0e423a02b39890db48123522b2bb"
+  },
+  {
+   "path": "reports/coordination/B-030/byl-index-links.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": true,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 47301,
+   "sha256": "8ca8958945daa659524018aa9451d06e564cf983a1df853193d52b29e8ac2c6e"
+  },
+  {
+   "path": "reports/coordination/DATA-CONTINUE-007/applies-to-backfill.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": true,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 2581,
+   "sha256": "f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4"
+  },
+  {
+   "path": "reports/coordination/DATA-CONTINUE-007/term-map.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": true,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 7008,
+   "sha256": "531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897"
+  },
+  {
+   "path": "reports/coordination/DATA-GAPS-008/applies-to-backfill.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": true,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 4856,
+   "sha256": "4f45cbf3c63d279f626ee769ecbdf63b8f7c4009c1b96b1913d8407378ce5827"
+  },
+  {
+   "path": "runs/workspace-index/v5/bm25/data.csc.index.npy",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 19694400,
+   "sha256": "5745479962b1d9e6d7d1a4c0546ffd06ff05054e0e6d1498d59e8d300f3707b9",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/bm25/indices.csc.index.npy",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 19694400,
+   "sha256": "1907cecffe21f79eed0d7b539f6e53efe0be089776c10b02f5f7c8b6f088a015",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/bm25/indptr.csc.index.npy",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 534568,
+   "sha256": "d563a6cc9d7538035e541a8dfaa8a377241bd874bf2cac1e33950f9a4bf01a0d",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/bm25/params.index.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 225,
+   "sha256": "28e585ae25ac6c130fa0633c0dcace3435a2bf6ed6b1cba4f2682a38bb7f011e",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/bm25/vocab.index.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 1323524,
+   "sha256": "613e7895961c58ec7d8469137d4882d3043d12b21f16d9d08728efa1bccd6933",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/dense.f16.npy",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 213266560,
+   "sha256": "d3e0066336c4fd4b5eef99c898686c033e84ea816a05387eeb9d609ca8cf2bcb",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/dense.f32.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "absent_intentional",
+   "reference_exists": false
+  },
+  {
+   "path": "runs/workspace-index/v5/dense.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 537,
+   "sha256": "db5539444d8976bad23d381ff75a3e28dd8943543e78aa055107f762faf00b4a",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/documents.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 158204078,
+   "sha256": "dac70e6cbe36cc17c32c52cee4b940fc878021583aab3c41eedb90bb5827730d",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/documents.jsonl.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "absent_intentional",
+   "reference_exists": false
+  },
+  {
+   "path": "runs/workspace-index/v5/facts.jsonl",
+   "scope": "code_root",
+   "kinds": [
+    "checked"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "absent_intentional",
+   "reference_exists": false
+  },
+  {
+   "path": "runs/workspace-index/v5/graph.json",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 1787524,
+   "sha256": "ce68472991ce3abf95daa2c0d80cd685f967ae31d7b7037d498bc9396854c707",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/manifest.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 4708,
+   "sha256": "1c9540cab9a0a94f809e3d1de63bd7a9b6356d9d6f16857fb3e351d25cb9ba21",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/meta.json",
+   "scope": "code_root",
+   "kinds": [
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 12745675,
+   "sha256": "b14b4a639baedf313f44e024958c2c66c9062c6e6105f8d9bf44c55e47e83cbc",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "runs/workspace-index/v5/tables.json",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": false,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 1121812,
+   "sha256": "153d854cd49b39096dd1f911846def51d3539da20fce93551b1dc5d9547198f8",
+   "reference_sha256_equal": true
+  },
+  {
+   "path": "trid/service/reference/admin-areas.json",
+   "scope": "code_root",
+   "kinds": [
+    "checked",
+    "read"
+   ],
+   "git_tracked": true,
+   "symlink": false,
+   "status": "ok",
+   "bytes": 1572,
+   "sha256": "00f3fa993bf24594041d1643dc11654eacc8061ef794fa31bfccee57929c9834"
+  },
+  {
+   "path": "/opt/homebrew/bin/jbig2dec",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "checked"
+   ],
+   "bytes": 52512,
+   "sha256": "8c557edc278a17ce3b0591c85500dfd3cb7e82d0176401125a2f49465f8937a2"
+  },
+  {
+   "path": "/usr/share/zoneinfo/UTC",
+   "scope": "external",
+   "status": "ok",
+   "kinds": [
+    "read"
+   ],
+   "bytes": 114,
+   "sha256": "8b85846791ab2c8a5463c83a5be3c043e2570d7448434d41398969ed47e3e6f2"
+  }
+ ],
+ "pinned_contract": [
+  {
+   "path": "reports/coordination/DATA-CONTINUE-007/term-map.jsonl",
+   "pinned_sha256": "531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897",
+   "exists": true,
+   "git_tracked": true,
+   "sha256_equal": true,
+   "status": "ok"
+  },
+  {
+   "path": "reports/coordination/DATA-CONTINUE-007/applies-to-backfill.jsonl",
+   "pinned_sha256": "f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4",
+   "exists": true,
+   "git_tracked": true,
+   "sha256_equal": true,
+   "status": "ok"
+  },
+  {
+   "path": "reports/coordination/DATA-GAPS-008/applies-to-backfill.jsonl",
+   "pinned_sha256": "4f45cbf3c63d279f626ee769ecbdf63b8f7c4009c1b96b1913d8407378ce5827",
+   "exists": true,
+   "git_tracked": true,
+   "sha256_equal": true,
+   "status": "ok"
+  }
+ ],
+ "summary": {
+  "ok": 41,
+  "missing": [],
+  "absent_intentional": [
+   "odr",
+   "runs/workspace-index/v5/dense.f32.json",
+   "runs/workspace-index/v5/documents.jsonl.json",
+   "runs/workspace-index/v5/facts.jsonl"
+  ],
+  "untracked_differs_from_reference": [],
+  "pinned_contract_failed": []
+ },
+ "verdict": "pass"
+}
