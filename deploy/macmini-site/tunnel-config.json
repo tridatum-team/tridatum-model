@@ -1,0 +1,11 @@
+{
+  "tunnel": "4562e85a-de9b-4567-a926-47c381d7102e",
+  "credentials-file": "/Users/eomgyuhyeon/Services/trid-site/tunnel/credentials.json",
+  "protocol": "http2",
+  "metrics": "127.0.0.1:20244",
+  "no-autoupdate": true,
+  "ingress": [
+    {"hostname": "trid-test-origin.eommydocs.com", "service": "http://127.0.0.1:51873"},
+    {"service": "http_status:404"}
+  ]
+}

@@ -2,24 +2,33 @@
 
 공유 주소: https://test.tridatum.co
 
-이 배포는 Cloudflare Worker → 임시 Cloudflare Tunnel → 이 Mac의 CPU 모델 서버로 연결됩니다. 별도 클라우드 머신으로 모델을 옮긴 배포가 아닙니다. Mac 전원과 인터넷 연결이 필요하며 덮개를 닫거나 재부팅하면 중단될 수 있습니다. 화면은 꺼져도 되도록 `caffeinate -i`를 서버 실행 동안에만 사용합니다.
+이 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됩니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
 
-**2026-10-30 22:48 재배포 (INSTITUTION-CONNECT-001).** Worker `08f77f3c…`, 공유 색인 `runs/workspace-index/v5`, 한국부동산원 별도 색인 `runs/workspace-index/inst-reb-002`, B 검토 메타데이터 search-corpus-v4. 24시간 실행하며 자동 종료 예정은 **2026-10-31 22:48 KST**다. 중단되면 도메인은 임시 서버 종료 안내를 표시한다. 소규모 테스트용이며 운영 서비스의 가용성을 보장하지 않는다. C-027 고정 평가 색인 `v3`는 바꾸지 않았다.
+**현재 상태 (2026-11-01)**
+- 운영 코드는 브랜치 `site-memory-022`의 코드 커밋 `6a5eb37`이다. 배포판 `9256df4`에 색인 적재 메모리 절감을 더했으며, 검색 결과, 모델, 정밀도는 같다. main에는 병합하지 않았다.
+- 색인: 공유 색인 `runs/workspace-index/v5`, 한국부동산원 별도 색인 `runs/workspace-index/inst-reb-002`, B 검토 메타데이터 search-corpus-v4. C-027 고정 평가 색인 `v3`는 바꾸지 않았다.
 
-## 제공 버전 (`deploy/shared-demo/versions.json`)
+**검증 한계**
+- 맥미니 재부팅 뒤 자동 복구는 시험하지 않았다. 자동 로그인 설정만 확인했다.
+- 디스플레이가 꺼진 상태에서 켜지며 배경화면 동영상이 재생되는 순간의 메모리 여유는 새 코드로 재현하지 못했다.
+- 같은 대화에서 다른 기관 규정으로 바꿔 물으면 이전 기관 규정이 이어지는 기존 결함이 있다.
+- CPU 실행이라 기관 질문 답은 약 17–21초 걸린다.
+
+## 제공 버전 (`deploy/macmini-site/versions.json`)
 
 | 버전 | 기반 모델 | 라이선스 | 상태 |
 |---|---|---|---|
-| `trid-assistant-qwen3-1.7b` (**기본**) | Qwen/Qwen3-1.7B-GGUF Q8_0 원본(업무 특화 학습 없음), sha `061b54da…`, llama.cpp 8ca4060 Metal | Apache-2.0 | 대화 + 근거 검색. 특화 모델 아님 |
-| `trid-v0.1-reader` (롤백 기준) | 자체 91M 추출 독해기 `runs/reader-factorial-01-cpt-v1-v2-v4` (sha `90ccb60f…`) | 자체 | 실험판, 품질 기준 미달 |
-| `baseline-qwen3-1.7b` | 위와 같은 원본 GGUF(서버 공유), 값 형식 출력 | Apache-2.0 | 비교 기준선, 품질 기준 미달 |
-| `trid-qwen3-1.7b-pilot-sft-001` | 원본 + LoRA pilot-sft-001 (GGUF `0c78b0c2…`) | Apache-2.0 | **C-023에서 원본 대비 회귀.** 버전 확인용 |
-| `trid-qwen3-1.7b-model-repair-002` | 원본 + LoRA(B case-training-view-v1r1 34건, 같은 설정, 맥북 MPS 513초), GGUF `21715b4f…`, 학습 형식과 같은 '자료 정보' 줄로 서빙 | Apache-2.0 | **성능 향상 미확인**, C-028 blind 평가 대기. 기본값 아님 |
+| `trid-assistant-qwen3-1.7b` (**기본**) | Qwen/Qwen3-1.7B-GGUF Q8_0 원본(업무 특화 학습 없음), sha `061b54da…`, llama.cpp 8ca4060 CPU 전용(GPU offload 0) | Apache-2.0 | 대화 + 근거 검색. 특화 모델 아님 |
+| `trid-v0.1-reader` | 자체 91M 추출 독해기 `runs/reader-factorial-01-cpt-v1-v2-v4` (sha `90ccb60f…`) | 자체 | 실험판, 품질 기준 미달 |
+
+**제공하지 않는 버전 (2026-11-01부터)**
+- `baseline-qwen3-1.7b`: 비교 기준선.
+- `trid-qwen3-1.7b-pilot-sft-001`: C-023에서 원본 대비 회귀.
+- `trid-qwen3-1.7b-model-repair-002`: C-028에서 원본 대비 회귀.
+- 모델 파일은 맥북에 보존하며, 맥북용 `deploy/shared-demo/versions.json`에 기록이 남아 있다.
+- 이 ID로 요청하면 422로 거절하며, 원본으로 대신 답하지 않는다.
 
 - 각 버전의 기반 모델, 라이선스, 실측, 한계는 화면의 모델 정보(접힘)에 표시한다.
-- 같은 모델 파일·실행 파일·context를 쓰는 버전은 llama-server 하나를 공유한다.
-
-**롤백:** `versions.json`에서 `trid-assistant-qwen3-1.7b` 항목을 빼면 이전 기본(`trid-v0.1-reader`)으로 돌아간다. 그다음 `stop` → `start` → `deploy`를 실행한다.
 
 ## 일반 대화와 근거 검색 (TRID-CONVERSATION-001, 기본 버전)
 
@@ -91,25 +100,25 @@
 - `/pdf`, `/paste`로 넣은 문서가 있으면 그 문서에서만 찾습니다. 텍스트 PDF는 2MB·20페이지·5만 자, 붙여넣기는 5,000자까지입니다.
 - 모델 파일은 방문자에게 내려주지 않습니다. GGUF와 llama.cpp 실행 파일은 `runs/`에 있으며 기동할 때 sha256을 검사합니다.
 
-PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 Mac으로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
+PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
 
-## 중지 / 재실행
+## 운영 / 중지 / 재실행 (맥미니 원점)
 
-프로젝트 폴더에서:
-
-```sh
-.venv/bin/python scripts/share_demo_control.py status
-.venv/bin/python scripts/share_demo_control.py stop
-```
-
-다시 24시간 열기:
+- **배치:** 맥미니 `~/Services/trid-site/repo`는 이 브랜치 코드(`DEPLOYED_FROM_COMMIT`)와 `deploy/macmini-site/`(launchd plist 두 개, `versions.json`, 터널 설정)를 담는다. 가상환경, 임베더 캐시, 색인, 모델 파일도 같은 폴더 아래 있다.
+- **launchd 작업** (`deploy/macmini-site/` → 맥미니 `~/Library/LaunchAgents/`)
+  - `co.tridatum.trid.site`: `share_demo_control.py supervise --hours 168`. KeepAlive라 끝나면(장애나 168시간 만료) 다시 뜬다.
+  - 환경 설정: `TRID_DEMO_TUNNEL=0`, `TRID_DEMO_VERSIONS=…/deploy/macmini-site/versions.json`, `LLAMA_ARG_DEVICE=none`, `LLAMA_ARG_N_GPU_LAYERS=0`.
+  - `co.tridatum.trid.site.tunnel`: named tunnel `trid-test-origin`(`4562e85a-…`) 커넥터. 커넥터는 한 호스트에서만 띄운다. Worker의 `ORIGIN_URL`은 고정이라 재배포가 필요 없다. 비밀키 없이 요청하면 원점은 403을 준다.
+- **색인을 다시 만들면** `python -m trid.service.derived runs/workspace-index/v5 runs/workspace-index/inst-reb-002`로 파생 파일을 다시 써야 메모리 절감이 적용된다. 쓰지 않아도 원본을 예전 방식으로 읽어 결과는 같다.
 
 ```sh
-.venv/bin/python scripts/share_demo_control.py start --hours 24
-.venv/bin/python scripts/share_demo_control.py deploy
+# 맥미니에서
+launchctl kickstart -k gui/$(id -u)/co.tridatum.trid.site      # 모델 서버 재시작
+launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel     # 원점 내리기(터널)
 ```
 
-새 실행마다 터널 주소가 바뀌므로 `deploy`까지 실행해야 도메인이 새 서버로 연결됩니다. 시작이 실패하면 `.shared-demo/server.log`, `supervisor.log`, `tunnel.log`를 확인합니다. 비밀키는 `.shared-demo/proxy-secret`(0600)에 있고 Cloudflare Worker secret으로도 저장됩니다. 이 폴더를 공유하지 마세요. Cloudflare OAuth 자격 증명은 기존 Wrangler 저장소를 사용하며 프로젝트에 복사하지 않습니다.
+- **맥북으로 되돌리기:** main 브랜치 `docs/SHARING.md`의 "맥북으로 되돌리기"를 따른다. 맥북 launchd 작업은 disable했고 plist는 `.shared-demo/launchagents-archive-20261101/`에 보관했다.
+- 시작이 실패하면 맥미니 `~/Services/trid-site/.runtime/`의 `server.log`, `launchd.log`, `llama-*.log`와 `tunnel.log`를 확인한다. 비밀키는 같은 폴더의 `proxy-secret`(0600)에 있고 Cloudflare Worker secret으로도 저장된다. 이 폴더를 공유하지 않는다.
 
 **정지·시작 수명 주기 (CONTROL-LIFECYCLE-001):**
 - 모델 서버는 자체 프로세스 그룹으로 실행된다. 그 서버가 띄운 llama-server들도 같은 그룹에 들어간다.
