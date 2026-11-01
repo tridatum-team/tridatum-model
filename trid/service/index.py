@@ -126,7 +126,7 @@ class Index:
         graph = json.loads((root / "graph.json").read_text(encoding="utf-8"))
         if graph.get("format") != FORMAT:
             raise ValueError("색인 형식이 다릅니다. trid ingest로 다시 만드세요.")
-        documents = [Document.from_dict(d) for d in json.loads((root / "documents.json").read_text(encoding="utf-8"))]
+        documents = read_documents(root)
         bm25 = bm25s.BM25.load(str(root / "bm25"), show_progress=False)
         return cls(documents, [tuple(e) for e in graph["edges"]], bm25, [p.text for d in documents for p in d.passages])
 
@@ -177,3 +177,30 @@ class Index:
                         added += 1
             frontier = next_frontier
         return hits
+
+
+def read_documents(root):
+    """The documents of `documents.json`, in file order. A current `documents.jsonl` (one document per line, the same
+    JSON values; see trid.service.derived) is parsed a line at a time instead of decoding the whole file into one
+    string and one parse tree, which held about 0.3 GB of text (4 bytes per character for this corpus) plus the tree
+    at startup (SITE-MEMORY-023). Without a current one the file is read exactly as before."""
+    from . import derived
+    root = Path(root)
+    source, copy = root / "documents.json", root / "documents.jsonl"
+    if derived.current(source, copy, root / "documents.jsonl.json"):
+        with open(copy, encoding="utf-8", newline="\n") as f:
+            return [Document.from_dict(json.loads(line)) for line in f]
+    return [Document.from_dict(d) for d in json.loads(source.read_text(encoding="utf-8"))]
+
+
+def write_documents_jsonl(root):
+    """Write `documents.jsonl` (each element of `documents.json` as one JSON line) and its record."""
+    from . import derived
+    root = Path(root)
+    source = root / "documents.json"
+
+    def produce(path):
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            for d in json.loads(source.read_text(encoding="utf-8")):
+                f.write(json.dumps(d, ensure_ascii=False) + "\n")
+    derived.write(source, root / "documents.jsonl", root / "documents.jsonl.json", produce)

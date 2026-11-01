@@ -436,6 +436,22 @@ class RuleRoleTests(WorkspaceTests.__base__):
         self.assertNotIn('standard_choice', r)
 
 
+class TitleFragmentTests(WorkspaceTests.__base__):
+    """A question naming TITLE_MIN (8) consecutive normalised characters of a title names that document; 7 do not, and a
+    Q&A title never does (SITE-MEMORY-023 replaced the title n-gram dictionary with a substring scan)."""
+    TEXTS = {'a': ('공무국외출장 운영지침', '제1조(목적) 이 지침은 공무국외출장의 운영에 필요한 사항을 정한다.'),
+             'b': ('국외 업무협의 처리요령', '제1조(목적) 이 요령은 국외 업무협의 처리에 필요한 사항을 정한다.'),
+             'q': ('공무국외출장 운영 질의', '공무국외출장 운영에 관한 질의와 회신이다.')}
+    META = {'a': {'institution': '가기관'}, 'b': {'institution': '가기관'}, 'q': {'institution': '가기관', 'kind': '질의응답'}}
+    setUp = WorkspaceTests.setUp
+
+    def test_eight_shared_title_characters_name_the_document(self):
+        self.assertEqual(self.ws.constraints('공무국외출장운영 기준이 궁금해요')[3], {'a'})
+        self.assertIsNone(self.ws.constraints('공무국외출장운 관련 기준이 궁금해요')[3])
+        self.assertEqual(self.ws.constraints('국외 업무협의 처리 방법')[3], {'b'})
+
+
+
 class AskBackAnnexTests(WorkspaceTests.__base__):
     """An ask-back over institutions lists each one's own annex with its body when both passed (C-030 L1/S3)."""
     TEXTS = {'a': ('가기관 여비 규정', '제10조(식비) 국내 출장 식비는 하루 단위로 별표 2에 따라 국내 출장 식비를 지급한다.'),
