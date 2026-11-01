@@ -105,32 +105,49 @@
 - `/pdf`, `/paste`로 넣은 문서가 있으면 그 문서에서만 찾습니다. 텍스트 PDF는 2MB·20페이지·5만 자, 붙여넣기는 5,000자까지입니다.
 - 모델 파일은 방문자에게 내려주지 않습니다. GGUF와 llama.cpp 실행 파일은 `runs/`에 있으며 기동할 때 sha256을 검사합니다.
 
-PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 Mac으로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
+PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
 
-## 운영 / 중지 / 재실행 (SITE-RECOVERY-010부터)
+## 운영 / 중지 / 재실행
 
-현재 원점은 **맥북**이다. 맥미니는 최소 구성(기본 1.7B + 추출 독해기)으로도 메모리 압력 경고가 나 이관하지 못했다(`reports/coordination/SITE-RECOVERY-010.md`).
+**현재 원점: 맥미니 (2026-11-01 22:08 KST부터, SITE-MEMORY-023).** 맥북 원점(SITE-RECOVERY-010)은 정지·비활성화했다.
 
-- **고정 원점:** Worker는 `ORIGIN_URL=https://trid-test-origin.eommydocs.com`(named tunnel `trid-test-origin`, `4562e85a-…`)으로 간다. 터널을 다시 연결해도 주소가 바뀌지 않아 Worker 재배포가 필요 없다. 비밀키 없이 요청하면 원점은 403을 준다.
-- **launchd 두 작업** (`deploy/macbook-site/`, `~/Library/LaunchAgents/`에 복사):
-  - `co.tridatum.trid.site`: `share_demo_control.py supervise --hours 168`, `TRID_DEMO_TUNNEL=0`, `TRID_DEMO_SERVICE`=배포 커밋 서비스 사본. 끝나면(장애나 168시간 만료) launchd가 다시 띄운다.
-  - `co.tridatum.trid.site.tunnel`: `.shared-demo/named-tunnel.json`으로 named tunnel 커넥터를 띄운다. 터널 전용 자격 증명은 `.shared-demo/named-tunnel-credentials.json`(0600)에 있다.
-- **배포 코드 고정:** `TRID_DEMO_SERVICE`가 가리키는 `scripts/shared_demo_live_<commit>.py`는 `git show <commit>:scripts/shared_demo.py`로 만든 사본이다(git 무시). 작업 트리의 검증 전 코드는 서비스되지 않는다.
+- **코드:** 브랜치 `site-memory-022` 커밋 `6a5eb37` = 배포판 `9256df4` + 색인 적재 메모리 절감(022/023).
+  - 검색 결과, 문서 값, 모델, 정밀도, 프롬프트, 컨텍스트 4096은 그대로다.
+  - main에는 아직 병합하지 않았다. 미완성 ROOT-009는 포함하지 않는다.
+  - 맥미니 `~/Services/trid-site/repo`(`DEPLOYED_FROM_COMMIT`)에 있다.
+  - 색인 파생 파일(`dense.f32.npy`, `documents.jsonl`과 기록)은 `python -m trid.service.derived runs/workspace-index/v5 runs/workspace-index/inst-reb-002`로 만든다.
+- **버전 2개만 제공** (`deploy/macmini-site/versions.json`)
+  - 기본 Qwen3-1.7B 원본, v0.1 추출 독해기.
+  - 회귀한 실험판 2개(pilot-sft-001, model-repair-002)는 제공하지 않는다. 모델 파일은 맥북에 보존했다.
+  - 목록에 없는 버전 요청은 422로 거절한다.
+- **CPU 실행:** llama.cpp `8ca4060`을 `LLAMA_ARG_DEVICE=none`, `LLAMA_ARG_N_GPU_LAYERS=0`(launchd 환경)으로 돌린다. GPU offload 0(실측).
+  - 기관 업무 질문은 약 17–21초, 대화 약 2초, 첨부 문서 질문 약 6초(맥미니 실측). 맥북 Metal 때(9–13초)보다 느리다. 성능 보장은 없다.
+- **고정 원점:** Worker `ORIGIN_URL=https://trid-test-origin.eommydocs.com`(named tunnel `trid-test-origin`, `4562e85a-…`). 커넥터는 맥미니 한 곳에서만 돈다. 비밀키 없이 요청하면 원점은 403을 준다.
+- **맥미니 launchd** (`deploy/macmini-site/`, 맥미니 `~/Library/LaunchAgents/`에 복사)
+  - `co.tridatum.trid.site`: `supervise --hours 168`, KeepAlive, `TRID_DEMO_TUNNEL=0`.
+  - `co.tridatum.trid.site.tunnel`: 맥미니 `~/Services/trid-site/tunnel/config.json`.
+  - 맥미니는 GUI 자동 로그인(`autoLoginUser`)이 켜져 있어 재부팅 후 로그인되면 두 작업이 뜬다. 재부팅 시험은 하지 않았다.
+- **맥북 TRID 작업:** `co.tridatum.trid.site`와 `.tunnel`을 `launchctl disable`했다. plist는 `.shared-demo/launchagents-archive-20261101/`로 옮겨 재로그인 때 다시 뜨지 않는다.
+- **알려진 제약** (`reports/coordination/SITE-MEMORY-023.md`)
+  - 맥미니 물리 16GB에 다른 서비스가 함께 돈다. 디스플레이가 꺼진 상태에서 켜지면서 배경화면 동영상이 재생되는 순간(022에서 압력 2가 30초 지속된 사례)은 023 코드로는 직접 재현하지 못했다.
+  - 맥미니 정리 상태(bohun-test 정지, Docker VM 정지)가 전제다. 재로그인하면 bohun-test가 다시 뜬다.
 
 ```sh
-.venv/bin/python scripts/share_demo_control.py status
+# 맥미니에서
 launchctl kickstart -k gui/$(id -u)/co.tridatum.trid.site      # 모델 서버 재시작
 launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel     # 원점 내리기(터널)
-launchctl bootout gui/$(id -u)/co.tridatum.trid.site            # 모델 서버 내리기
 ```
 
-**원점 옮기기(예: 맥미니):** named tunnel 커넥터는 한 호스트에서만 띄운다. 새 호스트에서 모델 서버를 띄우고 로컬 `/healthz`를 확인한 뒤, 이 맥북에서 터널 작업을 `bootout`하고 새 호스트에서 터널 작업을 `bootstrap`한다. Worker는 그대로다. 맥미니용 작업 파일은 `deploy/macmini-site/`에 있다.
+**맥북으로 되돌리기(롤백):**
+1. 맥북에서 `launchctl enable gui/$(id -u)/co.tridatum.trid.site` 및 `.tunnel`을 실행한다.
+2. 보관한 plist 두 개를 `~/Library/LaunchAgents/`로 되돌린다.
+3. `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/co.tridatum.trid.site.plist`를 실행하고 `/healthz`를 확인한다.
+4. 맥미니에서 `launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel`을 실행한다.
+5. 맥북에서 터널 plist를 `bootstrap`한다. Worker는 그대로다.
 
 **다른 원점으로 Worker 돌리기:** `share_demo_control.py deploy --origin <URL>`. 먼저 그 URL이 비밀키로 `/healthz`를 통과해야 하며, 실패하면 도메인을 바꾸지 않는다.
 
-**롤백(임시 터널 방식):** 두 launchd 작업을 `bootout`한 뒤 `share_demo_control.py start --hours 24`와 `deploy`를 실행한다. 이 방식은 실행마다 주소가 바뀌고 만료 시 서비스가 멈춘다(2026-11-01 장애 원인).
-
-시작이 실패하면 `.shared-demo/server.log`, `supervisor.log`, `launchd.log`, `named-tunnel.log`를 확인한다. 비밀키는 `.shared-demo/proxy-secret`(0600)에 있고 Cloudflare Worker secret으로도 저장된다. 이 폴더를 공유하지 않는다. Cloudflare OAuth 자격 증명은 기존 Wrangler 저장소를 쓰며 프로젝트에 복사하지 않는다.
+시작이 실패하면 맥미니 `~/Services/trid-site/.runtime/`의 `server.log`, `launchd.log`, `llama-*.log`와 터널 `tunnel.log`를 확인한다. 비밀키는 맥북 `.shared-demo/proxy-secret`과 맥미니 `~/Services/trid-site/.runtime/proxy-secret`(둘 다 0600, 같은 값)에 있고 Cloudflare Worker secret으로도 저장된다. 이 폴더들을 공유하지 않는다. Cloudflare OAuth 자격 증명은 맥북의 기존 Wrangler 저장소를 쓰며 프로젝트에 복사하지 않는다.
 
 **정지·시작 수명 주기 (CONTROL-LIFECYCLE-001):**
 - 모델 서버는 자체 프로세스 그룹으로 실행된다. 그 서버가 띄운 llama-server들도 같은 그룹에 들어간다.

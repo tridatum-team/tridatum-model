@@ -1,0 +1,11 @@
+21:49:38 bootstrap co.tridatum.trid.site (code 6a5eb37 (branch site-memory-022))
+21:49:38 bootstrap rc=0
+21:49:49 service ready (healthz 200) at t=11s
+21:49:49 llama-server env (two values): LLAMA_ARG_N_GPU_LAYERS=0 LLAMA_ARG_DEVICE=none ; args: llama-server -m runs/open-weight-base/Qwen3-1.7B-Q8_0.gguf --host 127.0.0.1 --port 51912 -c 4096 -np 1 -t 4 -tb 4 --jinja
+21:49:50 llama-server vmmap: IOAccelerator resident=64K IOAccelerator resident=928K mapped_file virt=1.8G resident=1.7G
+21:50:22 ready + pressure 1 stable for 30 s
+21:50:22 scenario start
+22:06:41 scenario end after 7 cycle(s)
+22:06:42 scenario finished
+22:06:42 max consecutive warning: 0s; samples: 949; pressure counts:  949  p=1 
+22:06:42 health now: []; service loaded: yes
