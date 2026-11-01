@@ -1326,12 +1326,14 @@ class Workspace:
         held when a title contains it, when its noun units occur in order in a held rule's name with words left out
         ("공무원수당 규정" → 공무원수당 등에 관한 규정, "공무원 복무규정" → 국가공무원 복무규정; C-026 3), or when it is
         a qualified form of a held rule ("국가공무원 여비 규정" → 공무원 여비 규정) — each only for a rule whose scope
-        fits the question ("지방공무원 …" never reads as 공무원 여비 규정, 제1조 국가공무원). The answer then says the
-        search corpus does not hold it — never that no such rule exists (C-025 4.3)."""
+        does not conflict with the question ("지방공무원 …" never reads as 공무원 여비 규정, 제1조 국가공무원). The
+        population word the question leads the name with (국가/지방 of 국가공무원/지방공무원) is judged by scope, not by
+        name: without it the units may match a held rule whose recorded scope is that population ("국가공무원 수당
+        규정" → 공무원수당 등에 관한 규정, central_government); an unrecorded scope is not taken as that population
+        (C-027 2). The answer then says the search corpus does not hold it — never that no such rule exists."""
         from trid.korean_quality import kiwi
         tokens = kiwi().tokenize(question)
         noun = lambda t: t.tag in ('NNG', 'NNP')
-        fits = lambda n: not self.scope_conflict(question, next(iter(self.rule_names[n])))
         for k, t in enumerate(tokens):
             if not (noun(t) and t.form.endswith(self.RULE_SUFFIX)):
                 continue
@@ -1344,10 +1346,29 @@ class Workspace:
             units = [tokens[i].form for i in range(j, k + 1)]
             if before < 2 or any(name in title for title in self.norm_titles.values()):
                 continue
-            held = [n for n in self.rule_names if len(n) >= 6 and (name.endswith(n) or _in_order(units, n)) and fits(n)]
-            if not held:
+            if not any(self.held_as(question, units, n, next(iter(self.rule_names[n])))
+                       or name.endswith(n) and not self.scope_conflict(question, next(iter(self.rule_names[n])))
+                       for n in self.rule_names if len(n) >= 6):
                 return phrase, units
         return None
+
+    def held_as(self, question, units, text, doc):
+        """True when the name units occur in order in `text` (a held rule's normalised name or title) of `doc` and its
+        scope does not conflict with the question; or, with the leading population word of the question taken off
+        the units, when they occur in order and `doc`'s recorded scope is that population."""
+        if _in_order(units, text) and not self.scope_conflict(question, doc):
+            return True
+        subject = self.civil_service_subject(question)
+        if not subject:
+            return False
+        mark = self.subject_qualifier(subject)
+        if units[0] == mark:
+            bare = units[1:]
+        elif units[0].startswith(mark) and units[0] != mark:
+            bare = [units[0][len(mark):]] + units[1:]
+        else:
+            return False
+        return bool(bare) and _in_order(bare, text) and rule_scope(self, doc) == subject
 
     def select(self, question, pinned=None, context_doc=None):
         """dict(status, applied, chunks, others, institutions, retrieval, ...). status: 'answer' | 'clarify' |
@@ -1376,8 +1397,8 @@ class Workspace:
         if missing:
             # double check (C-026 3): a top-ranked document whose title holds the name's units in order is that rule
             top = {str(self.passage_doc[i]) for i in np.argsort(-everywhere, kind='stable')[:20]}
-            if not any(d not in self.qa_docs and _in_order(missing[1], self.norm_titles.get(d, ''))
-                       and not self.scope_conflict(question, d) for d in top):
+            if not any(d not in self.qa_docs and self.held_as(question, missing[1], self.norm_titles.get(d, ''), d)
+                       for d in top):
                 return {**result, 'status': 'not_found', 'reason': 'rule_not_found', 'rule_name': missing[0]}
         topical = self.topical(question, named + unknown)
         result['retrieval'] = {'mode': 'hybrid' if cos is not None else 'bm25', 'topical_words': list(topical),
@@ -1715,11 +1736,21 @@ class Workspace:
         t = re.sub(r'\(.*?\)|일부개정\S*|전부개정\S*|제정\S*|규정|규칙|지침|세칙|내규|요강|처리|업무|운영|시행|게시|[^가-힣]', ' ', t)
         return {w[i:i + 2] for w in t.split() for i in range(len(w) - 1)}
 
-    @staticmethod
-    def civil_service_subject(question):
+    CIVIL_SERVICE = {'local_government': '지방공무원', 'central_government': '국가공무원'}
+
+    @classmethod
+    def civil_service_subject(cls, question):
         """'local_government' / 'central_government' when the question names only 지방공무원 / only 국가공무원."""
-        local, central = '지방공무원' in question, '국가공무원' in question
-        return 'local_government' if local and not central else 'central_government' if central and not local else None
+        named = [scope for scope, word in cls.CIVIL_SERVICE.items() if word in question]
+        return named[0] if len(named) == 1 else None
+
+    @classmethod
+    def subject_qualifier(cls, scope):
+        """The word that marks `scope` in front of 공무원 ("국가", "지방"): its subject word without the part both
+        subject words share."""
+        words = list(cls.CIVIL_SERVICE.values())
+        shared = os.path.commonprefix([w[::-1] for w in words])[::-1]
+        return cls.CIVIL_SERVICE[scope][:-len(shared)]
 
 
 
