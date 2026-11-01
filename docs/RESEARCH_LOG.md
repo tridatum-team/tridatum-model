@@ -198,6 +198,8 @@ uv sync --frozen --python 3.12 --extra service
 
 통과한 행은 148개 서명 예약 가족과의 겹침 검사(`check_reserved_overlap.py`)도 거친다. 852개 미서명 가족은 검사하지 않았으므로, 통과했다고 안전하다고 볼 수 없다.
 
+`data/work-case-candidates-v2/`(MODEL-RESUME-B-025)는 C-024 의미 검토를 반영해 4건을 원문 기준으로 고친 버전이다. 나머지 29건은 v1과 같고, v1은 그대로 둔다. 금액 계산은 `structure.calculations`(근거 숫자만 쓴 산술식과 결과)를 통과해야 목표 문장에 쓸 수 있다. 852개 미서명 가족을 지금 서명하지 못하는 이유와 필요한 원천·권리·다운로드량은 `reports/coordination/MODEL-RESUME-B-025/unsigned-852-metadata.json`에 있다.
+
 ### 생성형 모델 실제 학습 결과
 
 데이터 준비 이후 완료된 91M 추가 사전학습 몸통에서 실제 생성형 SFT를 수행했다. `scripts/train_public_dialogue.py`의 `prepare` → `train` → `evaluate`로 첫 실험을 재현하며, `prepare-qa`는 첫 혼합 데이터로부터 독해 비중을 높인 두 번째 데이터를 만든다. `--data`, `--run`, `--init-run`, `--steps`, `--device`를 명시하며 평가에는 `--report`가 필요하다. 기존 실행을 덮어쓰지 않는다.

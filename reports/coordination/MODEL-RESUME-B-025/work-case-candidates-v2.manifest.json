@@ -1,0 +1,128 @@
+{
+ "version": "work-case-candidates-v2",
+ "code_sha256": "b4abddfc72571de530d3edabd11f2231483399e3336dc0bce081fce42352752f",
+ "status": "candidates only; not approved for training",
+ "inputs": {
+  "spec": {
+   "path": "reports/coordination/MODEL-RESUME-B-025/case-spec.json",
+   "sha256": "c81182b23b89f4ad9a0e599272103d76eddaffe5ba93ee41098c60f928772331"
+  },
+  "screen": {
+   "path": "reports/coordination/MODEL-RESUME-B-024/screen-and-protect.json",
+   "sha256": "f2fc0f49113bfa46c60dd48cd8ea4a0624b7985adbb2caf9c498d6ff5fd00929"
+  },
+  "v5_manifest": "1c9540cab9a0a94f809e3d1de63bd7a9b6356d9d6f16857fb3e351d25cb9ba21",
+  "law_docs": "data/law-ko-source/docs.jsonl",
+  "reserved_manifest": {
+   "path": "data/benchmark-reserve-001/signatures-partial-148.jsonl",
+   "sha256": "0ed3cc079e8da0f9765e320091c88608186ef259c426f3319944c0921f7495e8"
+  },
+  "tokenizer": "runs/open-weight-base/qwen3-1.7b-hf-rev70d244cc"
+ },
+ "files": {
+  "candidates": {
+   "rows": 33,
+   "sha256": "cf7dc105629074df4e1aa04d722e2561d03b2ff77dcc740cfb6b280e6ecc3db3"
+  },
+  "held": {
+   "rows": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "documents": {
+   "rows": 25,
+   "sha256": "6d8ea7a0c8e32c46fb2159464df75e7d1f47c7369cac502a41a24d829c734e8f"
+  }
+ },
+ "counts": {
+  "cases_in_spec": 33,
+  "candidates": 33,
+  "held": 0,
+  "held_reasons": {},
+  "candidates_by_domain": {
+   "여비": 6,
+   "복무": 10,
+   "인사": 4,
+   "회계": 7,
+   "계약": 6
+  },
+  "candidates_by_behavior": {
+   "answer_with_condition": 15,
+   "answer_with_exception": 11,
+   "hold_missing_basis": 5,
+   "ask_back": 2
+  },
+  "documents_screened": 25,
+  "documents_with_candidates": 9,
+  "documents_rejected": {
+   "law-go-kr:admrul-file:143116119": [
+    "eval_exposure_windows",
+    "protected"
+   ],
+   "law-go-kr:admrul:2100000278916": [
+    "manual"
+   ],
+   "law-go-kr:law:209867": [
+    "eval_family"
+   ],
+   "law-go-kr:law:218301": [
+    "eval_title"
+   ],
+   "law-go-kr:law:280909": [
+    "eval_family"
+   ],
+   "law-go-kr:law:282641": [
+    "eval_family"
+   ],
+   "law-go-kr:law:288435": [
+    "eval_title"
+   ],
+   "law-go-kr:law:288975": [
+    "eval_family"
+   ],
+   "law-go-kr:law:289957": [
+    "eval_id",
+    "eval_title"
+   ],
+   "law-go-kr:law:290313": [
+    "eval_id",
+    "eval_title",
+    "b013_reserve_overlap"
+   ],
+   "law-go-kr:law:290321": [
+    "eval_id",
+    "eval_title"
+   ],
+   "law-go-kr:law:290323": [
+    "eval_id",
+    "eval_title",
+    "b013_reserve_overlap"
+   ],
+   "law-go-kr:law:290349": [
+    "eval_id",
+    "eval_title",
+    "b013_reserve_overlap"
+   ],
+   "law-go-kr:law:290493": [
+    "eval_title",
+    "b013_reserve_overlap"
+   ],
+   "reb.or.kr:1244:116253:file:021728bfe39ccd71": [
+    "institution_in_eval"
+   ],
+   "reb.or.kr:1244:98560:file:f8eafee96eda455e": [
+    "protected",
+    "institution_in_eval"
+   ]
+  },
+  "answer_tokens_max": 256,
+  "total_tokens_max": 1622
+ },
+ "overlap_148": {
+  "reserved_families": 148,
+  "corpus_rows_scanned": 33,
+  "matched_corpus_rows": 0,
+  "partial_review_rows": 0
+ },
+ "not_checked": "852 unsigned reserved families; human review; legal correctness beyond verbatim spans",
+ "review": "B (AI) authored; mechanical gates only; not quality-confirmed"
+}

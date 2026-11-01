@@ -22,7 +22,9 @@ Document gates (any one rejects every case of that document):
   manual                               B's written reason in the screening file
 Case gates: question prefix in evaluation-side files; same document and article already in a case training view
 (duplicate); spans not verbatim in the cited articles; [Dn] out of range or a passage never cited; hold behaviours
-without / answers with the '확인 불가: ' prefix; a target number that neither a cited passage nor the question holds;
+without / answers with the '확인 불가: ' prefix; a target number that neither a cited passage nor the question holds
+(a computed amount is allowed only through structure.calculations: an arithmetic expression over grounded numbers that
+evaluates to the stated result);
 a PII hint (document ids and dates removed first); a protected quote inside any text; target over 256 tokens or
 sequence over 4096 tokens (CASE_SYSTEM + rag_prompt, the tokenizer A trains with); A's case contract check;
 near-duplicate questions (character 3-gram Jaccard >= 0.7). Rows passing all gates are then checked against the 148
@@ -267,6 +269,18 @@ def main():
         if (c['behavior'] in HOLD) != t.startswith(PREFIX):
             problems.append('hold_prefix_mismatch')
         allowed = nums(q) | set().union(*(nums(context[n - 1]) for n in set(cited) if 1 <= n <= len(context)))
+        # a stated result of arithmetic on grounded numbers (e.g. 15,000원의 2분의 1 = 7,500원) is allowed once the
+        # expression only uses grounded operands and evaluates to the stated result
+        for calc in st.get('calculations', []):
+            expr = calc['expression']
+            if not re.fullmatch(r'[\d\s.*/+\-()]+', expr):
+                problems.append('calculation_expression_not_arithmetic')
+                continue
+            if not nums(expr) <= allowed:
+                problems.append('calculation_operand_ungrounded')
+            if abs(eval(expr, {'__builtins__': {}}) - float(calc['result'])) > 1e-9:  # digits and operators only
+                problems.append('calculation_result_mismatch')
+            allowed |= nums(calc['result'])
         stray = sorted(nums(re.sub(r'\[D\d+\]', '', t)) - allowed)
         if stray:
             problems.append(f'ungrounded_number:{",".join(stray)}')
@@ -310,6 +324,7 @@ def main():
                 'time': {'effective_from': src['effective'], 'basis': src['date_basis'], 'current': 'not labelled current'},
                 'family': {'stem': stem(src['title']), 'doc_in_existing_case_view': bool(used)},
                 'pii': {'hint_hits': pii, 'check': 'trid.korean_quality.PII_HINT after removing document ids and dates'},
+                'revision': c.get('revision'),
                 'review': 'B (AI) wrote question, target and structure; gates are mechanical; not human-reviewed, '
                           'not quality-confirmed, not approved for training'}}
         (held if problems else rows).append({**row, 'held': sorted(set(problems))} if problems else row)

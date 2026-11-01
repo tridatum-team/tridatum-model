@@ -1,0 +1,160 @@
+{
+ "report": "MODEL-RESUME-B-025: why 852 of the 1,000 reserved families are unsigned, and what would resolve it (metadata only)",
+ "access": "Read: the public reservation file (reports/coordination/benchmark-reserve-001.jsonl, families sha 9cf8233b…), its manifest, the acquisition status/summary, the signed manifest (family ids only), B-003. No reserved text, evaluation item or answer was opened or printed.",
+ "counts": {
+  "reserved_families": 1000,
+  "signed": 148,
+  "unsigned": 852,
+  "unsigned_text_status": {
+   "catalogued": 852
+  },
+  "unsigned_reservation_state": {
+   "provisional_exclude_from_training": 852
+  },
+  "unsigned_pending_checks": [
+   "business_group_review",
+   "licence_evidence",
+   "original_text_and_attachments",
+   "prior_training_exact_near_overlap",
+   "revision_family_resolution"
+  ],
+  "by_business_group": {
+   "회계·예산": 107,
+   "보건·안전": 107,
+   "교육·연구": 107,
+   "공기업 운영·서비스": 107,
+   "보훈·복지": 106,
+   "주거·부동산": 106,
+   "고용·인사": 106,
+   "계약·조달": 106
+  },
+  "by_institution_type": {
+   "공기업(시장형)": 35,
+   "기타공공기관": 620,
+   "준정부기관(위탁집행형)": 126,
+   "공기업(준시장형)": 42,
+   "준정부기관(기금관리형)": 29
+  },
+  "by_rule_category": {
+   "보수": 52,
+   "기타": 579,
+   "인사·복무·징계": 168,
+   "정관": 15,
+   "직제": 38
+  },
+  "institutions": 354,
+  "title_topic_proximity_to_b025_domains": {
+   "여비·출장": 32,
+   "계약·용역·입찰": 97,
+   "예산·성과금": 19,
+   "물품·불용·자산": 13,
+   "휴가·복무": 24,
+   "징계": 2
+  }
+ },
+ "why_unsigned": [
+  "Signatures are made only from extracted original text (check_reserved_overlap.py sign: exact sha256 of NFC whitespace-free text, 64-value MinHash of word 5-shingles, word 8-gram set); the reservation file itself is metadata and must not be signed (manifest limitation).",
+  "Original text exists for 148 families only: B-003 acquisition (ALIO, collect_institutions.py reserved) stopped on 2026-10-30 after ALIO connections failed from 04:15 KST (after a 0.5 s interval test); B stopped all ALIO requests at 04:25 and never resumed. All 852 are text_status=catalogued, text_path=null.",
+  "Later instructions bar B from ALIO access; the acquisition writes to S3 (corpus/reserved/...), and AWS use is not allowed in this round."
+ ],
+ "resolvable_with_originals_already_held": {
+  "families": 0,
+  "evidence": "The local sign input (data/benchmark-reserve-001/sign-input*.jsonl[.gz], 867 rows) holds exactly the 148 signed families. Matching the 852 by institution + normalised title against every local source (v5 index meta, runs/search-snapshots/*, data/public-data guides-v11 and inst-rules-reb-*) found 0 title matches.",
+  "institutions_with_local_documents_and_unsigned_families": {
+   "주택도시보증공사": {
+    "signed": 1,
+    "unsigned": 4,
+    "local_sources": [
+     "guides-v11",
+     "v5"
+    ]
+   },
+   "한국부동산원": {
+    "signed": 1,
+    "unsigned": 4,
+    "local_sources": [
+     "inst-rules-reb-001/002",
+     "inst-rule-reb-001/002/003"
+    ]
+   },
+   "국가철도공단": {
+    "signed": 1,
+    "unsigned": 3,
+    "local_sources": [
+     "v5"
+    ]
+   },
+   "한국동서발전(주)": {
+    "signed": 1,
+    "unsigned": 1,
+    "local_sources": [
+     "v5"
+    ]
+   },
+   "한국국제협력단": {
+    "signed": 1,
+    "unsigned": 2,
+    "local_sources": [
+     "v5"
+    ]
+   },
+   "한국산업기술기획평가원": {
+    "signed": 1,
+    "unsigned": 2,
+    "local_sources": [
+     "v5"
+    ]
+   },
+   "한국환경공단": {
+    "signed": 0,
+    "unsigned": 3,
+    "local_sources": [
+     "guides-v11",
+     "v5"
+    ]
+   },
+   "한국남부발전(주)": {
+    "signed": 0,
+    "unsigned": 3,
+    "local_sources": [
+     "v5"
+    ]
+   },
+   "한국토지주택공사": {
+    "signed": 0,
+    "unsigned": 2,
+    "local_sources": [
+     "inst-rule-lh-pay-001",
+     "v5"
+    ]
+   },
+   "수도권매립지관리공사": {
+    "signed": 0,
+    "unsigned": 2,
+    "local_sources": [
+     "v5"
+    ]
+   }
+  },
+  "note": "These 10 institutions have 26 unsigned families; their other local documents are not those families, so signing them would not cover the reservation. Retrieval or training on these institutions' own rules carries the most unchecked risk."
+ },
+ "b025_candidate_relation": "The 8 issuers of the B-025 candidates (ministries/agencies and 법령) are not reserved institutions (0 of 354). Title topic proximity above is the only metadata signal; text overlap cannot be ruled out without the 852 texts.",
+ "what_resolving_needs": {
+  "source": "ALIO detail pages and rule files (www.alio.go.kr/occasional/ruleDtl.do, /download/rulefiledown.json); robots Allow: / (B-003)",
+  "rights": "ALIO 저작권정책 (공공데이터법 자유이용, 저작권법 제24조의2); per-file 공공누리 unconfirmed, as for all 148 acquired",
+  "volume_estimate": {
+   "basis": "148 acquired families: 4.86 files/family; listed file bytes per family mean 1.69 MB, median 0.63 MB, p90 3.73 MB; B-003: about 5.5 requests/family",
+   "requests": "≈ 4,700 [추정]",
+   "bytes": "≈ 0.54 GB (median basis) to 1.44 GB (mean basis) [추정]",
+   "time_at_1_req_per_s": "≈ 80 min (B-003) [추정]",
+   "vs_budget": "exceeds the 200 MB download budget of this work"
+  },
+  "approvals": [
+   "ALIO access for B (currently barred; the B-003 connection failure must be re-checked with a single request first)",
+   "storage: S3 (AWS approval) or a local-only mode of collect_institutions.py reserved (code change)",
+   "download budget above 200 MB"
+  ],
+  "output_plan": "sign the newly extracted text into a NEW candidate manifest (e.g. data/benchmark-reserve-001/signatures-candidate-<N>.jsonl); the sealed signatures-partial-148.jsonl and the reservation files are never overwritten; re-run check_reserved_overlap.py on every training candidate against both manifests"
+ },
+ "executed_this_round": "No signing job: no unsigned family has a locally held original. No download, no ALIO request."
+}
