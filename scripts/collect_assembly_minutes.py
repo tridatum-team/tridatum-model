@@ -287,21 +287,46 @@ class HostLimiter:
             self.interval = max(self.base, self.interval * 0.95)
 
 
+class BudgetExceeded(Exception):
+    """A response body would pass the byte budget; it was not kept (the transfer stopped at the budget)."""
+
+
+class NetworkError(Exception):
+    """No response (connection, timeout); raised instead of retrying when the client was built with retry=False."""
+
+
 class Client:
-    def __init__(self, limiter, request_log=None):
+    def __init__(self, limiter, request_log=None, retry=True):
+        """retry=False: one attempt per call; every response is returned whatever its status and a network error
+        raises NetworkError, so the caller decides when to stop (bounded runs, MODEL-RESUME-B-026)."""
         import requests
         self.session, self.limiter = requests.Session(), limiter
         self.session.headers.update({'User-Agent': UA})
         self.request_log, self.log_lock = request_log, threading.Lock()
+        self.retry = retry
 
-    def request(self, method, url, metrics, **kw):
-        for attempt in range(6):
+    def request(self, method, url, metrics, max_bytes=None, **kw):
+        """max_bytes: stream the body and stop reading once it passes this many bytes (BudgetExceeded)."""
+        for attempt in range(6 if self.retry else 1):
+            over = False
             with self.limiter.slot() as (start, waited):
                 started = time.monotonic()
                 r = error = None
                 try:
-                    r = self.session.request(method, url, timeout=180, **kw)
-                    size = len(r.content)  # read the body inside the slot: one transfer in flight per host
+                    if max_bytes is None:
+                        r = self.session.request(method, url, timeout=180, **kw)
+                        size = len(r.content)  # read the body inside the slot: one transfer in flight per host
+                    else:
+                        r = self.session.request(method, url, timeout=180, stream=True, **kw)
+                        chunks, size = [], 0
+                        for chunk in r.iter_content(65536):
+                            size += len(chunk)
+                            if size > max_bytes:
+                                over = True
+                                break
+                            chunks.append(chunk)
+                        r.close()
+                        r._content, r._content_consumed = b''.join(chunks), True
                 except Exception as exc:  # network error: count as a 5xx-like failure and back off
                     error = exc
                     self.limiter.observe(599, time.monotonic() - started)
@@ -317,10 +342,14 @@ class Client:
             latency = time.monotonic() - started
             if error is not None:
                 metrics.record(waited, latency, 0, 599)
+                if not self.retry:
+                    raise NetworkError(f'{url}: {error!r}') from error
                 print(f'retry after {error!r}', flush=True)
                 continue
             metrics.record(waited, latency, size, r.status_code)
-            if r.status_code < 500 and r.status_code != 429:
+            if over:
+                raise BudgetExceeded(f'{url}: body passed {max_bytes} bytes')
+            if not self.retry or (r.status_code < 500 and r.status_code != 429):
                 return r
         raise RuntimeError(f'request failed after retries: {url}')
 

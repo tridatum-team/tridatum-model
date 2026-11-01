@@ -11,6 +11,14 @@
                Per-family state corpus/reserved/<reservation>/state/<seq>.json (resume skips finished families);
                acquisition status JSONL, A's check_reserved_overlap.py `sign` input and a summary are rebuilt from
                the states after every batch.
+  --local DIR  (reserved, reserved-sign-input) the same pipeline with every object under DIR on this machine instead
+               of S3; boto3 is never imported and no AWS client is created. Built for a bounded resume
+               (MODEL-RESUME-B-026): one request in flight, start interval >= 1 s, no retries; it stops after a
+               checkpoint on 401/403/429/451, an access-restriction page, --max-network-failures consecutive network
+               failures, or when --max-bytes (response bytes, kept across runs in DIR/budget.json) or --max-disk-bytes
+               (bytes under DIR) would be passed. Families already acquired elsewhere (--skip-acquisition, the S3
+               run's status JSONL) are skipped; files are written atomically (temp file + link, never replaced) under
+               validated keys. Status goes to reports/coordination/<reservation>-local-acquisition{,-summary}.json*.
 
 Licence evidence: ALIO 저작권정책 (https://www.alio.go.kr/notice/copyright.do) - public data free to use including
 commercial use under 공공데이터법; ALIO-owned works under 저작권법 제24조의2; third-party rights and 비공개 정보 excluded.
@@ -23,7 +31,9 @@ import datetime
 import gzip
 import hashlib
 import json
+import os
 import re
+import shutil
 import sys
 import time
 import unicodedata
@@ -34,10 +44,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT))
-from collect_assembly_minutes import (BUCKET, Client, HostLimiter, Metrics, list_keys, put_raw_keep,  # noqa: E402
-                                      put_verified, read_json_s3, s3_client)
+from collect_assembly_minutes import (BUCKET, BudgetExceeded, Client, HostLimiter, Metrics, NetworkError,  # noqa: E402
+                                      list_keys, put_raw_keep, put_verified, read_json_s3, s3_client)
 
 SOURCE = 'institutions'
+REPORTS = ROOT / 'reports/coordination'  # status JSONL / summary files (tests point this elsewhere)
 BASE = 'https://www.alio.go.kr'
 
 
@@ -143,12 +154,144 @@ def extract(kind, data):
     raise ValueError(f'no extractor for {kind}')
 
 
-def acquire_family(client, s3, metrics, rid, fam):
+class Stop(Exception):
+    """A condition that ends a bounded run after a checkpoint (blocked/limited by the site, budget, network)."""
+
+
+STOP_STATUS = {401, 403, 429, 451}
+
+
+def check_response(r, kind):
+    """Bounded runs: the site refusing or limiting us ends the run; nothing is retried or worked around."""
+    if r.status_code in STOP_STATUS:
+        raise Stop(f'http_{r.status_code} on {kind}')
+    head = r.content[:4096].decode('utf-8', 'ignore')
+    if 'text/html' in (r.headers.get('Content-Type') or '') and '접근' in head and ('제한' in head or '차단' in head):
+        raise Stop(f'access_restriction_page on {kind}')
+
+
+class S3Store:
+    """The reserved pipeline's objects in the training bucket (the original B-003 run)."""
+
+    def __init__(self, s3):
+        self.s3 = s3
+
+    def raw(self, key, body):
+        return put_raw_keep(self.s3, key, body)
+
+    def text(self, key, body):
+        return put_verified(self.s3, key, body)
+
+    def put(self, key, body):
+        self.s3.put_object(Bucket=BUCKET, Key=key, Body=body)
+
+    def read(self, key):
+        return self.s3.get_object(Bucket=BUCKET, Key=key)['Body'].read()
+
+    def states(self, prefix):
+        return [read_json_s3(self.s3, key, None) for key in list_keys(self.s3, prefix)]
+
+    def where(self, key):
+        return f's3://{BUCKET}/{key}'
+
+
+class LocalStore:
+    """The same objects as files under `root`. Keys are checked (no absolute path, no '..', a fixed character set)
+    and every write goes to a temp file in the target folder first. Raw and text are written once: os.link refuses an
+    existing name, so a re-run keeps identical bytes and puts different bytes beside them (<stem>.<sha16>.<ext>, as in
+    S3). States and status files are replaced atomically with os.replace. A write that would take the folder past
+    `max_disk_bytes` raises Stop before anything is written."""
+
+    KEY = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*')
+
+    def __init__(self, root, max_disk_bytes):
+        self.root = Path(root).resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.max_disk_bytes = max_disk_bytes
+        self.disk_bytes = sum(p.stat().st_size for p in self.root.rglob('*') if p.is_file())
+
+    def path(self, key):
+        if not self.KEY.fullmatch(key) or '..' in key.split('/'):
+            raise ValueError(f'unsafe key: {key!r}')
+        path = (self.root / key).resolve()
+        if self.root not in path.parents:
+            raise ValueError(f'key leaves the store: {key!r}')
+        return path
+
+    def _reserve(self, size):
+        if self.disk_bytes + size > self.max_disk_bytes:
+            raise Stop(f'disk budget: {self.disk_bytes} + {size} > {self.max_disk_bytes} bytes')
+
+    def _temp(self, path, body):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.parent / f'.{path.name}.tmp-{os.getpid()}'
+        with open(tmp, 'wb') as f:
+            f.write(body)
+            f.flush()
+            os.fsync(f.fileno())
+        return tmp
+
+    def _once(self, path, body):
+        """Write `path` once; raises FileExistsError when it already holds different bytes."""
+        if path.exists():
+            if hashlib.sha256(path.read_bytes()).digest() == hashlib.sha256(body).digest():
+                return
+            raise FileExistsError(path)
+        self._reserve(len(body))
+        tmp = self._temp(path, body)
+        try:
+            os.link(tmp, path)  # fails if the name exists: stored bytes are never replaced
+        finally:
+            tmp.unlink()
+        self.disk_bytes += len(body)
+
+    def raw(self, key, body):
+        digest = hashlib.sha256(body).hexdigest()
+        try:
+            self._once(self.path(key), body)
+            return digest, key
+        except FileExistsError:
+            folder, _, name = key.rpartition('/')
+            stem, dot, suffix = name.partition('.')
+            alt = f'{folder}/{stem}.{digest[:16]}{dot}{suffix}'
+            self._once(self.path(alt), body)
+            return digest, alt
+
+    def text(self, key, body):
+        self._once(self.path(key), body)
+        return hashlib.sha256(body).hexdigest()
+
+    def put(self, key, body):
+        path = self.path(key)
+        old = path.stat().st_size if path.exists() else 0
+        self._reserve(max(0, len(body) - old))
+        os.replace(self._temp(path, body), path)
+        self.disk_bytes += len(body) - old
+
+    def read(self, key):
+        return self.path(key).read_bytes()
+
+    def states(self, prefix):
+        folder = self.path(prefix.rstrip('/'))
+        return [json.loads(p.read_text()) for p in sorted(folder.glob('*.json'))] if folder.is_dir() else []
+
+    def where(self, key):
+        return str(self.path(key))
+
+
+def acquire_family(client, store, metrics, rid, fam, budget=None):
+    """budget: bounded runs only, a callable giving the response bytes still allowed (bodies are cut there); the
+    responses are then also checked for refusal or limiting (Stop)."""
     seq = fam['doc_family_id'].rsplit(':', 1)[1]
+    if not seq.isdigit():
+        raise ValueError(f"unexpected family id {fam['doc_family_id']}")
     prefix = f'corpus/reserved/{rid}'
-    r = client.request('GET', f'{BASE}/occasional/findRuleDtl.json', metrics, params={'seq': seq})
+    limit = (lambda: {'max_bytes': budget()}) if budget else (lambda: {})
+    r = client.request('GET', f'{BASE}/occasional/findRuleDtl.json', metrics, params={'seq': seq}, **limit())
+    if budget:
+        check_response(r, f'detail {seq}')
     t = time.monotonic()
-    detail_sha, detail_key = put_raw_keep(s3, f'{prefix}/raw/{seq}/detail.json', r.content)  # raw is never replaced
+    detail_sha, detail_key = store.raw(f'{prefix}/raw/{seq}/detail.json', r.content)  # raw is never replaced
     metrics.add('s3_s', time.monotonic() - t)
     state = {'doc_family_id': fam['doc_family_id'], 'seq': seq, 'reservation': rid,
              'reserved_business_group': fam.get('business_group'), 'business_group_review': 'pending',
@@ -171,7 +314,9 @@ def acquire_family(client, s3, metrics, rid, fam):
         rec = {'file_no': no, 'file_name': name, 'list_index': index, 'url': FILE_URL.format(no),
                'filename_date_text': m.group(0) if m else None}
         state['files'].append(rec)
-        f = client.request('GET', FILE_URL.format(no), metrics)
+        f = client.request('GET', FILE_URL.format(no), metrics, **limit())
+        if budget:
+            check_response(f, f'file {no}')
         rec['http'] = f.status_code
         if f.status_code != 200 or not f.content:
             rec['download_status'] = f'http_{f.status_code}' if f.status_code != 200 else 'empty_body'
@@ -180,15 +325,16 @@ def acquire_family(client, s3, metrics, rid, fam):
         rec.update({'download_status': 'ok', 'bytes': len(data), 'content_type': f.headers.get('Content-Type'),
                     'kind': kind_of(data, name)})
         t = time.monotonic()
-        rec['raw_sha256'], rec['raw_key'] = put_raw_keep(s3, f'{prefix}/raw/{seq}/{no}.{rec["kind"].split(":")[-1] or "bin"}', data)
+        ext = re.sub(r'[^a-z0-9]', '', rec['kind'].split(':')[-1].lower()) or 'bin'
+        rec['raw_sha256'], rec['raw_key'] = store.raw(f'{prefix}/raw/{seq}/{no}.{ext}', data)
         metrics.add('s3_s', time.monotonic() - t)
         if rec['kind'] == 'zip:zip':
-            rec['members'] = zip_members(s3, metrics, prefix, seq, no, data)
+            rec['members'] = zip_members(store, metrics, prefix, seq, no, data)
             states = Counter(x.get('extract_status') for x in rec['members'])
             rec['extract_status'] = ('empty_archive' if not rec['members'] else 'ok' if states == {'ok': len(rec['members'])}
                                      else 'partial' if states.get('ok') else 'failed')
         else:
-            rec.update(text_record(s3, metrics, prefix, seq, no, rec['kind'], data))
+            rec.update(text_record(store, metrics, prefix, seq, no, rec['kind'], data))
     ok = [x for x in state['files'] if x.get('extract_status') == 'ok']
     state['status'] = ('no_files' if not state['files'] else 'text_acquired' if len(ok) == len(state['files'])
                        else 'partial' if ok else 'extraction_failed'
@@ -199,7 +345,7 @@ def acquire_family(client, s3, metrics, rid, fam):
 EXTRACTOR = {'hwp': 'rhwp export-doclang', 'pdf': 'pdftotext', 'hwpx': 'hwpx section XML'}
 
 
-def text_record(s3, metrics, prefix, seq, stem, kind, data):
+def text_record(store, metrics, prefix, seq, stem, kind, data):
     """Extract one document; text stored at <prefix>/text/<seq>/<stem>.txt. Failures are recorded, never promoted."""
     rec, t = {}, time.monotonic()
     try:
@@ -210,7 +356,7 @@ def text_record(s3, metrics, prefix, seq, stem, kind, data):
     metrics.add('parse_s', time.monotonic() - t)
     if text.strip():
         t = time.monotonic()
-        rec['text_sha256'] = put_verified(s3, f'{prefix}/text/{seq}/{stem}.txt', text.encode())
+        rec['text_sha256'] = store.text(f'{prefix}/text/{seq}/{stem}.txt', text.encode())
         metrics.add('s3_s', time.monotonic() - t)
         rec.update({'text_key': f'{prefix}/text/{seq}/{stem}.txt', 'chars': len(text), 'extractor': EXTRACTOR[kind],
                     'effective_clauses': [line.strip() for line in text.splitlines() if '시행한다' in line][:8],
@@ -218,7 +364,7 @@ def text_record(s3, metrics, prefix, seq, stem, kind, data):
     return rec
 
 
-def zip_members(s3, metrics, prefix, seq, no, data):
+def zip_members(store, metrics, prefix, seq, no, data):
     """Archived revisions/attachments (e.g. "…(개정 전).zip"): one record per file member; the zip itself is the raw."""
     import io
     import zipfile
@@ -238,7 +384,7 @@ def zip_members(s3, metrics, prefix, seq, no, data):
         m = DATE_IN_NAME.search(name)
         rec = {'member': name, 'member_index': i, 'bytes': info.file_size, 'kind': kind_of(body, name),
                'member_sha256': hashlib.sha256(body).hexdigest(), 'filename_date_text': m.group(0) if m else None}
-        rec.update(text_record(s3, metrics, prefix, seq, f'{no}-m{i:03d}', rec['kind'], body))
+        rec.update(text_record(store, metrics, prefix, seq, f'{no}-m{i:03d}', rec['kind'], body))
         members.append(rec)
     return members
 
@@ -256,11 +402,13 @@ def round_robin(families):
     return out
 
 
-def publish(s3, rid, states, reservation_count, metrics=None):
+def publish(store, rid, states, reservation_count, metrics=None, report=None, extra=None):
+    """report: status-file stem under reports/coordination (default <rid>; the local run writes <rid>-local)."""
+    report = report or rid
     rows = [states[k] for k in sorted(states, key=lambda k: int(k))]
     text = ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows)
-    (ROOT / f'reports/coordination/{rid}-acquisition.jsonl').write_text(text)
-    s3.put_object(Bucket=BUCKET, Key=f'corpus/reserved/{rid}/acquisition.jsonl', Body=text.encode())
+    (REPORTS / f'{report}-acquisition.jsonl').write_text(text)
+    store.put(f'corpus/reserved/{rid}/acquisition.jsonl', text.encode())
     files = [f for r in rows for f in r['files']]
     summary = {'reservation': rid, 'reserved_families': reservation_count, 'families_attempted': len(rows),
                'families_pending': reservation_count - len(rows),
@@ -274,30 +422,25 @@ def publish(s3, rid, states, reservation_count, metrics=None):
                'archive_member_extract_status': dict(Counter(m.get('extract_status') for f in files for m in f.get('members', []))),
                'text_chars': sum(f.get('chars', 0) + sum(m.get('chars', 0) for m in f.get('members', [])) for f in files),
                'files_mentioning_kogl': sum(bool(f.get('mentions_kogl')) for f in files),
-               'updated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}
+               'updated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'), **(extra or {})}
     if metrics:
         summary['metrics'] = metrics.snapshot()
-    s3.put_object(Bucket=BUCKET, Key=f'corpus/reserved/{rid}/summary.json',
-                  Body=json.dumps(summary, ensure_ascii=False, indent=1).encode())
-    (ROOT / f'reports/coordination/{rid}-acquisition-summary.json').write_text(
+    store.put(f'corpus/reserved/{rid}/summary.json', json.dumps(summary, ensure_ascii=False, indent=1).encode())
+    (REPORTS / f'{report}-acquisition-summary.json').write_text(
         json.dumps(summary, ensure_ascii=False, indent=1) + '\n')
     return summary
 
 
-def load_states(s3, rid):
-    states = {}
-    for key in list_keys(s3, f'corpus/reserved/{rid}/state/'):
-        st = read_json_s3(s3, key, None)
-        states[st['seq']] = st
-    return states
+def load_states(store, rid):
+    return {st['seq']: st for st in store.states(f'corpus/reserved/{rid}/state/') if st}
 
 
-def reserved(client, s3, metrics, reservation, workers, limit=None, retry=()):
+def reserved(client, store, metrics, reservation, workers, limit=None, retry=()):
     """retry: family statuses to fetch again (e.g. partial after an extractor fix); their old state is replaced."""
     rid = reservation.name.removesuffix('.jsonl')
     families = [json.loads(line) for line in reservation.read_text().splitlines() if line.strip()]
     families = [f for f in families if f['doc_family_id'].startswith('institutions:alio-rule:')]
-    states = load_states(s3, rid)
+    states = load_states(store, rid)
     pending = lambda f: (st := states.get(f['doc_family_id'].rsplit(':', 1)[1])) is None or st['status'] in retry
     todo = [f for f in round_robin(families) if pending(f)][:limit]
     print(json.dumps({'reserved': len(families), 'done': len(states), 'todo': len(todo)}), flush=True)
@@ -305,7 +448,7 @@ def reserved(client, s3, metrics, reservation, workers, limit=None, retry=()):
 
     def one(fam):
         try:
-            return acquire_family(client, s3, metrics, rid, fam)
+            return acquire_family(client, store, metrics, rid, fam)
         except Exception as exc:  # leave the family pending; a re-run retries it
             print(f"pending {fam['doc_family_id']}: {exc!r}", flush=True)
             return None
@@ -314,10 +457,9 @@ def reserved(client, s3, metrics, reservation, workers, limit=None, retry=()):
         for begin in range(0, len(todo), 20):
             for st in pool.map(one, todo[begin:begin + 20]):
                 if st:
-                    s3.put_object(Bucket=BUCKET, Key=f"corpus/reserved/{rid}/state/{st['seq']}.json",
-                                  Body=json.dumps(st, ensure_ascii=False).encode())
+                    store.put(f"corpus/reserved/{rid}/state/{st['seq']}.json", json.dumps(st, ensure_ascii=False).encode())
                     states[st['seq']] = st
-            summary = publish(s3, rid, states, len(families), metrics)
+            summary = publish(store, rid, states, len(families), metrics)
             done = begin + len(todo[begin:begin + 20])
             rate = done / max(1e-9, time.monotonic() - started)
             print(json.dumps({'done': len(states), 'of': len(families), 'families_per_min': round(rate * 60, 2),
@@ -326,26 +468,102 @@ def reserved(client, s3, metrics, reservation, workers, limit=None, retry=()):
                               'metrics': metrics.snapshot()}, ensure_ascii=False), flush=True)
 
 
-def sign_input(s3, rid):
+def reserved_local(client, store, metrics, reservation, skip_acquisition, max_bytes, max_network_failures=3,
+                   limit=None, retry=()):
+    """Bounded, sequential resume into a LocalStore. Families listed in `skip_acquisition` (the status JSONL of an
+    earlier run, e.g. the S3 run's 148) are not fetched again. A family's state is written as soon as it is done
+    (checkpoint); a family cut by a stop keeps no state and stays pending. Response bytes are kept across runs in
+    budget.json and bodies are cut so the total never passes `max_bytes`. Returns the last summary."""
+    rid = reservation.name.removesuffix('.jsonl')
+    families = [json.loads(line) for line in reservation.read_text().splitlines() if line.strip()]
+    families = [f for f in families if f['doc_family_id'].startswith('institutions:alio-rule:')]
+    elsewhere = {json.loads(line)['doc_family_id'] for line in skip_acquisition.read_text().splitlines() if line.strip()}
+    states = load_states(store, rid)
+    budget_key = 'budget.json'
+    spent = (json.loads(store.read(budget_key)) if store.path(budget_key).exists()
+             else {'response_bytes': 0, 'requests': 0})
+    pending = lambda f: f['doc_family_id'] not in elsewhere and (
+        (st := states.get(f['doc_family_id'].rsplit(':', 1)[1])) is None or st['status'] in retry)
+    todo = [f for f in round_robin(families) if pending(f)][:limit]
+    base = {'bytes': 0, 'requests': 0}  # everything this process sent counts, the robots.txt check included
+    used = lambda: spent['response_bytes'] + metrics.snapshot()['bytes'] - base['bytes']
+    remaining = lambda: max(0, max_bytes - used() - 65536)  # one stream chunk of slack: the total stays under max_bytes
+    run = {'families_elsewhere': len(elsewhere), 'local_states_before': len(states), 'todo': len(todo),
+           'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')}
+    print(json.dumps({'reserved': len(families), **run, 'response_bytes_before': spent['response_bytes']}), flush=True)
+    failures, done, stop = 0, 0, None
+
+    def checkpoint():
+        snap = metrics.snapshot()
+        totals = {'response_bytes': spent['response_bytes'] + snap['bytes'] - base['bytes'],
+                  'requests': spent['requests'] + snap['requests'] - base['requests']}
+        store.put(budget_key, json.dumps(totals).encode())
+        return publish(store, rid, states, len(families), metrics, report=f'{rid}-local',
+                       extra={'families_acquired_elsewhere': len(elsewhere),
+                              'budget': {'max_response_bytes': max_bytes, 'max_disk_bytes': store.max_disk_bytes,
+                                         **totals, 'disk_bytes': store.disk_bytes},
+                              'run': {**run, 'done_this_run': done, 'stop': stop}})
+
+    for fam in todo:
+        if remaining() <= 0:
+            stop = f'response byte budget reached ({used()} of {max_bytes})'
+            break
+        try:
+            st = acquire_family(client, store, metrics, rid, fam, budget=remaining)
+        except Stop as exc:
+            stop = str(exc)
+            break
+        except BudgetExceeded as exc:
+            stop = f'response byte budget: {exc}'
+            break
+        except NetworkError as exc:
+            failures += 1
+            print(f"pending {fam['doc_family_id']}: {exc}", flush=True)
+            if failures >= max_network_failures:
+                stop = f'{failures} consecutive network failures (last: {exc})'
+                break
+            continue
+        failures = 0
+        store.put(f"corpus/reserved/{rid}/state/{st['seq']}.json", json.dumps(st, ensure_ascii=False).encode())
+        states[st['seq']] = st
+        done += 1
+        if done % 10 == 0:
+            summary = checkpoint()
+            print(json.dumps({'done_this_run': done, 'local_states': len(states), 'status': summary['family_status'],
+                              'budget': summary['budget'], 'interval_s': round(client.limiter.interval, 2)},
+                             ensure_ascii=False), flush=True)
+    run['finished_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
+    summary = checkpoint()
+    print(json.dumps({'stop': stop, 'done_this_run': done, 'local_states': len(states),
+                      'status': summary['family_status'], 'budget': summary['budget']}, ensure_ascii=False), flush=True)
+    return summary
+
+
+def sign_input(store, rid, local_out=None):
     """A's check_reserved_overlap.py `sign` input: one row per extracted file {family_id, text, doc_id, source_url,
-    group}. Written to S3 and data/ (gitignored); reserved text never goes under corpus/clean."""
-    states = load_states(s3, rid)
+    group}. S3 run: written to S3 and data/<rid>/sign-input.jsonl.gz (gitignored). Local run: written only to
+    `local_out`, never over an existing file. Reserved text never goes under corpus/clean."""
+    states = load_states(store, rid)
     rows = []
     for st in states.values():
         for f in st['files']:
             for doc, doc_id in [(f, f"{st['doc_family_id']}:file:{f['file_no']}")] + [
                     (m, f"{st['doc_family_id']}:file:{f['file_no']}:member:{m['member_index']}") for m in f.get('members', [])]:
                 if doc.get('text_key'):
-                    text = s3.get_object(Bucket=BUCKET, Key=doc['text_key'])['Body'].read().decode()
-                    rows.append({'family_id': st['doc_family_id'], 'text': text, 'doc_id': doc_id,
-                                 'source_url': f['url'], 'group': st['doc_family_id']})
+                    rows.append({'family_id': st['doc_family_id'], 'text': store.read(doc['text_key']).decode(),
+                                 'doc_id': doc_id, 'source_url': f['url'], 'group': st['doc_family_id']})
     body = gzip.compress(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows).encode(), mtime=0)
-    digest = put_verified(s3, f'corpus/reserved/{rid}/sign-input.jsonl.gz', body)
-    local = ROOT / f'data/{rid}/sign-input.jsonl.gz'
+    if local_out:
+        local, digest, remote = Path(local_out), hashlib.sha256(body).hexdigest(), None
+        if local.exists():
+            raise SystemExit(f'{local} exists; versions are never overwritten')
+    else:
+        digest = put_verified(store.s3, f'corpus/reserved/{rid}/sign-input.jsonl.gz', body)
+        local, remote = ROOT / f'data/{rid}/sign-input.jsonl.gz', store.where(f'corpus/reserved/{rid}/sign-input.jsonl.gz')
     local.parent.mkdir(parents=True, exist_ok=True)
     local.write_bytes(body)
     print(json.dumps({'rows': len(rows), 'families': len({r['family_id'] for r in rows}), 'sha256': digest,
-                      's3': f's3://{BUCKET}/corpus/reserved/{rid}/sign-input.jsonl.gz', 'local': str(local)}))
+                      's3': remote, 'local': str(local)}))
 
 
 def homepage_host(homepage):
@@ -377,6 +595,24 @@ def reserved_hosts(s3, reservation):
                       'hosts': len(out['hosts'])}))
 
 
+def robots_check(client, metrics, paths):
+    """One robots.txt request before a bounded run; the run starts only if every path is allowed."""
+    from urllib.robotparser import RobotFileParser
+    r = client.request('GET', f'{BASE}/robots.txt', metrics, max_bytes=1 << 20)
+    check_response(r, 'robots.txt')
+    if r.status_code != 200:
+        raise Stop(f'robots.txt http_{r.status_code}')
+    parser = RobotFileParser()
+    parser.parse(r.text.splitlines())
+    blocked = [p for p in paths if not parser.can_fetch('trid-collector', BASE + p)]
+    if blocked:
+        raise Stop(f'robots.txt disallows {blocked}')
+    return r.text
+
+
+GiB = 1 << 30
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('action', choices=['agencies', 'rules-index', 'reserved', 'reserved-sign-input', 'reserved-hosts'])
@@ -386,20 +622,54 @@ def main():
     p.add_argument('--reservation', type=Path, default=ROOT / 'reports/coordination/benchmark-reserve-001.jsonl')
     p.add_argument('--limit', type=int)
     p.add_argument('--retry-status', nargs='*', default=[], help='re-fetch families whose state has these statuses')
+    p.add_argument('--local', type=Path, help='store under this folder; never S3 (reserved, reserved-sign-input only)')
+    p.add_argument('--skip-acquisition', type=Path,
+                   default=ROOT / 'reports/coordination/benchmark-reserve-001-acquisition.jsonl',
+                   help='status JSONL of families already acquired elsewhere (the S3 run); not fetched again')
+    p.add_argument('--max-bytes', type=int, default=2 * GiB, help='response bytes over all local runs')
+    p.add_argument('--max-disk-bytes', type=int, default=2 * GiB, help='bytes under --local')
+    p.add_argument('--max-network-failures', type=int, default=3, help='consecutive network failures that stop the run')
+    p.add_argument('--sign-out', type=Path, help='reserved-sign-input --local: output file (never overwritten)')
     args = p.parse_args()
-    s3, metrics = s3_client(), Metrics()
+    metrics = Metrics()
+    if args.local:
+        if args.action not in ('reserved', 'reserved-sign-input'):
+            p.error('--local supports reserved and reserved-sign-input only')
+        store = LocalStore(args.local, args.max_disk_bytes)
+        rid = args.reservation.name.removesuffix('.jsonl')
+        if args.action == 'reserved-sign-input':
+            if not args.sign_out:
+                p.error('--sign-out is required with --local')
+            return sign_input(store, rid, args.sign_out)
+        if args.workers != 1 or args.interval < 1.0:
+            p.error('--local runs one request at a time with --interval >= 1.0')
+        free = shutil.disk_usage(store.root).free
+        need = args.max_disk_bytes - store.disk_bytes
+        if free < need + GiB:
+            p.error(f'free space {free} bytes < remaining disk budget {need} + 1 GiB margin')
+        client = Client(HostLimiter(args.interval, host='www.alio.go.kr'), ROOT / 'logs/requests-www.alio.go.kr.jsonl',
+                        retry=False)
+        try:
+            robots_check(client, metrics, ['/occasional/findRuleDtl.json', '/download/rulefiledown.json'])
+        except (Stop, NetworkError, BudgetExceeded) as exc:
+            print(json.dumps({'stop': f'before families: {exc}'}, ensure_ascii=False), flush=True)
+            return 2
+        reserved_local(client, store, metrics, args.reservation, args.skip_acquisition, args.max_bytes,
+                       args.max_network_failures, args.limit, tuple(args.retry_status))
+        return 0
+    s3 = s3_client()
     client = Client(HostLimiter(args.interval, host='www.alio.go.kr'), ROOT / 'logs/requests-www.alio.go.kr.jsonl')
     if args.action == 'agencies':
         agencies(client, s3, metrics)
     elif args.action == 'rules-index':
         rules_index(client, s3, metrics, args.max_pages, args.workers)
     elif args.action == 'reserved':
-        reserved(client, s3, metrics, args.reservation, args.workers, args.limit, tuple(args.retry_status))
+        reserved(client, S3Store(s3), metrics, args.reservation, args.workers, args.limit, tuple(args.retry_status))
     elif args.action == 'reserved-hosts':
         reserved_hosts(s3, args.reservation)
     else:
-        sign_input(s3, args.reservation.name.removesuffix('.jsonl'))
+        sign_input(S3Store(s3), args.reservation.name.removesuffix('.jsonl'))
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
