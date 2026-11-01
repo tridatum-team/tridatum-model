@@ -1,0 +1,350 @@
+{
+ "worktree": "/Users/eomgyuhyeon/사업/trid-model-024",
+ "sha": "e6848ebceeea4569d830e331de07cc48dc0f6196",
+ "pressure_before": "1",
+ "W": [
+  {
+   "tag": "W1 abbreviation, held (C-026 V6 gate)",
+   "q": "공무원수당 규정에서 정근수당은 어떻게 주나요?",
+   "http": 200,
+   "sec": 4.9,
+   "status": "clarify",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 공무원수당 등에 관한 규정 제7조 등 관련"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정 [별표 0002] 정근수당 지급 구분표(제7조제1항 관련)"
+    ],
+    [
+     "국무조정실",
+     "국무조정실 및 국무총리비서실 공무직 등 근로자 인사관리규정"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "warnings": [],
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 행정안전부: 지방공무원 수당 등에 관한 규정\n- 행정안전부: 지방공무원 수당 등에 관한 규정 [별표 0002] 정근수당 지급구분표(제6조제1항 관련)\n- 인사혁신처: 공무원수당 등에 관한 규정\n- 인사혁신처: 공무원수당 등에 관한 규정 [별표 0002] 정근수당 지급 구분표(제7조제1항 관련)\n- 법제처(질의: 민원인): 민원인 - 공무원수당 등에 관한 규정 제7조 등 관련\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "W2 abbreviation spaced, held",
+   "q": "공무원 수당 규정에서 가족수당은 얼마인가요?",
+   "http": 200,
+   "sec": 1.3,
+   "status": "clarify",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정"
+    ],
+    [
+     "인사혁신처",
+     "공무원수당 등에 관한 규정 [별표 0005] 가족수당 지급 구분표(제10조제1항 관련)"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 부부 중 한 명이 공무원인 경우 가족수당의 지급이 제한되는 구체적 기준(「지방공무원 수당 등에 관"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 가족수당의 지급 대상인 부양가족의 범위(「지방공무원 수당 등에 관한 규정」 제10조제2항 등 관련"
+    ],
+    [
+     "법원행정처",
+     "법관 및 법원공무원수당 등에 관한 규칙 [별표 0005] 가족수당 지급 구분표"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "warnings": [],
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 행정안전부: 지방공무원 수당 등에 관한 규정\n- 인사혁신처: 공무원수당 등에 관한 규정\n- 인사혁신처: 공무원수당 등에 관한 규정 [별표 0005] 가족수당 지급 구분표(제10조제1항 관련)\n- 법제처(질의: 민원인): 민원인 - 부부 중 한 명이 공무원인 경우 가족수당의 지급이 제한되는 구체적 기준(「지방공무원 수당 등에 관한 규정」 제10조제5항 등 관련)\n- 법원행정처: 법관 및 법원공무원수당 등에 관한 규칙 [별표 0005] 가족수당 지급 구분표\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "W3 spacing of held title 공무원보수규정",
+   "q": "공무원 보수 규정에서 호봉 획정은 어떻게 하나요?",
+   "http": 200,
+   "sec": 28.6,
+   "status": "unverified",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원보수규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원보수규정 [별표 0015] 공무원의 초임호봉표(제8조 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원보수규정 [별표 0029] 승급심사에 의하여 승급하는 호봉(제17조제1항 본문 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원보수규정 [별표 0025] 별표 11의 봉급표를 적용받는 교육공무원의 기산호봉표"
+    ],
+    [
+     "인사혁신처",
+     "공무원보수규정 [별표 0026] 별표 12의 봉급표를 적용받는 교육공무원 등의 기산호봉표"
+    ],
+    [
+     "인사혁신처",
+     "공무원보수규정 [별표 0012] 국립대학 교원 등의 봉급표(제5조 및 별표 1 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": [
+    {
+     "annex": "28",
+     "table": "승진ㆍ전보 시 호봉 획정표(제11조제2항 관련)",
+     "unstated": [
+      "승진"
+     ]
+    },
+    {
+     "annex": "3",
+     "table": "일반직공무원과 일반직에 준하는 특정직 및 별정직 공무원 등의 봉급표(제5조 및 별표 1 관련)",
+     "unstated": [
+      "일반직"
+     ]
+    }
+   ],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 모델 문맥 한도로 함께 넣으려던 다른 별표 구간 1개를 빼었습니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(2건).",
+   "warnings": [],
+   "answer": "「공무원보수규정」은 경우에 따라 다른 표를 씁니다: 별표 28(승진ㆍ전보 시 호봉 획정표(제11조제2항 관련)), 별표 3(일반직공무원과 일반직에 준하는 특정직 및 별정직 공무원 등의 봉급표(제5조 및 별표 1 관련)). 질문에 어느 경우인지(승진, 일반직 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "W4 scope-qualified abbreviation, held",
+   "q": "국가공무원 수당 규정에서 정근수당은?",
+   "http": 200,
+   "sec": 1.6,
+   "status": "not_found",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": "rule_not_found",
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "warnings": [],
+   "answer": "질문한 「국가공무원 수당 규정」을(를) 이 서비스의 검색 자료(공개 자료 색인)에서 찾지 못했습니다. 그런 규정이 없다는 뜻은 아니며, 검색 자료에 들어 있지 않을 수 있습니다. 다른 규정으로 대신 답하지 않습니다. 정확한 규정명이나 소관 기관명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "W5 scope-qualified spaced held title",
+   "q": "국가공무원 복무 규정에서 연가 일수는?",
+   "http": 200,
+   "sec": 12.5,
+   "status": "unverified",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "국가공무원 복무규정"
+   ],
+   "others": [],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "warnings": [],
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "W6 local held title spaced",
+   "q": "지방공무원 복무 규정에서 연가 일수는?",
+   "http": 200,
+   "sec": 13.0,
+   "status": "unverified",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "행정안전부",
+    "지방공무원 복무규정"
+   ],
+   "others": [
+    [
+     "행정안전부",
+     "지방공무원 복무규정 [별표 0002] 시간선택제공무원등의 휴가 기준(제7조의9 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 복무규정 [별표 0001] 경조사 휴가일수표(제7조의7제2항 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 복무규정 [서식 0002] 비상소집 결과보고서"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "warnings": [],
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "W7 truly unheld",
+   "q": "교육공무원 여비 규정에서 일비는?",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "법제처(질의: 민원인)",
+     "행정안전부ㆍ민원인 - 대통령령 제33312호 「공무원 여비 규정」 시행 전에 국내 교육훈련이 시작된 공무원에"
+    ],
+    [
+     "행정안전부",
+     "행정안전부_지방공무원 인사실무_20251111"
+    ],
+    [
+     "법원행정처",
+     "법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0001] 여비 지급 구분표(제3조 관련)"
+    ],
+    [
+     "대법원",
+     "국외여비업무 처리지침"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "warnings": [],
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 인사혁신처: 공무원 여비 규정 [별표 0001] 여비 지급 구분표(제3조 관련)\n- 법원행정처: 법원공무원 여비 규칙 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "W8 truly unheld",
+   "q": "교육공무원 승진규정에서 가산점은 어떻게 주나요?",
+   "http": 200,
+   "sec": 14.6,
+   "status": "unverified",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "법제처(질의: 민원인)",
+    "민원인 - 교육공무원에 대한 승진후보자 명부 작성 시 부여하는 가산점 산정 기준(「교육공무원승진규정」 제41조 등 관련"
+   ],
+   "others": [
+    [
+     "법제처(질의: 전라북도교육청)",
+     "전라북도교육청 - 교육공무원인 정규 교사에 대한 가산점 산정 시 기간제교원으로 근무한 경력 및 실적도 포함되"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "warnings": [],
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  }
+ ],
+ "ports_free_after": true,
+ "pressure_after": "1"
+}
