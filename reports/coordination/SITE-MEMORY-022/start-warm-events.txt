@@ -1,0 +1,14 @@
+21:25:48 watchdog armed (120 s)
+21:25:48 start
+21:26:01 llama-server args: llama-server -m runs/open-weight-base/Qwen3-1.7B-Q8_0.gguf --host 127.0.0.1 --port 51912 -c 4096 -np 1 -t 4 -tb 4 --jinja
+21:26:01 llama-server env (two values): LLAMA_ARG_DEVICE=none LLAMA_ARG_N_GPU_LAYERS=0 
+21:26:02 llama-server vmmap: IOAccelerator resident=64K IOAccelerator resident=928K mapped_file virt=1.8G resident=1.6G
+21:26:03 backend footprint: Physical footprint= 1.9G Physical footprint (peak)= 2.6G 
+21:26:03 sending one institution question
+21:26:23 QUERY | HTTP 200 | 20.2s | status=quoted | applied=한국부동산원:한국부동산원_여비규정 일부개정규정안(게시 2026.07.15) | answer='한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자가 일치하는 문장 3건을 '
+21:27:43 STOP: scenario time over (115 s)
+Stopping temporary demo. Domain will show the offline page.
+Demo is stopped (supervisor and model server process group exited).
+21:27:47 max consecutive warning 0s; pressure counts:  106  p=1 
+max cmp=5.96 max trid_rss=6.08 max wired=2.97
+21:27:48 own processes left: 0; health after: []
