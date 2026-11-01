@@ -639,6 +639,53 @@ def _annex(text):
     return re.sub(r'\s+', '', text)
 
 
+def _path_annex(path):
+    """Annex id of a passage that is an inline table of its statute (index path part "별표 4"), else None."""
+    for part in path or ():
+        m = re.fullmatch(r'별표\s*(\d+(?:\s*의\s*\d+)?)', str(part).strip())
+        if m:
+            return _annex(m.group(1))
+    return None
+
+
+def _condition_units(text, drop_topic=False):
+    """Condition units of a table caption or a citing clause: its nouns (2+ letters), with "X이 아닌 Y" read as the one
+    unit "X 아닌" — X and its head noun Y are not units of their own (공무원이 아닌 사람 → "공무원 아닌"). With
+    `drop_topic`, the clause's topic (the nouns right before its last 은/는: "국외 항공운임은", "위험근무수당은") is what
+    the table pays, not a condition, and is left out: only its modifiers (국외) remain."""
+    from trid.korean_quality import kiwi
+    tokens = kiwi().tokenize(text)
+    noun = lambda t: t.tag in ('NNG', 'NNP')
+    units, skip = set(), set()
+    for k, t in enumerate(tokens):
+        if t.tag == 'VCN':
+            before = next((u for u in reversed(tokens[max(0, k - 2):k]) if noun(u)), None)
+            after = next((u for u in tokens[k + 1:k + 4] if noun(u)), None)
+            if before is not None:
+                units.add(before.form + ' 아닌')
+                skip.add(before.start)
+            if after is not None:
+                skip.add(after.start)
+    topic = next((k for k in range(len(tokens) - 1, -1, -1) if tokens[k].tag == 'JX' and tokens[k].form in ('은', '는')), None)
+    if drop_topic and topic is not None:
+        k = topic - 1
+        while k >= 0 and noun(tokens[k]) and tokens[k].start + tokens[k].len >= tokens[k + 1].start - 1:
+            skip.add(tokens[k].start)
+            k -= 1
+    return units | {t.form for t in tokens if noun(t) and len(t.form) >= 2 and t.start not in skip}
+
+
+def _unit_stated(unit, question):
+    if unit.endswith(' 아닌'):
+        return re.search(re.escape(unit[:-3]) + r'\s*(?:이|가)?\s*아닌', question) is not None
+    return unit in question
+
+
+def _names_table(question, annex):
+    """True when the question names the table "별표 <annex>" itself ("별표 2 식비", "별표 6의 2")."""
+    return re.search(r'별표\s*' + r'\s*의\s*'.join(map(re.escape, annex.split('의'))) + r'(?![\d의])', question) is not None
+
+
 def _lines(path):
     """The lines of `Path(path).read_text().splitlines()`, read a line at a time instead of holding the whole file and
     its line list (SITE-MEMORY-023): the same text decoding and newline translation, then the same splitlines()
@@ -1259,6 +1306,33 @@ class Workspace:
         scope = rule_scope(self, doc) if subject and doc in self.meta else None
         return bool(scope) and scope != subject
 
+    RULE_SUFFIX = ('시행규칙', '시행령', '규정', '규칙', '지침', '훈령', '예규', '내규', '세칙', '요령')
+
+    def unheld_rule_name(self, question):
+        """The rule name the question gives ("지방공무원 여비 규정": nouns ending in 규정/규칙/지침 …, at least two before
+        the ending) when no title in the corpus contains it and it is no qualified form of a held rule whose scope fits
+        the question ("국가공무원 여비 규정" → 공무원 여비 규정, 제1조 국가공무원; not "지방공무원 …"); else None. The
+        answer then says the search corpus does not hold it — never that no such rule exists (C-025 4.3)."""
+        from trid.korean_quality import kiwi
+        tokens = kiwi().tokenize(question)
+        noun = lambda t: t.tag in ('NNG', 'NNP')
+        for k, t in enumerate(tokens):
+            if not (noun(t) and t.form.endswith(self.RULE_SUFFIX)):
+                continue
+            j = k
+            while j > 0 and noun(tokens[j - 1]) and tokens[j - 1].start + tokens[j - 1].len >= tokens[j].start - 1:
+                j -= 1
+            before = (k - j) + (1 if len(t.form) > max(len(s) for s in self.RULE_SUFFIX if t.form.endswith(s)) else 0)
+            phrase = question[tokens[j].start:t.start + t.len]
+            name = _norm(phrase)
+            if before < 2 or any(name in title for title in self.norm_titles.values()):
+                continue
+            held = [n for n in self.rule_names if len(n) >= 6 and name.endswith(n)
+                    and not self.scope_conflict(question, next(iter(self.rule_names[n])))]
+            if not held:
+                return phrase
+        return None
+
     def select(self, question, pinned=None, context_doc=None):
         """dict(status, applied, chunks, others, institutions, retrieval, ...). status: 'answer' | 'clarify' |
         'unknown_institution' | 'institution_no_match' | 'not_found' (reason 'irrelevant' when passages were found but
@@ -1280,6 +1354,9 @@ class Workspace:
                             'candidates': []}
                 return {**result, 'status': 'unknown_institution', 'reason': 'unrecognized'}
             return {**result, 'status': 'unknown_institution'}
+        missing = None if (named or unknown or titled or pinned) else self.unheld_rule_name(question)
+        if missing:
+            return {**result, 'status': 'not_found', 'reason': 'rule_not_found', 'rule_name': missing}
         restrict = {pinned} if pinned else (titled or allowed)
         everywhere, cos, tokens, hidden = self.scores(question, protected=True)
         topical = self.topical(question, named + unknown)
@@ -1362,8 +1439,22 @@ class Workspace:
             if standard:
                 result['standard_choice'] = {'from': applied, 'to': standard[0], 'basis': standard[1]}
                 applied = standard[0]
-        others = [self.describe(d, s) for d, s in best.items() if d != applied][:5]
+        # MODEL-RESUME-A-025: the rule's tables whose applicability condition (table_conditions) the question does not
+        # state are no evidence here — not as passages of the body (inline 별표), linked tables or reviewed rows, and
+        # not in ask-back or other-document lists: "공무원 여비 규정에서는 숙박비가…" gets neither 별표 2 (국내) nor 별표 4
+        # (국외) values, and says why; "국외 출장 숙박비" keeps 별표 4, "국내 …" 별표 2.
+        rule = self.rule_of.get(applied)
+        unstated = self.unstated_tables(rule, question) if rule else {}
+        unstated.pop(self.annex_id.get(applied), None)  # a table chosen itself (its body did not pass) stays evidence
+        dropped = set(unstated) | ({self.annex_id[set_aside]} if set_aside and self.rule_of.get(set_aside) == rule else set())
+        conditional = lambda d: d in self.annex_id and self.annex_id[d] in self.unstated_tables(self.rule_of.get(d), question)
+        others = [self.describe(d, s) for d, s in best.items() if d != applied and not conditional(d)][:5]
         result.update(others=others)
+        # A question about public institutions as a class answered from a rule recorded as applying to 국가/지방공무원
+        # (B applies_to) only: no class-wide rule was found, so it is asked back like "공공기관 출장비"
+        # (population_notice says so) instead of answering from the civil-service rule (C-025 4.2).
+        civil = (general and POPULATION.search(question) and '공무원' not in question
+                 and rule_scope(self, applied) in ('central_government', 'local_government'))
         if general:
             inst = lambda d: (self.meta[d]['institution'] or self.meta[d]['title']).split('(질의')[0]
             top = best[applied]
@@ -1374,19 +1465,18 @@ class Workspace:
             # 방위사업청 관리규정 once DG-008 recorded the rival 선관위 rule as its own; MODEL-RESUME-A-024).
             unrecorded = not rule_scope(self, applied)
             for d, s in best.items():
-                if (inst(d) != inst(applied) and s >= self.CLOSE * top
+                if (inst(d) != inst(applied) and s >= self.CLOSE * top and not conditional(d)
                         and (applied in self.specific or d not in self.specific or unrecorded)):
                     rivals.setdefault(inst(d), d)
-            if rivals:
+            if rivals or civil:
                 options = [inst(applied)] + list(rivals)[:3]
                 # each option with its own annex when that passed too: a common law's 별표 holds the amounts asked
                 # for, and listing only its body hides them (C-030 L1/S3) — but not a table for a condition the
                 # question does not state (공무원 여비 규정 [별표 8] 상시 출장 for "출장비"; MODEL-RESUME-A-024)
                 shown = [applied] + list(rivals.values())[:3]
                 annexes = [next((d for d in best if d not in shown and self.meta[d]['title'].startswith(self.meta[s]['title'])
-                                 and '[별표' in self.meta[d]['title'] and not self.unstated_table_condition(d, best, question)),
-                                None) for s in shown]
-                return {**result, 'status': 'clarify', 'institutions': options,
+                                 and '[별표' in self.meta[d]['title'] and not conditional(d)), None) for s in shown]
+                return {**result, 'status': 'clarify', 'institutions': options, **({'reason': 'population'} if civil else {}),
                         'candidates': [c for s, a in zip(shown, annexes)
                                        for c in [self.describe(s, best[s])] + ([self.describe(a, best[a])] if a else [])]}
         chunks = [(PassageChunk(self.index.passages[i].text, 1, self.index.passages[i].char_start,
@@ -1394,7 +1484,25 @@ class Workspace:
                                 self.index.passages[i].id in self.tables, self.index.passages[i].id in self.value_hold),
                   float(scores[i]))
                   for i in passing[applied]]
-        linked = self.linked_tables(applied, [c for c, _ in chunks], everywhere, exclude={set_aside})
+        removed = {_path_annex(c.path) for c, _ in chunks} & dropped
+        chunks = [(c, s) for c, s in chunks if _path_annex(c.path) not in dropped]
+        cited = {_annex(n) for c, _ in chunks for n in re.findall(r'(?<!\[)별표\s*(\d+(?:\s*의\s*\d+)?)', c.text)}
+        conditions = self.table_conditions(rule) if rule else {}
+        named = {n for n in conditions if _names_table(question, n)}
+        # said only when the question states none of the cases the evidence cites (P1); a question that chose one
+        # (국내 → 별표 2, or "별표 2") needs no note about the others. The ROOT-009 table has its own note.
+        chosen = named | {n for n in removed | cited if conditions.get(n, ('', set()))[1] and n not in unstated}
+        aside = [] if chosen else [{'annex': n, 'table': conditions[n][0].strip(), 'unstated': unstated[n]}
+                                   for n in sorted((removed | cited) & set(unstated) - {self.annex_id.get(set_aside)})
+                                   if n in conditions]
+        if aside:
+            result['tables_set_aside'] = aside
+        if not chunks:
+            # every passage that passed was a table for an unstated condition: ask for the condition
+            return {**result, 'status': 'clarify', 'reason': 'table_condition',
+                    'candidates': [self.describe(applied, best[applied])]}
+        linked = self.linked_tables(applied, [c for c, _ in chunks], everywhere, named=named,
+                                    exclude={set_aside} | {self.rule_tables.get(rule, {}).get(n) for n in dropped})
         if linked:
             result['linked_tables'] = sorted({str(self.passage_doc[i]) for i in linked})
             chunks += [(PassageChunk(self.index.passages[i].text, 1, self.index.passages[i].char_start,
@@ -1415,7 +1523,7 @@ class Workspace:
             # "…는 별표1에 따른다" inside the document that itself holds that table (institution rules): that table
             annexes |= {_annex(n) for n in re.findall(r'별표\s*(\d+(?:\s*의\s*\d+)?)', c.text)
                         if self.row_links.get((scope, _annex(n)), {}).get('doc') == d}
-            for n in annexes - ({self.annex_id[set_aside]} if set_aside and scope == self.rule_of.get(set_aside) else set()):
+            for n in annexes - (dropped if scope == rule else set()):
                 link = self.row_links.get((scope, n))
                 body = (link and d not in self.annex_id and self.meta[d].get('effective_date')
                         and self.meta[d].get('effective_date') == link['statute_effective_date'])
@@ -1463,50 +1571,90 @@ class Workspace:
         return {**result, 'status': 'answer', 'applied': applied, 'chunks': chunks}
 
     def unstated_table_condition(self, applied, best, question):
-        """(body doc, condition nouns) when `applied` is a rule's table (별표) whose caption states a condition the
-        question does not, and the rule's body also passed; else None. The condition nouns are the caption's nouns minus
-        the rule's own name, the table's type (…표), nouns shared by at least half of the rule's table captions (지급,
-        여비 …) and anything in the question. 별표 8 "상시 출장 공무원의 여비 지급 기준표" → 상시: a question that says
-        neither is not about that table. Nothing is matched against fixed words or table numbers."""
+        """(body doc, unstated condition units) when `applied` is a rule's table (별표) whose applicability condition
+        (table_conditions) the question does not state, and the rule's body also passed; else None. 별표 8 "상시 출장
+        공무원의 여비 지급 기준표" → 상시: a question that says neither is not about that table."""
         if applied not in self.annex_id:
             return None
-        base = self.rule_of.get(applied)
-        docs = self.rule_names.get(base, set())
-        body = next((d for d in docs if d not in self.annex_id and d in best), None)
-        if body is None:
-            return None
-        from trid.korean_quality import kiwi
-        caption = lambda d: re.sub(r'\([^)]*\)', '', self.meta[d]['title'].split(']', 1)[-1])
-        nouns = lambda text: {t.form for t in kiwi().tokenize(text) if t.tag in ('NNG', 'NNP') and len(t.form) >= 2}
-        annexes = [d for d in docs if d in self.annex_id]
-        counts = {}
-        for d in annexes:
-            for n in nouns(caption(d)):
-                counts[n] = counts.get(n, 0) + 1
-        shared = {n for n, c in counts.items() if c * 2 >= len(annexes)}
-        name = nouns(self.meta[body]['title'])
-        unstated = sorted(n for n in nouns(caption(applied)) - shared - name
-                          if not n.endswith('표') and n not in question)
-        return (body, unstated) if unstated else None
+        rule = self.rule_of.get(applied)
+        body = next((d for d in self.rule_names.get(rule, ()) if d not in self.annex_id and d in best), None)
+        missing = self.unstated_tables(rule, question).get(self.annex_id[applied]) if body else None
+        return (body, missing) if missing else None
 
-    def linked_tables(self, applied, chunks, scores, per_table=2, max_tables=2, exclude=()):
+    def unstated_tables(self, rule, question):
+        """{annex id: unstated condition units} for the tables of `rule` whose condition the question does not state
+        (every unit must be stated: 별표 6의2 국외 가족여비 needs both). A question that names the table ("별표 2 식비")
+        states it."""
+        out = {}
+        for n, (_, condition) in self.table_conditions(rule).items():
+            named = _names_table(question, n)
+            missing = [] if named else sorted(u for u in condition if not _unit_stated(u, question))
+            if missing:
+                out[n] = missing
+        return out
+
+    def table_conditions(self, rule):
+        """{annex id: (caption, condition units)} of the tables (별표) of `rule` (a rule_of key), cached. A table's
+        condition is what its caption states beyond the rule's own name, the table type (…표) and the units most of
+        the rule's captions share (여비, 지급) — confirmed by the body sentences that cite it: the clause before "별표 N"
+        ("국외 여행자의 경우는 별표 4", "상시 출장이 필요한 공무원에 대한 여비는 별표 8", "공무원이 아닌 사람 … 별표 9").
+        A table no body sentence cites gets none. Units are nouns, and "X이 아닌" as one unit (its head noun, 사람, is
+        whom the condition is about). Nothing is matched against fixed words or table numbers (MODEL-RESUME-A-025)."""
+        cache = self.__dict__.setdefault('_table_conditions', {})
+        if rule in cache:
+            return cache[rule]
+        docs = self.rule_names.get(rule, set())
+        body = next((d for d in docs if d not in self.annex_id), None)
+        captions = {self.annex_id[d]: self.meta[d]['title'].split(']', 1)[-1] for d in docs if d in self.annex_id}
+        for (scope, n), link in self.row_links.items():
+            parts = [p for p in (link['rows'][0].get('caption') or []) if '[별표' not in p and '단위' not in p]
+            if scope == rule and n not in captions and parts:
+                captions[n] = parts[0]
+        clauses = {}
+        for i in (np.flatnonzero(self.passage_doc == body) if body else []):
+            p = self.index.passages[i]
+            inline = _path_annex(p.path)
+            if inline:
+                m = re.search(r'\[별표\s*[\d의\s]+\]\s*(?:<[^>]*>\s*)*([^(<\n]{2,60}?표)', p.text)
+                if m and inline not in captions:
+                    captions[inline] = m.group(1)
+                continue
+            for sentence in re.split(r'(?<=다\.)\s+|\n', p.text):
+                start = 0
+                for m in re.finditer(r'(?<!\[)별표\s*(\d+(?:\s*의\s*\d+)?)', sentence):
+                    clauses.setdefault(_annex(m.group(1)), []).append(sentence[start:m.start()])
+                    start = m.end()
+        bare = lambda c: re.sub(r'\s*\S*표\s*$', '', re.sub(r'\([^)]*\)', '', c)).strip()  # the table type
+        units = {n: _condition_units(bare(c)) for n, c in captions.items()}
+        counts = {}
+        for u in units.values():
+            for x in u:
+                counts[x] = counts.get(x, 0) + 1
+        shared = {x for x, c in counts.items() if c * 2 >= len(units)}
+        name = _condition_units(self.meta[body]['title']) if body else set()
+        cited = {n: set().union(*(_condition_units(c, drop_topic=True) for c in cs)) for n, cs in clauses.items()}
+        cache[rule] = {n: (captions[n], (u - shared - name) & cited.get(n, set())) for n, u in units.items()}
+        return cache[rule]
+
+    def linked_tables(self, applied, chunks, scores, per_table=2, max_tables=2, exclude=(), named=()):
         """Passages of the tables (별표) that the chosen statute-body passages cite by annex id ("별표 2", "별표 6의2"),
         from the same rule — the best-scoring `per_table` of each (privacy passages excluded), for the `max_tables`
-        cited tables whose best passage scores highest — so "식비는 별표 2에 따른다" comes with 별표 2."""
+        cited tables whose best passage scores highest — so "식비는 별표 2에 따른다" comes with 별표 2. Tables the
+        question itself names ("별표 2 식비") are included and come first."""
         tables = self.rule_tables.get(self.rule_of.get(applied), {})
         if not tables or applied in tables.values():
             return []
         cited = {_annex(n) for c in chunks for n in re.findall(r'별표\s*(\d+(?:\s*의\s*\d+)?)', c.text)}
         cited -= {_annex(n) for c in chunks for n in re.findall(r'\[별표\s*(\d+(?:\s*의\s*\d+)?)\]', c.text)}  # quoted inline
         ranked = []
-        for n in sorted(cited):
+        for n in sorted(cited | set(named)):
             doc = tables.get(n)
             if doc and doc not in exclude:
                 idx = np.flatnonzero((self.passage_doc == doc) & ~self.private_mask)
                 if len(idx):
-                    ranked.append([int(i) for i in idx[np.argsort(-scores[idx], kind='stable')][:per_table]])
-        ranked.sort(key=lambda idx: -float(scores[idx[0]]))
-        return [i for idx in ranked[:max_tables] for i in idx]
+                    ranked.append((n in named, [int(i) for i in idx[np.argsort(-scores[idx], kind='stable')][:per_table]]))
+        ranked.sort(key=lambda r: (not r[0], -float(scores[r[1][0]])))
+        return [i for _, idx in ranked[:max_tables] for i in idx]
 
     def applies(self, doc):
         """B's structured applicability ({'scope', 'basis', ...}) of a document; {} when absent or free text only."""
@@ -1710,6 +1858,20 @@ def workspace_reply(workspace, selection):
                             for n in selection['institutions'])
         answer = (f"질문의 {', '.join(repr(n) for n in names)}이(가) 어느 기관인지 공식 기관 목록에서 하나로 정해지지 않습니다. "
                   f"다음 중 어느 기관인가요?\n{options}\n정식 기관명을 넣어 다시 물어봐 주세요.")
+    elif status == 'clarify' and selection.get('reason') == 'population':
+        options = '\n'.join(f"- {c['institution'] or '기관 표기 없음'}: {c['title']}" for c in selection['candidates'])
+        answer = (f'검색 자료에서 찾은 후보는 다음과 같습니다.\n{options}\n소속 기관의 기준이 필요하면 기관명을 넣어 묻거나 '
+                  '그 기관의 규정 문서를 첨부(＋)해 주세요.')
+    elif status == 'clarify' and selection.get('reason') == 'table_condition':
+        tables = ', '.join(f"별표 {t['annex']}({t['table']})" for t in selection.get('tables_set_aside') or [])
+        units = ', '.join(dict.fromkeys(u for t in selection.get('tables_set_aside') or [] for u in t['unstated']))
+        title = selection['candidates'][0]['title']
+        answer = (f'「{title}」은 경우에 따라 다른 표를 씁니다: {tables}. 질문에 어느 경우인지({units} 등)가 없어 표 값으로 '
+                  '답하지 않았습니다. 해당하는 경우를 넣어 다시 물어봐 주세요.')
+    elif status == 'not_found' and selection.get('reason') == 'rule_not_found':
+        answer = (f"질문한 「{selection['rule_name']}」을(를) 이 서비스의 검색 자료(공개 자료 색인)에서 찾지 못했습니다. 그런 "
+                  '규정이 없다는 뜻은 아니며, 검색 자료에 들어 있지 않을 수 있습니다. 다른 규정으로 대신 답하지 않습니다. 정확한 '
+                  '규정명이나 소관 기관명을 넣어 다시 물어봐 주세요.')
     elif status == 'clarify':
         options = '\n'.join(f"- {c['institution'] or '기관 표기 없음'}: {c['title']}" for c in selection['candidates'])
         answer = ('이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 '
@@ -2290,6 +2452,17 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                     result['scope'] += (f" 가장 가깝게 검색된 「{tc['table']}」는 질문에 적히지 않은 대상·조건에 "
                                                         f"관한 표라서, 그 표를 정한 규정 본문 「{tc['answered_from']}」을 근거로 "
                                                         '골랐습니다.')
+                                if selection.get('tables_set_aside'):
+                                    # MODEL-RESUME-A-025: the body cites tables for cases the question does not state
+                                    # (국내 별표 2 / 국외 별표 4): their values are not in the evidence, and the visible
+                                    # answer says which case to name first
+                                    ta = result['tables_set_aside'] = selection['tables_set_aside']
+                                    units = ', '.join(dict.fromkeys(u for t in ta for u in t['unstated']))
+                                    result['answer'] = (
+                                        f"「{ws.meta[selection['applied']]['title']}」은 경우에 따라 다른 표를 씁니다: "
+                                        + ', '.join(f"별표 {t['annex']}({t['table']})" for t in ta)
+                                        + f'. 질문에 어느 경우인지({units} 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 '
+                                        '경우를 넣어 다시 물어보면 그 표로 답합니다. ' + (result.get('answer') or ''))
                         population_notice(result, question, inst_ws, ws, selection)
                         if workspace_mode and result.get('status') != 'chat':
                             asked = _norm(question)

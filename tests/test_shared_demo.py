@@ -426,8 +426,10 @@ class WorkspaceTests(unittest.TestCase):
 
 
 class CivilServiceScopeTests(WorkspaceTests.__base__):
-    TEXTS = {'a': ('가기관 수당 규정', '제1조(목적) 이 영은 국가공무원 및 지방공무원의 출장 식비를 정한다. 출장 식비는 하루 2만원.'),
-             'b': ('나기관 수당 규정', '제1조(목적) 이 영은 국가공무원 및 지방공무원의 출장 식비를 정한다. 출장 식비는 하루 3만원.')}
+    TEXTS = {'a': ('가기관 수당 규정', '제1조(목적) 이 영은 국가공무원 및 지방공무원의 출장 식비를 정한다. 출장 식비는 하루 2만원. '
+                                  '공공기관 파견 중에도 같다.'),
+             'b': ('나기관 수당 규정', '제1조(목적) 이 영은 국가공무원 및 지방공무원의 출장 식비를 정한다. 출장 식비는 하루 3만원. '
+                                  '공공기관 파견 중에도 같다.')}
     setUp = WorkspaceTests.setUp
 
     def test_rule_for_the_other_civil_service_population_is_not_applied(self):
@@ -444,6 +446,15 @@ class CivilServiceScopeTests(WorkspaceTests.__base__):
         self.assertEqual((r['status'], r['applied'], r.get('continued')), ('answer', 'b', None))
         self.assertFalse(self.ws.continues('지방공무원 출장 식비는 하루 얼마인가요?', 'a'))
         self.assertTrue(self.ws.select('그럼 출장 식비는 하루 얼마인가요?', context_doc='a').get('continued'))
+
+    def test_class_question_answered_only_by_civil_service_rules_is_asked_back_the_same_way(self):
+        # C-025 4.2: "공공기관 출장비" and "그러면 공공기관의 출장비" must not split into ask-back vs single answer
+        for d in ('a', 'b'):
+            self.ws.meta[d]['applies_to'] = {'scope': 'central_government', 'basis': '제1조(목적)'}
+        for q in ('공공기관 출장 식비는 하루 얼마인가요?', '그러면 공공기관의 출장 식비는?'):
+            r = self.ws.select(q)
+            self.assertEqual((r['status'], r.get('reason')), ('clarify', 'population'), q)
+        self.assertNotEqual(self.ws.select('국가공무원 출장 식비는 하루 얼마인가요?').get('reason'), 'population')
 
 
 class RuleRoleTests(WorkspaceTests.__base__):
@@ -486,6 +497,7 @@ class RuleNameBoundaryTests(WorkspaceTests.__base__):
     it to 국가공무원), so a local-government question is not answered from the central rule (MODEL-RESUME-A-024)."""
     TEXTS = {'law': ('공무원 여비 규정', '제1조(목적) 이 영은 국가공무원의 여비를 정한다. 제16조(숙박비) 숙박비는 별표 2에 따른다.'),
              'b': ('나기관 출장 규정', '제1조(숙박) 출장 숙박비는 실비로 한다.')}
+    META = {'law': {'institution': '인사혁신처'}, 'b': {'institution': '나기관'}}
     setUp = WorkspaceTests.setUp
 
     def test_rule_name_inside_a_longer_word_does_not_name_the_rule(self):
@@ -493,6 +505,15 @@ class RuleNameBoundaryTests(WorkspaceTests.__base__):
             self.assertEqual(self.ws.constraints(q)[3], {'law'}, q)
         for q in ('지방공무원 여비 규정에서 숙박비는?', '국가공무원 여비 규정 숙박비'):
             self.assertFalse(self.ws.constraints(q)[3], q)
+
+    def test_named_rule_the_corpus_lacks_is_reported_as_not_held(self):
+        # C-025 4.3 S1.6: said to be absent from the search corpus, not answered from unrelated candidates
+        self.ws.meta['law']['applies_to'] = {'scope': 'central_government', 'basis': '제1조(목적)'}
+        r = self.ws.select('지방공무원 여비 규정에서 숙박비는?')
+        self.assertEqual((r['status'], r.get('reason'), r.get('rule_name')), ('not_found', 'rule_not_found', '지방공무원 여비 규정'))
+        # a qualified name of a held rule whose scope fits, the held name itself, a reference, no rule name
+        for q in ('국가공무원 여비 규정 숙박비', '공무원 여비 규정에서 숙박비는?', '그 규정에서 숙박비는?', '출장 숙박비는?'):
+            self.assertNotEqual(self.ws.select(q).get('reason'), 'rule_not_found', q)
 
 
 
@@ -509,15 +530,6 @@ class AskBackAnnexTests(WorkspaceTests.__base__):
         titles = [c['title'] for c in r['candidates']]
         # the top institution's body, then its own annex (where the amounts are), then the other institution's rule
         self.assertEqual(titles, ['가기관 여비 규정', '가기관 여비 규정 [별표 2] 국내 여비 지급표', '나기관 여비 규칙'])
-
-    def test_annex_for_an_unstated_condition_is_not_offered_with_its_body(self):
-        # "출장비" listed 공무원 여비 규정 with its [별표 8] 상시 출장 table (MODEL-RESUME-A-024)
-        from unittest.mock import patch
-        with patch.object(type(self.ws), 'unstated_table_condition',
-                          lambda ws, d, best, q: ('a', ['상시']) if d == 'a2' else None):
-            r = self.ws.select('국내 출장 식비는 하루 얼마인가요?')
-        self.assertEqual(r['status'], 'clarify')
-        self.assertEqual([c['title'] for c in r['candidates']], ['가기관 여비 규정', '나기관 여비 규칙'])
 
     def test_own_rule_rivals_a_rule_not_recorded_as_common(self):
         # 나기관's own rule (title prefix or B applies_to institution); 가기관's rule read as not its own
@@ -556,6 +568,48 @@ class TableConditionTests(WorkspaceTests.__base__):
         linked = lambda exclude: {str(self.ws.passage_doc[i]) for i in self.ws.linked_tables('a', body, everywhere, exclude=exclude)}
         self.assertEqual(linked(()), {'a2', 'a8'})
         self.assertEqual(linked({'a8'}), {'a2'})
+
+
+class TableConditionEvidenceTests(WorkspaceTests.__base__):
+    """MODEL-RESUME-A-025 (C-025 4.1, 4.3): a table's condition comes from its caption, confirmed by the body clause
+    that cites it; tables for cases the question does not state are no evidence or list entries, the stated ones stay."""
+    TEXTS = {'law': ('가 여비 규정', '제1조(목적) 이 영은 직원의 여비를 정한다.\n'
+                                   '제16조(숙박비) 국내 여행자의 숙박비는 별표 2에 따라 지급하고, 국외 여행자의 경우는 별표 4에 따라 지급한다.\n'
+                                   '제29조(상시 출장) 상시 출장이 필요한 직원에 대한 여비는 별표 8에 따라 지급한다.\n'
+                                   '제30조(직원이 아닌 사람의 여비) 직원이 아닌 사람을 여행하도록 하는 경우 그 지급 구분은 별표 9에 따른다.'),
+             'a2': ('가 여비 규정 [별표 2] 국내 여비 지급표', '■ 가 여비 규정 [별표 2] 국내 여비 지급표 숙박비 1박 70,000원'),
+             'a4': ('가 여비 규정 [별표 4] 국외 여비 지급표', '■ 가 여비 규정 [별표 4] 국외 여비 지급표 숙박비 1박 200달러'),
+             'a8': ('가 여비 규정 [별표 8] 상시 출장 직원의 여비 지급 기준표', '■ 가 여비 규정 [별표 8] 상시 출장 직원 숙박비 전액'),
+             'a9': ('가 여비 규정 [별표 9] 직원이 아닌 사람에 대한 여비 지급 구분표', '■ 가 여비 규정 [별표 9] 위원 숙박비 1박 70,000원')}
+    META = {d: {'institution': '가기관'} for d in TEXTS}
+    setUp = WorkspaceTests.setUp
+
+    def test_condition_is_the_caption_confirmed_by_the_citing_clause(self):
+        conditions = {n: c for n, (_, c) in self.ws.table_conditions(self.ws.rule_of['law']).items()}
+        self.assertEqual(conditions, {'2': {'국내'}, '4': {'국외'}, '8': {'상시', '출장', '직원'}, '9': {'직원 아닌'}})
+
+    def test_unstated_case_tables_leave_the_evidence_and_stated_ones_stay(self):
+        docs = lambda r: {str(c.doc_id) for c, _ in r.get('chunks', [])} | {c['doc_id'] for c in r.get('candidates', []) + r.get('others', [])}
+        p1 = self.ws.select('가 여비 규정에서 숙박비는 어떻게 되나요?')  # 국내/국외 unstated (C-025 P1)
+        self.assertFalse(docs(p1) & {'a2', 'a4', 'a8'})
+        self.assertLessEqual({'2', '4'}, {t['annex'] for t in p1['tables_set_aside']})
+        p2 = self.ws.select('가 여비 규정에서 국내 출장 숙박비는 얼마인가요?')  # P2
+        self.assertFalse(docs(p2) & {'a4', 'a8'})
+        self.assertNotIn('tables_set_aside', p2)
+        p3 = self.ws.select('가 여비 규정에서 국외 출장 숙박비는 어떻게 정하나요?')  # P3
+        self.assertFalse(docs(p3) & {'a2', 'a8'})
+        self.assertNotIn('tables_set_aside', p3)
+
+    def test_negated_condition_is_stated_by_the_same_negation(self):
+        # S4.f: "직원이 아닌 위원" states 별표 9's condition (whom it is about may be named differently)
+        unstated = self.ws.unstated_tables(self.ws.rule_of['law'], '직원이 아닌 위원의 출장 숙박비는?')
+        self.assertNotIn('9', unstated)
+        self.assertIn('8', unstated)
+        self.assertIn('9', self.ws.unstated_tables(self.ws.rule_of['law'], '가 여비 규정 숙박비'))
+
+    def test_naming_the_table_states_it(self):
+        self.assertNotIn('2', self.ws.unstated_tables(self.ws.rule_of['law'], '가 여비 규정 별표 2 숙박비'))
+        self.assertIn('2', self.ws.unstated_tables(self.ws.rule_of['law'], '가 여비 규정 별표 4 숙박비'))
 
 
 class DomainContractTests(WorkspaceTests.__base__):
