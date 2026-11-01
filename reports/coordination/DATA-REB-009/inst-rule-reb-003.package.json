@@ -1,0 +1,62 @@
+{
+ "package": "inst-rule-reb-003",
+ "task": "DATA-REB-009",
+ "producer": "B",
+ "created": "2026-11-01",
+ "status": "candidate for A's separate institution index (institution_rules_separate); not loaded by B; not approved for training or evaluation",
+ "spec": "same chain as inst-rule-reb-002 (B-027/B-028): files-state slice -> extract_public_guides.py source version -> check_reserved_overlap.py (148 signed families) -> resplit (overlap => held) -> build_institution_rule_snapshot.py",
+ "chain": {
+  "state_slice": {"path": "data/public-data/files-state-slice-reb009.jsonl", "sha256": "15cf3c10ec0b941047c7ebb3a820945fedc025e2829f9800507860111b18aefa"},
+  "source_version": {"path": "data/public-data/inst-rules-reb-002-src/manifest.json", "sha256": "89152ff552948b085fe7d56f5a56a7d09c9a2103e61d37a2d11adf9fb20b8160", "code": "scripts/extract_public_guides.py 1c5b01dff767…", "pii": "ko-pii 1.22.15, redactions 0 in both documents"},
+  "overlap": {
+   "manifest": {"path": "data/benchmark-reserve-001/signatures-partial-148.jsonl", "sha256": "0ed3cc079e8da0f9765e320091c88608186ef259c426f3319944c0921f7495e8"},
+   "corpus": {"path": "data/public-data/inst-rules-reb-002-src/overlap-input.jsonl", "sha256": "00f60ba89d3ee46063f33c72b2db94830965ed35669fd256bbd3b7d081fe7b7e"},
+   "report": {"path": "data/public-data/inst-rules-reb-002-src/overlap-148.json", "sha256": "d3723dffbe432d958a97176a8b48260937c04e42942502fa43a7104c01515c5a"},
+   "thresholds": {"minhash_estimate": 0.5, "ngram8_containment": 0.5, "partial_review_min_shared_ngram8": 50},
+   "span_check": {"path": "data/public-data/inst-rules-reb-002-src/overlap-span-check.jsonl (gitignored: holds shared-text excerpts)", "sha256": "57438eb5c8245c0957f161f287372d21c8c4c355d7bb92dc5a3610ff0f6bd097", "summary": "reports/coordination/DATA-REB-009/reb-overlap-span-check.summary.json", "code": "scripts/verify_overlap_spans.py b3faf235d3da…"},
+   "not_checked": "852 unsigned reserved families; C's fixed evaluation sets other than the 148 signed families"
+  },
+  "clean_version": {"path": "data/public-data/inst-rules-reb-002/manifest.json", "sha256": "2be515796b05a1229fd41b2a0aa18acf579f5ef95acce759a178955b9c77a170", "consumer_check": "ok", "parts": {"documents": 1, "held": {"reserved_overlap": 1}}},
+  "snapshot": {"path": "runs/search-snapshots/inst-rule-reb-003/manifest.json", "sha256": "d610e606efdbd36f40e1daff4e001d4eefdcc8fee408dd29303f75458bce74e6", "copy": "reports/coordination/DATA-REB-009/inst-rule-reb-003.manifest.json", "records_file_sha256": "6c80b214967828f00efd0fc9a30cb5a12b7db2926f8fb5caf49f45782c8573f1", "holds": ["evaluation", "training"], "index": "institution_rules_separate"}
+ },
+ "documents": [
+  {
+   "id": "reb.or.kr:1244:116253:file:60b3ce78755ba7db",
+   "snapshot_doc_id": "reb.or.kr:1244:116253:file:021728bfe39ccd71",
+   "title": "한국부동산원_직원 복무규정 일부개정규정안(게시 2026.08.20)",
+   "package_status": "in_snapshot",
+   "source": {"page": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=116253", "download_url": "https://www.reb.or.kr/reb/common/nttFileDownload.do?fileKey=4d643de48c4541a80ec49ec81367e0e8", "retrieved_at": "2026-10-31T07:49:33Z", "request_log": "logs/requests-reb.or.kr.jsonl (200, scripts/logged_get.py)"},
+   "raw": {"path": "data/public-data/raw/reb.or.kr-1244/60b3ce78755ba7db.pdf", "sha256": "60b3ce78755ba7dbc99ae81afd6a2b95332cfb39b8194eba856afb26a73945e4", "bytes": 444410, "pages": 32},
+   "text": {"extractor": "kordoc-4.24.23:pdf", "chars": 28775, "sha256": "021728bfe39ccd711c4a13e131ec12abcf4ef4dfd93b08e1fd73f2d86093ebcd", "same_articles_as_reviewed_reading": true},
+   "license": "한국부동산원 저작권 정책: 저작권법 제24조의2 자유이용 (https://www.reb.or.kr/reb/cm/cntnts/cntntsView.do?mi=9977&cntntsId=1293)",
+   "time": {"effective_from": "2026-08-20", "basis": "마지막 부칙<2026.8.10> '2026년 8월 20일부터 시행' (본문 그대로)", "posted": "2026-08-20", "header_history_last": "개정 2026. 08. 10. (부칙과 맞음)", "current": "not labelled current; later revisions not checked"},
+   "applies_to": {"scope": "institution", "ids": ["C0150"], "population": "한국부동산원 직원 (제2조)"},
+   "conditions_units_verified": [
+    {"what": "휴가 종류", "value": "연차휴가, 청원휴가, 인병휴가, 공가, 특별휴가", "where": "제28조, 6쪽"},
+    {"what": "연차휴가", "value": "15", "unit": "일", "condition": "전년도 중 80% 이상 근무한 자", "where": "제29조② 1호, 6쪽"},
+    {"what": "연차휴가 가산", "value": "1", "unit": "일", "condition": "3년 이상 계속 근무한 자, 1년을 초과하는 계속근무년수 매 2년마다 제1호 휴가일수에 가산", "where": "제29조② 4호, 6쪽"}
+   ],
+   "review": {"level": "independent_reader_and_key_pages_only", "readers": ["pdftotext", "kordoc 4.24.23"], "article_titles": "78 = 78", "pages_viewed": [6, 32], "viewer": "B (AI), not a human review", "not_reviewed": "그 밖의 조문, 별표·서식·표 (표 3행, table_check unverified)"},
+   "numeric_answer_policy": "자동 숫자 답 승격 금지: 검토 행·structured_facts 없음. 위 3개 항목도 문장 인용으로만 표시(원문 일치·정답 검증 아님)",
+   "eval_overlap": {"matched": false, "partial_review": false}
+  },
+  {
+   "id": "reb.or.kr:1244:98560:file:f8eafee96eda455e",
+   "title": "한국부동산원_임직원 행동강령 일부개정강령안(게시 2024.08.27)",
+   "package_status": "held_reserved_overlap (not in snapshot)",
+   "source": {"page": "https://www.reb.or.kr/reb/na/ntt/selectNttInfo.do?mi=9610&bbsId=1244&nttSn=98560", "download_url": "https://www.reb.or.kr/reb/common/nttFileDownload.do?fileKey=d055ea9f899188353bd11412c5ec114a", "retrieved_at": "2026-10-31T07:49:36Z", "request_log": "logs/requests-reb.or.kr.jsonl (200, scripts/logged_get.py)"},
+   "raw": {"path": "data/public-data/raw/reb.or.kr-1244/f8eafee96eda455e.pdf", "sha256": "f8eafee96eda455e78998e61da66427ae162e34141e175a8b63c5bae58d0d766", "bytes": 725573, "pages": 44},
+   "text": {"extractor": "kordoc-4.24.23:pdf", "chars": 37333, "sha256": "eb6693e9c3233cc32be5a74a149e11deedc126f8ddcbf06f5e7a97128886a9e8", "same_articles_as_reviewed_reading": true},
+   "license": "한국부동산원 저작권 정책: 저작권법 제24조의2 자유이용 (https://www.reb.or.kr/reb/cm/cntnts/cntntsView.do?mi=9977&cntntsId=1293)",
+   "time": {"effective_from": "2024-08-27", "basis": "마지막 부칙<2024.8.27> '2024년 8월 27일부터 시행' (본문 그대로)", "posted": "2024-08-27", "header_history_last": "개정 2024. 08. 27 (부칙과 맞음)", "later_postings": "2026-10-31 내규공개 목록에 없음", "current": "not labelled current"},
+   "applies_to": {"scope": "institution", "ids": ["C0150"], "population": "한국부동산원 임원과 직원(비정규직 포함) (제3조)"},
+   "conditions_units_verified": [
+    {"what": "받을 수 있는 음식물 가액", "value": "5만", "unit": "원", "condition": "별표3 제1호 (받는 쪽 상한, 출장 식비 기준 아님)", "where": "별표3, 22쪽"},
+    {"what": "경조사비(축의금·조의금)", "value": "5만", "unit": "원", "condition": "별표3 제2호", "where": "별표3, 22쪽"}
+   ],
+   "review": {"level": "independent_reader_and_key_pages_only", "readers": ["pdftotext", "kordoc 4.24.23"], "article_titles": "42 = 42", "pages_viewed": [22], "viewer": "B (AI), not a human review", "not_reviewed": "그 밖의 조문, 별표·서식"},
+   "numeric_answer_policy": "자동 숫자 답 승격 금지 (보류 문서)",
+   "eval_overlap": {"matched": false, "partial_review": true, "family": "institutions:alio-rule:20256", "shared_ngram8": 394, "of_reserved": 5108, "span_check": {"spans": 144, "non_statute_span": 120, "statute_span": 24, "decision": "separate_from_eval_index"}, "hold": "reserved_overlap (resplit); release needs C/supervisor decision"}
+  }
+ ]
+}

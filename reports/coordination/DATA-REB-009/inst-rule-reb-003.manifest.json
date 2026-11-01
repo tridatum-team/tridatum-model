@@ -1,0 +1,35 @@
+{
+ "snapshot_id": "inst-rule-reb-003",
+ "created_at": "2026-11-01T04:45:33Z",
+ "producer": "B/DATA-REB-009",
+ "code_sha256": "47e817d6f78854cc004890d64b8a1805f5d4bcf32550e51a9d7f6054aacf1d67",
+ "kinds": {
+  "institution_rule": 1
+ },
+ "sources": [
+  {
+   "provider": "data.go.kr file data / institution 사규 board",
+   "guides_version": "inst-rules-reb-002",
+   "records": 1,
+   "collection": "public_file_download, not an API call"
+  }
+ ],
+ "files": [
+  {
+   "path": "normalized/records-00000.jsonl",
+   "sha256": "6c80b214967828f00efd0fc9a30cb5a12b7db2926f8fb5caf49f45782c8573f1",
+   "records": 1
+  }
+ ],
+ "records_total": 1,
+ "holds": [
+  "evaluation",
+  "training"
+ ],
+ "index": "institution_rules_separate",
+ "registry": {
+  "path": "data/corpus-inventory/alio-agencies.json",
+  "sha256": "5e79c5339f9f59d0ca575f1c98936505539a7b89ae5902e0aec9d8df46ed1cb5"
+ },
+ "notes": "publicly posted institution rules; not non-public internal data; nothing labelled current"
+}

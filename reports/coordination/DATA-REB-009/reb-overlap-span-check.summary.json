@@ -1,0 +1,14 @@
+{
+ "code_sha256": "b3faf235d3da4ab54a5dff29b49a5c9cd557717ebdb21ac7c8e3f06e6bc9d3c2",
+ "rows": 1,
+ "counts": {
+  "separate_from_eval_index": 1,
+  "span:non_statute_span": 120,
+  "span:statute_span": 24
+ },
+ "by_kind": {
+  "partial_overlap_row": {
+   "separate_from_eval_index": 1
+  }
+ }
+}
