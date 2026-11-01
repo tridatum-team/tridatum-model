@@ -19,6 +19,11 @@
   <dict>
     <key>TRID_DEMO_RUNTIME</key><string>/Users/eomgyuhyeon/Services/trid-site/.runtime</string>
     <key>TRID_DEMO_TUNNEL</key><string>0</string>
+    <!-- SITE-MIGRATION-019: default 1.7B + reader only (the two regressed experimental versions are not served here;
+         their GGUFs stay on the MacBook), and llama.cpp on the CPU (no Metal offload) to fit this machine's memory. -->
+    <key>TRID_DEMO_VERSIONS</key><string>/Users/eomgyuhyeon/Services/trid-site/repo/deploy/macmini-site/versions.json</string>
+    <key>LLAMA_ARG_DEVICE</key><string>none</string>
+    <key>LLAMA_ARG_N_GPU_LAYERS</key><string>0</string>
     <key>HF_HUB_CACHE</key><string>/Users/eomgyuhyeon/Services/trid-site/hf/hub</string>
     <key>HF_HUB_OFFLINE</key><string>1</string>
     <key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>

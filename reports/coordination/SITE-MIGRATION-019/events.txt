@@ -1,0 +1,8 @@
+19:03:12 bootstrap co.tridatum.trid.site (CPU-only, deploy/macmini-site/versions.json)
+19:03:12 bootstrap rc=0
+19:03:24 warning start (p=2)
+19:03:25 service ready (healthz 200) at t=13s
+19:03:55 STOP: warning lasted 30 s -> launchctl bootout co.tridatum.trid.site
+19:03:55 bootout rc=0
+19:03:55 max consecutive warning: 30s; samples: 41; pressure counts:   11  p=1   30  p=2 
+19:03:55 health now:  (empty = baseline); service loaded: yes
