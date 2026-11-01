@@ -1,0 +1,36 @@
+{
+ "code_sha256": "257654d7531bae0abd9ecc6065293f1d0a8127e493e77da85fbf9f25a4ba886e",
+ "inputs": {
+  "index_manifest": "1c9540cab9a0a94f809e3d1de63bd7a9b6356d9d6f16857fb3e351d25cb9ba21",
+  "inst_manifest": "f2239545471bb95a8522532743b0e903ba6652d763d2faafb7efa45c3c1d1b0f",
+  "ledger": "1eeeb0d44044e0124524af047de25d3adfb67e7b9274993bda847889fd491ee1",
+  "contract": "f77a117833e6eb286b62c9bfcefa7967825eb17d3264f0cf073f31374f4ba72a"
+ },
+ "source_ledger": {
+  "entries": 5,
+  "evidence_located": 17,
+  "status": {
+   "held_pending_supervisor_decision": 2,
+   "restored_text_artifact_not_indexed": 1,
+   "verified_two_readers_not_indexed": 2
+  }
+ },
+ "term_map": {
+  "entries": 0,
+  "relations": {}
+ },
+ "rule_conditions": {
+  "entries": 3
+ },
+ "applies_to_backfill": {
+  "entries": 4,
+  "documents": 4
+ },
+ "diagnostics": "skipped (--skip-diagnostics)",
+ "outputs": {
+  "source-ledger.jsonl": "b9aa72e74bde832b37bd712120e3de6b141df833424bc3f64d0fdb99e938710b",
+  "term-map.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "applies-to-backfill.jsonl": "4f45cbf3c63d279f626ee769ecbdf63b8f7c4009c1b96b1913d8407378ce5827",
+  "rule-conditions.jsonl": "294e8bc79f137197623e6fe9a228810a4a9248d163d9f6b233b8d594a872cd95"
+ }
+}

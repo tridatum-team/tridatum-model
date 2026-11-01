@@ -1,0 +1,58 @@
+{
+ "task": "DATA-GAPS-008",
+ "note": "local verification files (gitignored); no new web requests in DATA-GAPS-008",
+ "files": [
+  {
+   "path": "data/source-checks/dg008/candidates/law-byl-169708653.candidate.json",
+   "bytes": 6090,
+   "sha256": "3f08cf52fc2073a1f11dac7b854797d013b9ade3c2e0d87ae2677422b5972a90"
+  },
+  {
+   "path": "data/source-checks/dg008/render/bokmu-last-32.png",
+   "bytes": 60436,
+   "sha256": "fb5280bc1afc9afc3606041f9fd4348868ae4b4d9e1d41022bcb521160997f9d"
+  },
+  {
+   "path": "data/source-checks/dg008/render/bokmu-p-06.png",
+   "bytes": 128887,
+   "sha256": "0d7f97e531288a24c7789af45a107d3731e9bbbd29173c94d63c9c0e54dc78e8"
+  },
+  {
+   "path": "data/source-checks/dg008/render/code-p-22.png",
+   "bytes": 177390,
+   "sha256": "5e9f0f5e2216e4de8023628438b756bc78dd18b0fc64e91469a223dce8455a25"
+  },
+  {
+   "path": "data/source-checks/dg008/render/edu-p-009.png",
+   "bytes": 110355,
+   "sha256": "67e42f025c74dfc91f4742f7a51f072fc39afd3b21c6b571479ec643c7c976ef"
+  },
+  {
+   "path": "data/source-checks/dg008/text/edu-143116119-p9.pdftotext.txt",
+   "bytes": 1592,
+   "sha256": "efd44e277827618bd8aa75b3ec8085c8972ed816117e43521b29a1e8e2684554"
+  },
+  {
+   "path": "data/source-checks/dg008/text/reb-1244-116253.kordoc.md",
+   "bytes": 58186,
+   "sha256": "021728bfe39ccd711c4a13e131ec12abcf4ef4dfd93b08e1fd73f2d86093ebcd"
+  },
+  {
+   "path": "data/source-checks/dg008/text/reb-1244-98560.kordoc.md",
+   "bytes": 72959,
+   "sha256": "9d2977c62b8aaf20836fd219468465e49620296af7a0ea160f2d90df24865da8"
+  }
+ ],
+ "derived_from": {
+  "edu-143116119-p9.pdftotext.txt": "pdftotext (default mode) of data/law-attachments/raw/2100000245194/143116119.pdf, 9th form-feed page (printed page 5)",
+  "reb-1244-*.kordoc.md": "kordoc 4.24.23 (npx) on data/source-checks/dc007 REB PDFs",
+  "render/*.png": "pdftoppm page renders of the same PDFs",
+  "law-byl-169708653.candidate.json": "copy of the data/law-byl/v2/extracted.jsonl record with hold status; not an index input"
+ },
+ "raw": [
+  {
+   "path": "data/law-attachments/raw/2100000245194/143116119.pdf",
+   "sha256": "3800a9711109d533233c21239c75cf165da518e9e747645c7be1ba585d91aeda"
+  }
+ ]
+}
