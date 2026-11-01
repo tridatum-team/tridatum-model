@@ -175,6 +175,21 @@ launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel     # 원점 내리�
 
 서버는 127.0.0.1에만 바인딩하며 인터넷 터널 직접 접근은 프록시 비밀키 없이 거절합니다. 요청 원본과 CSRF 토큰을 검사하고, 브라우저가 보내는 프록시 신원 헤더는 Worker가 덮어씁니다. Worker는 IP별 분당 30회, 서버는 세션별 분당 20회를 제한합니다. 최대 32개 세션, HTTP 작업 8개, 모델·PDF 처리 1개를 허용합니다. PDF는 별도 프로세스에서 15초 제한 및 CPU/메모리 감시하에 읽습니다. 이 조치들은 정식 보안 심사나 운영용 격리 환경을 대신하지 않습니다.
 
+**색인 적재 메모리 (SITE-MEMORY-022/023).** 검색 결과, 문서 값, float32 정밀도, 모델은 그대로이고 적재 방식만 바뀌었다.
+- 파생 파일: 색인 폴더에서 `python -m trid.service.derived runs/workspace-index/v5 runs/workspace-index/inst-reb-002`
+  - `dense.f32.npy`: `dense.f16.npy`를 정확히 float32로 바꾼 사본. 읽기 전용 mmap으로 쓴다.
+  - `documents.jsonl`: `documents.json`의 문서를 한 줄에 하나씩 둔 것. 줄 단위로 읽는다.
+  - 각 사본은 원본과 사본의 sha256을 기록(`*.json`)한다. 원본이 만드는 도중 바뀌면 설치하지 않는다. 사본과 기록은 각각 원자적으로 교체한다.
+  - 서비스는 기록이 두 파일의 현재 sha256과 맞을 때만 사본을 쓴다. 없거나, 오래됐거나, 덜 쓰였거나, 손상되면 원본 파일을 예전 방식대로 읽는다. 색인을 다시 만들면 파생 파일도 다시 써야 메모리 절감이 적용된다.
+- 제목 조각 일치(`TITLE_MIN`=8자)는 117만 개 n-gram 사전(v5에서 0.35GB) 대신 정규화 제목 1.47만 건을 직접 검사한다. 결과 집합은 같다.
+- 검토 파일과 별칭 파일은 줄 단위로 읽는다(`read_text().splitlines()`와 같은 줄).
+- 측정(맥미니, Workspace v5 + inst, 임베더·LLM 제외)
+  - 상시 own RSS: 0.97 → 0.54GB.
+  - 적재 최고치: 2.28 → 0.75GB.
+  - 질의 32건 후: 1.87 → 1.25GB.
+  - select 1건당: 10.3 → 14.3ms.
+  - 같은 질문의 `select()` 결과는 동일. 근거는 `reports/coordination/SITE-MEMORY-022.md`, `SITE-MEMORY-023.md`.
+
 ## 검증
 
 - `tests/test_shared_demo.py`: 방문자별 문서 격리, CSRF/Origin/프록시 차단, 만료, 잘못된 입력, 크기 제한.
@@ -182,6 +197,8 @@ launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel     # 원점 내리�
 - `reports/shared-demo-local-smoke.json`: 이전 short-v3-hangul 모델의 샘플 4항목, PDF 담당 부서 응답에 대한 역사적 검증.
 - `reports/shared-demo-public-smoke.json`: 이전 모델의 HTTPS 공개 추론과 방문자 문서 접근 차단 검증. 현재 추출 모델의 새 측정 결과가 아닙니다.
 - `reports/shared-demo-extractive-update.json`: 새 가중치 해시, 배포 버전, 272개 회귀 테스트 통과, 공개 브라우저 `/sample`·`/paste` 담당 부서 응답과 정확한 원문 하이라이트 확인. 실제 모델의 로컬 샘플 해외 식비·숙박비 질문은 보류했으며 정답으로 집계하지 않았습니다. 이번 공개 UI 검증은 PDF 업로드를 재실행하지 않았습니다.
+- `tests/test_service_derived.py`: 파생 색인 파일이 오래되거나, 덜 쓰이거나, 손상돼도 원본과 같은 벡터·문서를 돌려주는지, 원본이 바뀌는 중에는 설치하지 않는지.
+- `tests/test_shared_demo.py` `TitleFragmentTests`: 제목 조각 8자 기준, 7자 비일치, 질의응답 제목 제외.
 - 공개 문서 선택 UI(정책브리핑 20건)는 2026-10-30에 제거했습니다. 같은 20건은 공유 검색 색인에 포함됩니다. 질문 중심 경로의 검증은 `reports/coordination/TRID-WORKSPACE-001.md`에 있습니다.
 - 공개 HTTPS 브라우저에서 문서 선택·교체·질문 요청·`/source` 원문 표시를 확인했다. 잘못된 문서 ID는 422로 거절하며 기존 문서를 유지한다. 전파산업 지원 비율·한도 질문은 6/6구간 확인 후 모델이 보류했고, 산림투자 설명회 참가 비용 질문은 0/4구간 검색 실패였다. **배포 경로 동작 검증이지 정답률 개선이 아니다.** 새 103건 SFT 데이터의 본학습·모델 배포는 하지 않았다.
 - `reports/shared-demo-release-test-001.json` (RELEASE-TEST-001):

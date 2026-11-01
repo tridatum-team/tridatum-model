@@ -618,6 +618,15 @@ def _annex(text):
     return re.sub(r'\s+', '', text)
 
 
+def _lines(path):
+    """The lines of `Path(path).read_text().splitlines()`, read a line at a time instead of holding the whole file and
+    its line list (SITE-MEMORY-023): the same text decoding and newline translation, then the same splitlines()
+    boundaries within each read line."""
+    with open(path) as f:
+        for raw in f:
+            yield from raw.splitlines()
+
+
 def render_rows(rows, shown=-1):
     """Reviewed table rows (B review ai_visual_review_match) as evidence text: each table's caption, unit, revision and
     statute dates, one line per row pairing every value with its column header, then the table's notes in full —
@@ -722,10 +731,6 @@ class Workspace:
         self.norm_titles = {doc_id: _norm(m['title']) for doc_id, m in self.meta.items()}
         tables = root / 'tables.json'
         self.tables = set(json.loads(tables.read_text())) if tables.exists() else set()
-        self.title_grams = {}
-        for doc_id, t in self.norm_titles.items():
-            for i in range(len(t) - self.TITLE_MIN + 1):
-                self.title_grams.setdefault(t[i:i + self.TITLE_MIN], set()).add(doc_id)
         self.qa_docs = {d for d, m in self.meta.items() if any(x in (m['kind'] or '') for x in ('FAQ', '질의응답', '질의회신'))}
         self.authority = np.array([self.authority_of(self.meta[str(d)]['kind']) for d in self.passage_doc], np.float32)
         self.form_mask = np.array([bool(p.path) and bool(FORM_PATH.fullmatch(p.path[-1] or '')) for p in self.index.passages])
@@ -755,7 +760,7 @@ class Workspace:
         # numbers are not answer values (the reply points to the original page instead).
         self.private, self.value_hold, self.review_source = set(), set(), None
         if review and Path(review).exists():
-            for line in Path(review).read_text().splitlines():
+            for line in _lines(review):
                 if '"value_review"' not in line:
                     continue
                 row = json.loads(line)
@@ -982,7 +987,7 @@ class Workspace:
         if official.exists():
             self.alias_source = {'file': str(official), 'manifest_sha256': hashlib.sha256(
                 official.with_name('manifest.json').read_bytes()).hexdigest() if official.with_name('manifest.json').exists() else None}
-            for line in official.read_text().splitlines():
+            for line in _lines(official):
                 row = json.loads(line)
                 alias, canonical, kind = _norm(row['alias']), _norm(row['canonical']), row['kind']
                 # Hangul aliases need 3+ characters; Latin acronyms (LH) defined in law texts count from 2.
@@ -1190,8 +1195,12 @@ class Workspace:
         q_title = q
         for name in named + mentioned:
             q_title = q_title.replace(name, '|')
+        # Documents whose normalised title contains any TITLE_MIN-character stretch of the question title. (Formerly a
+        # dictionary of every title's TITLE_MIN-grams, 1.17 M entries and 0.35 GB resident for v5; a title has a gram
+        # exactly when the gram is a substring of it, so scanning the 14.7 k titles gives the same set — SITE-MEMORY-023.)
         k = self.TITLE_MIN
-        near = set().union(*(self.title_grams.get(q_title[i:i + k], set()) for i in range(len(q_title) - k + 1)))
+        grams = {q_title[i:i + k] for i in range(len(q_title) - k + 1)}
+        near = {d for d, t in self.norm_titles.items() if any(g in t for g in grams)} if grams else set()
         pool = (near & allowed if allowed is not None else near) - self.qa_docs  # Q&A titles are visitors' questions
         shared = {d: _longest_shared(self.norm_titles[d], q_title) for d in pool}
         top = max(shared.values(), default=0)
