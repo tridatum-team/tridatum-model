@@ -1,0 +1,112 @@
+{
+ "report": "MODEL-RESUME-B-024 metadata-only report for C",
+ "access": "B did not open, print or copy evaluation items or answers. Evaluation-side files were read only by the existing membership test (scripts/build_pilot_manifest.eval_side_text: is this id/title string present) and the 148 signed hash manifest.",
+ "protected_items_held": [
+  {
+   "item": "REB 임직원 행동강령 문서",
+   "where": "data/public-data/inst-rules-reb-002/held.jsonl",
+   "file_sha256": "5729033ae665ba7c52a8d1c0899898415e9c9b3f62d26622140c409ea5ddad30",
+   "reason": "148 signed family institutions:alio-rule:20256 partial overlap (8-gram 394/5108; spans 120 non-statute / 24 statute)",
+   "state": "held, not in any snapshot, not in candidates"
+  },
+  {
+   "item": "DATA-CONTINUE-007 source-ledger L09",
+   "where": "reports/coordination/DATA-CONTINUE-007/source-ledger.jsonl (row id L09)",
+   "file_sha256": "afdf1648703f3a23a16ddd429f3488b81300ba343a689893c97ff63e8012bce7",
+   "reason": "quotes the REB 행동강령",
+   "state": "unchanged; not used by B-024 candidates (quote gate)"
+  },
+  {
+   "item": "DATA-CONTINUE-007 term-map line 6",
+   "where": "reports/coordination/DATA-CONTINUE-007/term-map.jsonl (line 6)",
+   "file_sha256": "531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897",
+   "reason": "evidence includes a REB 행동강령 quote",
+   "state": "unchanged; the file is sha-pinned by A (scripts/shared_demo.py:589 TERM_MAP). A's loader uses only relation 'equivalent_when' rows (term pair and cited doc ids, shared_demo.py:747-750); line 6 is 'not_equivalent', so its quote text is not used for retrieval or prompts (read from code, not run). Whether keeping it in a pinned file is acceptable is C's call."
+  },
+  {
+   "item": "DATA-GAPS-008 source-ledger G05",
+   "where": "reports/coordination/DATA-GAPS-008/source-ledger.jsonl (row id G05)",
+   "file_sha256": "b9aa72e74bde832b37bd712120e3de6b141df833424bc3f64d0fdb99e938710b",
+   "reason": "quotes the REB 행동강령",
+   "state": "unchanged; not pinned by A"
+  },
+  {
+   "item": "DATA-GAPS-008 applies-to-backfill line 4",
+   "where": "reports/coordination/DATA-GAPS-008/applies-to-backfill.jsonl (line 4, doc law-go-kr:admrul-file:143116119)",
+   "file_sha256": "4f45cbf3c63d279f626ee769ecbdf63b8f7c4009c1b96b1913d8407378ce5827",
+   "reason": "evidence is the 교육비특별회계 '1. 목적' section, an evaluation_exposure window",
+   "state": "unchanged; not pinned by A; not to be promoted before C"
+  },
+  {
+   "item": "law-byl 10 annexes held as reserved_overlap",
+   "where": "data/law-byl/v2/status.jsonl",
+   "reason": "148 signed partial_review promoted to hold",
+   "state": "held"
+  }
+ ],
+ "exclusion_rules_for_C": [
+  {
+   "rule": "148 signed: matches and partial_review -> hold",
+   "code": [
+    "scripts/collect_statute_tables.py:226",
+    "scripts/extract_public_guides.py:213",
+    "scripts/curate_admrul_attachments.py:41",
+    "scripts/build_work_case_candidates.py (case rows)"
+   ]
+  },
+  {
+   "rule": "search-corpus-v2 evaluation_exposure windows dropped",
+   "code": [
+    "data/search-corpus-v2/dropped.jsonl"
+   ],
+   "B-024 use": "a document with any such window is not used for cases"
+  },
+  {
+   "rule": "evaluation-side membership (doc id / title / question prefix)",
+   "code": [
+    "scripts/build_pilot_manifest.py eval_side_text, exposed()",
+    "scripts/build_statute_cases.py:63"
+   ],
+   "B-024 addition": "title and family stem (decree/rule -> act) and institution name for institution own rules"
+  },
+  {
+   "rule": "852 unsigned reserved families",
+   "state": "not checked anywhere in B's pipelines; no candidate is declared safe for them"
+  }
+ ],
+ "observations_for_C": [
+  {
+   "what": "existing fixed case views contain documents whose title appears in evaluation-side files (title membership only; whether this is contamination is C's judgment)",
+   "rows": [
+    {
+     "doc": "law-go-kr:law:276107",
+     "title": "물품관리법",
+     "gate": "eval_title",
+     "rows": {
+      "case-training-view-v2:train": 4,
+      "case-training-view-v2r1:train": 4
+     }
+    },
+    {
+     "doc": "law-go-kr:law:286449",
+     "title": "보조금 관리에 관한 법률",
+     "gate": "eval_title",
+     "rows": {
+      "case-training-view-v2:dev": 3,
+      "case-training-view-v2:held": 1,
+      "case-training-view-v2r1:dev": 3,
+      "case-training-view-v2r1:held": 1
+     }
+    }
+   ],
+   "checked": "97 documents of case-training-view-v2/v2r1 (all splits); B changed nothing in those views"
+  },
+  {
+   "what": "B-024 candidates that cite a parent act whose title appears in evaluation-side files (not a gate; candidates keep only the rule's own text)",
+   "examples": [
+    "예산성과금 규정 -> 국가재정법",
+    "조달청 물품관리 사무처리규정 -> 물품관리법"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "task": "MODEL-RESUME-B-024",
+ "note": "Documents B read or screened this round (인사·복무·여비·회계/계약), and the protected items that must not be promoted before C decides. Gates are computed by scripts/build_work_case_candidates.py; manual reasons are B's and are listed separately.",
+ "screened": [
+  {"doc": "law-go-kr:admrul:2100000133909"},
+  {"doc": "law-go-kr:admrul:2100000255514"},
+  {"doc": "law-go-kr:admrul:2100000275274"},
+  {"doc": "law-go-kr:admrul:2100000244746"},
+  {"doc": "law-go-kr:admrul:2100000181661"},
+  {"doc": "law-go-kr:admrul:2100000279008"},
+  {"doc": "law-go-kr:admrul:2100000274000"},
+  {"doc": "law-go-kr:admrul:2100000273584"},
+  {"doc": "law-go-kr:law:281413"},
+  {"doc": "law-go-kr:law:209867"},
+  {"doc": "law-go-kr:law:218301"},
+  {"doc": "law-go-kr:law:282641"},
+  {"doc": "law-go-kr:law:288975"},
+  {"doc": "law-go-kr:law:280909"},
+  {"doc": "law-go-kr:law:288435"},
+  {"doc": "law-go-kr:law:290313"},
+  {"doc": "law-go-kr:law:290321"},
+  {"doc": "law-go-kr:law:290323"},
+  {"doc": "law-go-kr:law:290349"},
+  {"doc": "law-go-kr:law:290493"},
+  {"doc": "law-go-kr:law:289957"},
+  {"doc": "law-go-kr:admrul:2100000278916", "manual_exclusion": "징계 양정·감경 조문이 공무원 징계 관계 법령 체계를 거의 그대로 옮긴 기관 규정이라 평가 가족과 내용이 겹칠 수 있음 [추정]; 이번 라운드에서 사례로 쓰지 않음"},
+  {"doc": "reb.or.kr:1244:116253:file:021728bfe39ccd71", "snapshot": "runs/search-snapshots/inst-rule-reb-003", "institution": "한국부동산원"},
+  {"doc": "reb.or.kr:1244:98560:file:f8eafee96eda455e", "institution": "한국부동산원"},
+  {"doc": "law-go-kr:admrul-file:143116119"}
+ ],
+ "protected": {
+  "doc_prefixes": ["reb.or.kr:1244:98560", "law-go-kr:admrul-file:143116119"],
+  "law_byl_status": "data/law-byl/v2/status.jsonl",
+  "quote_rows": [
+   {"file": "reports/coordination/DATA-CONTINUE-007/source-ledger.jsonl", "id": "L09", "why": "REB 행동강령 인용 (DATA-REB-009 부분 겹침 alio-rule:20256)"},
+   {"file": "reports/coordination/DATA-CONTINUE-007/term-map.jsonl", "line": 6, "why": "REB 행동강령 인용 포함 용어 대응 행"},
+   {"file": "reports/coordination/DATA-GAPS-008/source-ledger.jsonl", "id": "G05", "why": "REB 행동강령 인용"},
+   {"file": "reports/coordination/DATA-GAPS-008/applies-to-backfill.jsonl", "line": 4, "why": "교육비특별회계 목적 절(평가 노출 구간) 인용"}
+  ]
+ }
+}

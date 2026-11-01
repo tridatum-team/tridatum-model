@@ -178,6 +178,26 @@ uv sync --frozen --python 3.12 --extra service
 
 이 데이터는 **생성형 SFT용**이며 현재 배포된 단일 구간 추출 헤드에 그대로 넣는 데이터가 아니다. 기존 GPU 실험·평가셋·배포 모델은 변경하지 않았다. 20문서·반복된 질문 유형의 작은 데이터이고, 계산·되묻기 예제도 적다. 기존 사전학습 문서와 겹칠 수 있으므로 개발 분할을 독립 성능 평가로 사용하지 않는다. 의미가 유사한 문서까지 중복 제거한 것은 아니다. 날짜가 지난 정책을 현재 적용되는 제도로 안내해서는 안 된다.
 
+### 내부업무 사례 후보 (MODEL-RESUME-B-024)
+
+`data/work-case-candidates-v1/`(git 제외, manifest 사본 `reports/coordination/MODEL-RESUME-B-024/`)에는 이미 수집한 법령·행정규칙 9건의 조문에서 B(AI)가 쓴 인사·복무·여비·회계·계약 사례 후보 33건이 있다. 학습 승인 데이터가 아니며 사람 검수도 받지 않았다. 각 사례는 질문·결론·조건·예외·주체·되물을 사실·보류 사유를 따로 기록하고, 조건·예외마다 조문 원문 구간을 둔다. 형식은 A의 `case` 어댑터(`CASE_SYSTEM` + `rag_prompt`, `[Dn]` 인용)와 같다.
+
+```sh
+.venv/bin/python scripts/build_work_case_candidates.py --spec reports/coordination/MODEL-RESUME-B-024/case-spec.json \
+    --screen reports/coordination/MODEL-RESUME-B-024/screen-and-protect.json \
+    --tokenizer runs/open-weight-base/qwen3-1.7b-hf-rev70d244cc --out data/work-case-candidates-v1
+```
+
+빌더는 다음을 기계적으로 검사한다.
+
+- 평가측 파일에 문서 ID·제목·가족명(시행령·시행규칙 → 법률)이 있는지
+- search-corpus-v2에서 평가 노출 구간으로 빠진 적이 있는지, B-013 예약 겹침 목록·law-byl 보류·보호 항목에 들어 있는지
+- 기존 case view와 같은 문서·같은 조문인지
+- 조건·예외 구간이 원문 그대로인지, 인용 번호가 맞는지, 목표 문장의 숫자에 근거가 있는지
+- 개인정보 힌트, 토큰 예산
+
+통과한 행은 148개 서명 예약 가족과의 겹침 검사(`check_reserved_overlap.py`)도 거친다. 852개 미서명 가족은 검사하지 않았으므로, 통과했다고 안전하다고 볼 수 없다.
+
 ### 생성형 모델 실제 학습 결과
 
 데이터 준비 이후 완료된 91M 추가 사전학습 몸통에서 실제 생성형 SFT를 수행했다. `scripts/train_public_dialogue.py`의 `prepare` → `train` → `evaluate`로 첫 실험을 재현하며, `prepare-qa`는 첫 혼합 데이터로부터 독해 비중을 높인 두 번째 데이터를 만든다. `--data`, `--run`, `--init-run`, `--steps`, `--device`를 명시하며 평가에는 `--report`가 필요하다. 기존 실행을 덮어쓰지 않는다.

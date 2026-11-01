@@ -1,0 +1,25 @@
+{"doc": "law-go-kr:admrul-file:143116119", "title": null, "institution": null, "found": false, "gates": ["eval_exposure_windows", "protected"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:admrul:2100000133909", "title": "국립농산물품질관리원 소속 상시출장공무원 여비지급규정", "institution": "국립농산물품질관리원", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 4}
+{"doc": "law-go-kr:admrul:2100000181661", "title": "휴가일수 계산 자체 기준 지침", "institution": "법무부", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 2}
+{"doc": "law-go-kr:admrul:2100000244746", "title": "산림청 현업공무원 복무관리 규정", "institution": "산림청", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 3}
+{"doc": "law-go-kr:admrul:2100000255514", "title": "우정사업본부 장기출장 및 파견에 관한 업무처리 규정", "institution": "우정사업본부", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 2}
+{"doc": "law-go-kr:admrul:2100000273584", "title": "조달청 행사대행용역 입찰 및 계약관리 지침", "institution": "조달청", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 6}
+{"doc": "law-go-kr:admrul:2100000274000", "title": "물품관리 사무처리규정", "institution": "조달청", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 3}
+{"doc": "law-go-kr:admrul:2100000275274", "title": "교원휴가에 관한 예규", "institution": "교육부", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 5}
+{"doc": "law-go-kr:admrul:2100000278916", "title": "국가데이터처 공무원의 징계 등의 양정기준에 관한 규정", "institution": "국가데이터처", "found": true, "gates": ["manual"], "manual_reason": "징계 양정·감경 조문이 공무원 징계 관계 법령 체계를 거의 그대로 옮긴 기관 규정이라 평가 가족과 내용이 겹칠 수 있음 [추정]; 이번 라운드에서 사례로 쓰지 않음", "cases_in_spec": 0}
+{"doc": "law-go-kr:admrul:2100000279008", "title": "기획예산처 징계·문책사항 통보처리 제운영기준", "institution": "기획예산처", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 4}
+{"doc": "law-go-kr:law:209867", "title": "채용절차의 공정화에 관한 법률 시행령", "institution": "법령", "found": true, "gates": ["eval_family"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:218301", "title": "채용절차의 공정화에 관한 법률", "institution": "법령", "found": true, "gates": ["eval_title"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:280909", "title": "특정조달을 위한 국가를 당사자로 하는 계약에 관한 법률 시행령 특례규정", "institution": "법령", "found": true, "gates": ["eval_family"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:281413", "title": "예산성과금 규정", "institution": "법령", "found": true, "gates": [], "manual_reason": null, "cases_in_spec": 4}
+{"doc": "law-go-kr:law:282641", "title": "물품관리법 시행규칙", "institution": "법령", "found": true, "gates": ["eval_family"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:288435", "title": "지방공무원 보수규정", "institution": "법령", "found": true, "gates": ["eval_title"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:288975", "title": "보조금 관리에 관한 법률 시행령", "institution": "법령", "found": true, "gates": ["eval_family"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:289957", "title": "지방공무원 수당 등에 관한 규정", "institution": "법령", "found": true, "gates": ["eval_id", "eval_title"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:290313", "title": "공무원 여비 규정", "institution": "법령", "found": true, "gates": ["eval_id", "eval_title", "b013_reserve_overlap"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:290321", "title": "공무원보수규정", "institution": "법령", "found": true, "gates": ["eval_id", "eval_title"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:290323", "title": "공무원수당 등에 관한 규정", "institution": "법령", "found": true, "gates": ["eval_id", "eval_title", "b013_reserve_overlap"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:290349", "title": "국가공무원 복무규정", "institution": "법령", "found": true, "gates": ["eval_id", "eval_title", "b013_reserve_overlap"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "law-go-kr:law:290493", "title": "지방공무원 복무규정", "institution": "법령", "found": true, "gates": ["eval_title", "b013_reserve_overlap"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "reb.or.kr:1244:116253:file:021728bfe39ccd71", "title": "한국부동산원_직원 복무규정 일부개정규정안(게시 2026.08.20)", "institution": "한국부동산원", "found": true, "gates": ["institution_in_eval"], "manual_reason": null, "cases_in_spec": 0}
+{"doc": "reb.or.kr:1244:98560:file:f8eafee96eda455e", "title": null, "institution": "한국부동산원", "found": false, "gates": ["protected", "institution_in_eval"], "manual_reason": null, "cases_in_spec": 0}
