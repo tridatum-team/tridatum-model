@@ -519,6 +519,15 @@ class AskBackAnnexTests(WorkspaceTests.__base__):
         self.assertEqual(r['status'], 'clarify')
         self.assertEqual([c['title'] for c in r['candidates']], ['가기관 여비 규정', '나기관 여비 규칙'])
 
+    def test_own_rule_rivals_a_rule_not_recorded_as_common(self):
+        # 나기관's own rule (title prefix or B applies_to institution); 가기관's rule read as not its own
+        self.ws.specific = (self.ws.specific | {'b'}) - {'a', 'a2'}
+        r = self.ws.select('국내 출장 식비는 하루 얼마인가요?')
+        self.assertEqual((r['status'], r['institutions'][-1]), ('clarify', '나기관'))  # 가기관 rule: applicability unrecorded
+        self.ws.meta['a']['applies_to'] = {'scope': 'central_government', 'basis': '제1조(목적)'}
+        r = self.ws.select('국내 출장 식비는 하루 얼마인가요?')
+        self.assertEqual((r['status'], r['applied']), ('answer', 'a'))  # a recorded common rule is not rivalled by it
+
 
 class TableConditionTests(WorkspaceTests.__base__):
     """RETRIEVAL-ROOT-009: a rule's table whose caption states a condition the question does not (상시 출장) is not

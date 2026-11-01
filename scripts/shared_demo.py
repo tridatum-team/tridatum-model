@@ -1368,9 +1368,14 @@ class Workspace:
             inst = lambda d: (self.meta[d]['institution'] or self.meta[d]['title']).split('(질의')[0]
             top = best[applied]
             rivals = {}
+            # Own rules don't rival a common one — a rule B recorded as applying beyond one institution (applies_to).
+            # A rule with no record is not known to be common: another institution's own rule still rivals it, so a
+            # general question is asked back instead of answered from one body's rule ("국외출장 계획서 작성 방법" →
+            # 방위사업청 관리규정 once DG-008 recorded the rival 선관위 rule as its own; MODEL-RESUME-A-024).
+            unrecorded = not rule_scope(self, applied)
             for d, s in best.items():
                 if (inst(d) != inst(applied) and s >= self.CLOSE * top
-                        and (applied in self.specific or d not in self.specific)):  # own rules don't rival a common one
+                        and (applied in self.specific or d not in self.specific or unrecorded)):
                     rivals.setdefault(inst(d), d)
             if rivals:
                 options = [inst(applied)] + list(rivals)[:3]
