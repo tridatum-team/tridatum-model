@@ -22,6 +22,8 @@ data/*
 output/
 tmp/
 .shared-demo/
+# pinned copy of the deployed commit's service (git show <commit>:scripts/shared_demo.py), served via TRID_DEMO_SERVICE
+scripts/shared_demo_live_*.py
 deploy/shared-demo/.wrangler/
 deploy/shared-demo/wrangler.json
 reports/*.flag

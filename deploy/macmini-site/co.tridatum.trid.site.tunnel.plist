@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- SITE-RECOVERY-010: named tunnel trid-test-origin (4562e85a-…) → https://trid-test-origin.eommydocs.com → 127.0.0.1:51873.
+     Its own config and credentials under ~/Services/trid-site/tunnel (never ~/.cloudflared/config.yml, whose `tunnel:`
+     key belongs to the data-prep tunnel). The Worker for test.tridatum.co fetches this fixed origin. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>co.tridatum.trid.site.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/cloudflared</string>
+    <string>tunnel</string>
+    <string>--no-autoupdate</string>
+    <string>--config</string>
+    <string>/Users/eomgyuhyeon/Services/trid-site/tunnel/config.json</string>
+    <string>run</string>
+    <string>4562e85a-de9b-4567-a926-47c381d7102e</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/eomgyuhyeon/Services/trid-site/.runtime/tunnel.log</string>
+  <key>StandardErrorPath</key><string>/Users/eomgyuhyeon/Services/trid-site/.runtime/tunnel.log</string>
+</dict>
+</plist>

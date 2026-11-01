@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- SITE-RECOVERY-010: connector for named tunnel trid-test-origin → https://trid-test-origin.eommydocs.com → 127.0.0.1:51873.
+     Config and the tunnel-scoped credential live in .shared-demo (git-ignored, mode 600). Exactly one host runs this
+     connector at a time: moving the origin to the Mac mini = bootout here, bootstrap there; the Worker is unchanged. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>co.tridatum.trid.site.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/cloudflared</string>
+    <string>tunnel</string>
+    <string>--no-autoupdate</string>
+    <string>--config</string>
+    <string>/Users/eomgyuhyeon/사업/trid/.shared-demo/named-tunnel.json</string>
+    <string>run</string>
+    <string>4562e85a-de9b-4567-a926-47c381d7102e</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/eomgyuhyeon/사업/trid/.shared-demo/named-tunnel.log</string>
+  <key>StandardErrorPath</key><string>/Users/eomgyuhyeon/사업/trid/.shared-demo/named-tunnel.log</string>
+</dict>
+</plist>

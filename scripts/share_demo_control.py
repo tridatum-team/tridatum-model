@@ -21,6 +21,9 @@ DEPLOY = ROOT / 'deploy/shared-demo'
 PORT = int(os.environ.get('TRID_DEMO_PORT', 51873))
 VERSIONS = os.environ.get('TRID_DEMO_VERSIONS')
 TUNNEL = os.environ.get('TRID_DEMO_TUNNEL', '1') != '0'
+# The model server script. A recovery or a pinned deployment points this at a copy of the deployed commit's
+# scripts/shared_demo.py kept next to it (so its ROOT and data paths are this repository's), never at unreviewed code.
+SERVICE = Path(os.environ.get('TRID_DEMO_SERVICE') or ROOT / 'scripts/shared_demo.py')
 WORKER = 'trid-model-test'
 
 
@@ -159,7 +162,7 @@ def supervise(hours):
         with (RUNTIME / 'server.log').open('wb') as log:
             # Its own process group: the llama.cpp servers it starts inherit it, so stopping the group stops them all
             # even if the model server itself dies or is killed first (no orphaned llama-server holding a port).
-            backend = subprocess.Popen([sys.executable, str(ROOT / 'scripts/shared_demo.py'), '--secret-file', str(secret_path),
+            backend = subprocess.Popen([sys.executable, str(SERVICE), '--secret-file', str(secret_path),
                                         '--port', str(PORT)] + (['--versions', VERSIONS] if VERSIONS else []),
                                        cwd=ROOT, stdout=log, stderr=log, start_new_session=True)
         children.append(backend)
@@ -245,19 +248,25 @@ def wrangler():
     return [shutil.which('node'), installed[0]]
 
 
-def deploy(put_secret=True):
+def deploy(put_secret=True, origin=None):
+    """Point test.tridatum.co at this host's tunnel, or at `origin`: a fixed origin served by another host (a named
+    tunnel) that must already answer /healthz through Cloudflare with this proxy secret before traffic moves to it."""
     info = status()
-    if info.get('status') != 'running' or not alive(info.get('supervisor_pid')):
+    secret = (RUNTIME / 'proxy-secret').read_text().strip()
+    if origin:
+        if not external_ready(origin, secret):
+            raise RuntimeError(f'{origin} does not pass the proxy health check; the domain is left unchanged')
+        put_secret = False
+    elif info.get('status') != 'running' or not alive(info.get('supervisor_pid')):
         raise RuntimeError('Run start first')
     cfg = {'name': WORKER, 'account_id': 'a57b51f32c8d50f90c4f30debb508aa7', 'main': 'worker.mjs',
            'compatibility_date': '2026-10-01', 'workers_dev': False, 'preview_urls': False,
            'routes': [{'pattern': 'test.tridatum.co', 'custom_domain': True}],
-           'vars': {'ORIGIN_URL': info['origin_url']},
+           'vars': {'ORIGIN_URL': origin or info['origin_url']},
            'observability': {'enabled': False},
            'ratelimits': [{'name': 'DEMO_RATE_LIMIT', 'namespace_id': '2026102701', 'simple': {'limit': 30, 'period': 60}}]}
     (DEPLOY / 'wrangler.json').write_text(json.dumps(cfg, indent=2))
     cmd = wrangler()
-    secret = (RUNTIME / 'proxy-secret').read_text().strip()
     if put_secret:
         subprocess.run(cmd + ['secret', 'put', 'PROXY_SECRET'], cwd=DEPLOY, input=secret + '\n', text=True, check=True, timeout=90)
     subprocess.run(cmd + ['deploy'], cwd=DEPLOY, check=True, timeout=90)
@@ -278,6 +287,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['start', 'stop', 'status', 'deploy', 'supervise'])
     parser.add_argument('--hours', type=float, default=24)
+    parser.add_argument('--origin', help='deploy: fixed origin URL of another host (verified before the switch)')
     args = parser.parse_args()
     if not 0 < args.hours <= 168:
         parser.error('--hours must be between 0 and 168')
@@ -328,7 +338,7 @@ def main():
                                + '; '.join(f'{p} (started {s}) {c[:80]}' for p, s, c in left))
         print('Demo is stopped (supervisor and model server process group exited).')
     else:
-        deploy()
+        deploy(origin=args.origin)
 
 
 if __name__ == '__main__':

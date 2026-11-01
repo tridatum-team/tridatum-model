@@ -107,23 +107,30 @@
 
 PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 Mac으로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
 
-## 중지 / 재실행
+## 운영 / 중지 / 재실행 (SITE-RECOVERY-010부터)
 
-프로젝트 폴더에서:
+현재 원점은 **맥북**이다. 맥미니는 최소 구성(기본 1.7B + 추출 독해기)으로도 메모리 압력 경고가 나 이관하지 못했다(`reports/coordination/SITE-RECOVERY-010.md`).
+
+- **고정 원점:** Worker는 `ORIGIN_URL=https://trid-test-origin.eommydocs.com`(named tunnel `trid-test-origin`, `4562e85a-…`)으로 간다. 터널을 다시 연결해도 주소가 바뀌지 않아 Worker 재배포가 필요 없다. 비밀키 없이 요청하면 원점은 403을 준다.
+- **launchd 두 작업** (`deploy/macbook-site/`, `~/Library/LaunchAgents/`에 복사):
+  - `co.tridatum.trid.site`: `share_demo_control.py supervise --hours 168`, `TRID_DEMO_TUNNEL=0`, `TRID_DEMO_SERVICE`=배포 커밋 서비스 사본. 끝나면(장애나 168시간 만료) launchd가 다시 띄운다.
+  - `co.tridatum.trid.site.tunnel`: `.shared-demo/named-tunnel.json`으로 named tunnel 커넥터를 띄운다. 터널 전용 자격 증명은 `.shared-demo/named-tunnel-credentials.json`(0600)에 있다.
+- **배포 코드 고정:** `TRID_DEMO_SERVICE`가 가리키는 `scripts/shared_demo_live_<commit>.py`는 `git show <commit>:scripts/shared_demo.py`로 만든 사본이다(git 무시). 작업 트리의 검증 전 코드는 서비스되지 않는다.
 
 ```sh
 .venv/bin/python scripts/share_demo_control.py status
-.venv/bin/python scripts/share_demo_control.py stop
+launchctl kickstart -k gui/$(id -u)/co.tridatum.trid.site      # 모델 서버 재시작
+launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel     # 원점 내리기(터널)
+launchctl bootout gui/$(id -u)/co.tridatum.trid.site            # 모델 서버 내리기
 ```
 
-다시 24시간 열기:
+**원점 옮기기(예: 맥미니):** named tunnel 커넥터는 한 호스트에서만 띄운다. 새 호스트에서 모델 서버를 띄우고 로컬 `/healthz`를 확인한 뒤, 이 맥북에서 터널 작업을 `bootout`하고 새 호스트에서 터널 작업을 `bootstrap`한다. Worker는 그대로다. 맥미니용 작업 파일은 `deploy/macmini-site/`에 있다.
 
-```sh
-.venv/bin/python scripts/share_demo_control.py start --hours 24
-.venv/bin/python scripts/share_demo_control.py deploy
-```
+**다른 원점으로 Worker 돌리기:** `share_demo_control.py deploy --origin <URL>`. 먼저 그 URL이 비밀키로 `/healthz`를 통과해야 하며, 실패하면 도메인을 바꾸지 않는다.
 
-새 실행마다 터널 주소가 바뀌므로 `deploy`까지 실행해야 도메인이 새 서버로 연결됩니다. 시작이 실패하면 `.shared-demo/server.log`, `supervisor.log`, `tunnel.log`를 확인합니다. 비밀키는 `.shared-demo/proxy-secret`(0600)에 있고 Cloudflare Worker secret으로도 저장됩니다. 이 폴더를 공유하지 마세요. Cloudflare OAuth 자격 증명은 기존 Wrangler 저장소를 사용하며 프로젝트에 복사하지 않습니다.
+**롤백(임시 터널 방식):** 두 launchd 작업을 `bootout`한 뒤 `share_demo_control.py start --hours 24`와 `deploy`를 실행한다. 이 방식은 실행마다 주소가 바뀌고 만료 시 서비스가 멈춘다(2026-11-01 장애 원인).
+
+시작이 실패하면 `.shared-demo/server.log`, `supervisor.log`, `launchd.log`, `named-tunnel.log`를 확인한다. 비밀키는 `.shared-demo/proxy-secret`(0600)에 있고 Cloudflare Worker secret으로도 저장된다. 이 폴더를 공유하지 않는다. Cloudflare OAuth 자격 증명은 기존 Wrangler 저장소를 쓰며 프로젝트에 복사하지 않는다.
 
 **정지·시작 수명 주기 (CONTROL-LIFECYCLE-001):**
 - 모델 서버는 자체 프로세스 그룹으로 실행된다. 그 서버가 띄운 llama-server들도 같은 그룹에 들어간다.

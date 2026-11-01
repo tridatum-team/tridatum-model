@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- SITE-RECOVERY-010: test.tridatum.co origin on the Mac mini. The supervisor runs the model server (deployed commit,
+     ~/Services/trid-site/repo) on 127.0.0.1:51873 without a quick tunnel; co.tridatum.trid.site.tunnel publishes it on a
+     fixed named-tunnel hostname. launchd restarts it when it exits (crash or the 168 h supervise lease). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>co.tridatum.trid.site</string>
+  <key>WorkingDirectory</key><string>/Users/eomgyuhyeon/Services/trid-site/repo</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/eomgyuhyeon/Services/trid-site/venv/bin/python</string>
+    <string>scripts/share_demo_control.py</string>
+    <string>supervise</string>
+    <string>--hours</string>
+    <string>168</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>TRID_DEMO_RUNTIME</key><string>/Users/eomgyuhyeon/Services/trid-site/.runtime</string>
+    <key>TRID_DEMO_TUNNEL</key><string>0</string>
+    <key>HF_HUB_CACHE</key><string>/Users/eomgyuhyeon/Services/trid-site/hf/hub</string>
+    <key>HF_HUB_OFFLINE</key><string>1</string>
+    <key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/eomgyuhyeon/Services/trid-site/.runtime/launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/eomgyuhyeon/Services/trid-site/.runtime/launchd.log</string>
+</dict>
+</plist>
