@@ -761,7 +761,8 @@ class Workspace:
         self.dense, self.dense_info, self.embedder = None, None, embedder
         if (root / 'dense.f16.npy').exists():
             self.dense_info = json.loads((root / 'dense.json').read_text())
-            self.dense = np.load(root / 'dense.f16.npy').astype(np.float32)
+            from trid.service.embed import load_dense
+            self.dense = load_dense(root)
             if len(self.dense) != len(self.index.passages):
                 raise ValueError('dense.f16.npy does not match the index passages; rerun scripts/build_embeddings.py')
             if self.embedder is None:
