@@ -2,24 +2,33 @@
 
 공유 주소: https://test.tridatum.co
 
-이 배포는 Cloudflare Worker → 임시 Cloudflare Tunnel → 이 Mac의 CPU 모델 서버로 연결됩니다. 별도 클라우드 머신으로 모델을 옮긴 배포가 아닙니다. Mac 전원과 인터넷 연결이 필요하며 덮개를 닫거나 재부팅하면 중단될 수 있습니다. 화면은 꺼져도 되도록 `caffeinate -i`를 서버 실행 동안에만 사용합니다.
+이 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됩니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
 
-**2026-10-30 22:48 재배포 (INSTITUTION-CONNECT-001).** Worker `08f77f3c…`, 공유 색인 `runs/workspace-index/v5`, 한국부동산원 별도 색인 `runs/workspace-index/inst-reb-002`, B 검토 메타데이터 search-corpus-v4. 24시간 실행하며 자동 종료 예정은 **2026-10-31 22:48 KST**다. 중단되면 도메인은 임시 서버 종료 안내를 표시한다. 소규모 테스트용이며 운영 서비스의 가용성을 보장하지 않는다. C-027 고정 평가 색인 `v3`는 바꾸지 않았다.
+**현재 상태 (2026-11-01)**
+- 운영 코드는 브랜치 `site-memory-022`의 코드 커밋 `6a5eb37`이다. 배포판 `9256df4`에 색인 적재 메모리 절감을 더했으며, 검색 결과, 모델, 정밀도는 같다. main에는 병합하지 않았다.
+- 색인: 공유 색인 `runs/workspace-index/v5`, 한국부동산원 별도 색인 `runs/workspace-index/inst-reb-002`, B 검토 메타데이터 search-corpus-v4. C-027 고정 평가 색인 `v3`는 바꾸지 않았다.
 
-## 제공 버전 (`deploy/shared-demo/versions.json`)
+**검증 한계**
+- 맥미니 재부팅 뒤 자동 복구는 시험하지 않았다. 자동 로그인 설정만 확인했다.
+- 디스플레이가 꺼진 상태에서 켜지며 배경화면 동영상이 재생되는 순간의 메모리 여유는 새 코드로 재현하지 못했다.
+- 같은 대화에서 다른 기관 규정으로 바꿔 물으면 이전 기관 규정이 이어지는 기존 결함이 있다.
+- CPU 실행이라 기관 질문 답은 약 17–21초 걸린다.
+
+## 제공 버전 (`deploy/macmini-site/versions.json`)
 
 | 버전 | 기반 모델 | 라이선스 | 상태 |
 |---|---|---|---|
-| `trid-assistant-qwen3-1.7b` (**기본**) | Qwen/Qwen3-1.7B-GGUF Q8_0 원본(업무 특화 학습 없음), sha `061b54da…`, llama.cpp 8ca4060 Metal | Apache-2.0 | 대화 + 근거 검색. 특화 모델 아님 |
-| `trid-v0.1-reader` (롤백 기준) | 자체 91M 추출 독해기 `runs/reader-factorial-01-cpt-v1-v2-v4` (sha `90ccb60f…`) | 자체 | 실험판, 품질 기준 미달 |
-| `baseline-qwen3-1.7b` | 위와 같은 원본 GGUF(서버 공유), 값 형식 출력 | Apache-2.0 | 비교 기준선, 품질 기준 미달 |
-| `trid-qwen3-1.7b-pilot-sft-001` | 원본 + LoRA pilot-sft-001 (GGUF `0c78b0c2…`) | Apache-2.0 | **C-023에서 원본 대비 회귀.** 버전 확인용 |
-| `trid-qwen3-1.7b-model-repair-002` | 원본 + LoRA(B case-training-view-v1r1 34건, 같은 설정, 맥북 MPS 513초), GGUF `21715b4f…`, 학습 형식과 같은 '자료 정보' 줄로 서빙 | Apache-2.0 | **평가 완료(C-028) · 원본 대비 회귀 · 사용 비권장.** case 결론 정확 31 → 22, EOS 종료 32/50 → 3/50, RAG310 grammar 98 → 14, evidence_constrained 과보류 128/228. 기본값 아님 |
+| `trid-assistant-qwen3-1.7b` (**기본**) | Qwen/Qwen3-1.7B-GGUF Q8_0 원본(업무 특화 학습 없음), sha `061b54da…`, llama.cpp 8ca4060 CPU 전용(GPU offload 0) | Apache-2.0 | 대화 + 근거 검색. 특화 모델 아님 |
+| `trid-v0.1-reader` | 자체 91M 추출 독해기 `runs/reader-factorial-01-cpt-v1-v2-v4` (sha `90ccb60f…`) | 자체 | 실험판, 품질 기준 미달 |
+
+**제공하지 않는 버전 (2026-11-01부터)**
+- `baseline-qwen3-1.7b`: 비교 기준선.
+- `trid-qwen3-1.7b-pilot-sft-001`: C-023에서 원본 대비 회귀.
+- `trid-qwen3-1.7b-model-repair-002`: C-028에서 원본 대비 회귀. case 결론 정확 31 → 22, EOS 종료 32/50 → 3/50, RAG310 grammar 98 → 14, evidence_constrained 과보류 128/228.
+- 모델 파일은 맥북에 보존하며, 맥북용 `deploy/shared-demo/versions.json`에 기록이 남아 있다.
+- 이 ID로 요청하면 422로 거절하며, 원본으로 대신 답하지 않는다.
 
 - 각 버전의 기반 모델, 라이선스, 실측, 한계는 화면의 모델 정보(접힘)에 표시한다.
-- 같은 모델 파일·실행 파일·context를 쓰는 버전은 llama-server 하나를 공유한다.
-
-**롤백:** `versions.json`에서 `trid-assistant-qwen3-1.7b` 항목을 빼면 이전 기본(`trid-v0.1-reader`)으로 돌아간다. 그다음 `stop` → `start` → `deploy`를 실행한다.
 
 ## 일반 대화와 근거 검색 (TRID-CONVERSATION-001, 기본 버전)
 
