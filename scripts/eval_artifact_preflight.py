@@ -92,10 +92,25 @@ def trace(code, index, review):
         ws = sd.Workspace(index, review=review)
         for q in PROBES:
             ws.select(q)
+        pinned = [(Path(path), sha) for path, sha in getattr(sd, 'PINNED_CONTRACT', ())]
     finally:
         builtins.open, io.open = real_open, real_io_open
         Path.exists, os.path.exists, Path.is_file = real_exists, real_os_exists, real_is_file
-    return seen
+    return seen, pinned
+
+
+def check_pinned(pinned, code):
+    """The B data contracts the service pins by sha256 (shared_demo.PINNED_CONTRACT) must be in the evaluated checkout,
+    git-tracked and byte-identical: a missing or untracked contract file is never an optional artifact (C-030)."""
+    rows = []
+    for path, sha in pinned:
+        rel = path.resolve().relative_to(code.resolve())
+        here = code / rel
+        row = {'path': str(rel), 'pinned_sha256': sha, 'exists': here.is_file(), 'git_tracked': tracked(code, str(rel))}
+        row['sha256_equal'] = here.is_file() and sha256(here) == sha
+        row['status'] = 'ok' if row['exists'] and row['git_tracked'] and row['sha256_equal'] else 'fail'
+        rows.append(row)
+    return rows
 
 
 def tracked(code, rel):
@@ -168,20 +183,23 @@ def main():
     index = a.index if a.index.is_absolute() else Path.cwd() / a.index
     review = (a.review if a.review.is_absolute() else Path.cwd() / a.review) if a.review else None
     commit = subprocess.run(['git', '-C', str(code), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
-    rows = classify(trace(code, index, review), code, a.reference)
+    seen, pinned = trace(code, index, review)
+    rows = classify(seen, code, a.reference)
+    contract = check_pinned(pinned, code)
     missing = [r['path'] for r in rows if r['status'] == 'missing']
     mismatched = [r['path'] for r in rows if r.get('reference_sha256_equal') is False]
+    contract_failed = [r['path'] for r in contract if r['status'] != 'ok']
     report = {'code': str(code), 'commit': commit, 'index': str(index), 'review': str(review) if review else None,
-              'reference': str(a.reference), 'probes': list(PROBES), 'artifacts': rows,
+              'reference': str(a.reference), 'probes': list(PROBES), 'artifacts': rows, 'pinned_contract': contract,
               'summary': {'ok': sum(r['status'] == 'ok' for r in rows), 'missing': missing,
                           'absent_intentional': [r['path'] for r in rows if r['status'] == 'absent_intentional'],
-                          'untracked_differs_from_reference': mismatched},
-              'verdict': 'fail' if missing or mismatched else 'pass'}
+                          'untracked_differs_from_reference': mismatched, 'pinned_contract_failed': contract_failed},
+              'verdict': 'fail' if missing or mismatched or contract_failed else 'pass'}
     a.output.parent.mkdir(parents=True, exist_ok=True)
     a.output.write_text(json.dumps(report, ensure_ascii=False, indent=1))
     print(json.dumps({'commit': commit[:12], 'verdict': report['verdict'], 'ok': report['summary']['ok'],
                       'missing': missing, 'absent_intentional': report['summary']['absent_intentional'],
-                      'untracked_differs': mismatched}, ensure_ascii=False))
+                      'untracked_differs': mismatched, 'pinned_contract_failed': contract_failed}, ensure_ascii=False))
     sys.exit(2 if report['verdict'] == 'fail' else 0)
 
 

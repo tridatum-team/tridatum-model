@@ -587,8 +587,8 @@ REVIEWED = 'ai_visual_review_match'
 #   applies-to-backfill.jsonl: applies_to of documents whose own record is missing (a rule's 별표 without its body).
 DOMAIN_CONTRACT = ROOT / 'reports/coordination/DATA-CONTINUE-007'
 TERM_MAP = (DOMAIN_CONTRACT / 'term-map.jsonl', '531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897')
-APPLIES_BACKFILL = (DOMAIN_CONTRACT / 'applies-to-backfill.jsonl',
-                    'f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4')
+APPLIES_BACKFILL = [(DOMAIN_CONTRACT / 'applies-to-backfill.jsonl',
+                     'f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4')]
 # A form (서식) passage — the index path's last part is "서식 N" (B: the index's own structure, not a word list) — is a
 # blank template: what to fill in, never a rule, an amount or a standard. It is evidence only for a question asking
 # for a form; otherwise documents are judged by their rule text (DATA-CONTINUE-007 T04).
@@ -596,10 +596,17 @@ FORM_PATH = re.compile(r'서식\s*\d+(?:\s*의\s*\d+)?')
 FORM_ASKED = re.compile(r'양식|서식|별지|신청서|계획서')
 
 
+PINNED_CONTRACT = (TERM_MAP, *APPLIES_BACKFILL)  # checked by scripts/eval_artifact_preflight.py (present, tracked, sha)
+
+
 def pinned_jsonl(spec):
-    """Rows of a pinned B file, [] when the file is absent (the feature is then off and Workspace.domain says so)."""
-    if not spec or not Path(spec[0]).exists():
+    """Rows of a pinned B file. A missing or changed file stops the service: a contract that silently switched itself
+    off would serve different retrieval than the one evaluated (the C-030 untracked-artifact failure). Callers that
+    build a Workspace without the contract pass None."""
+    if not spec:
         return []
+    if not Path(spec[0]).exists():
+        raise ValueError(f'{spec[0]}: pinned data contract is missing; refusing to serve')
     data = Path(spec[0]).read_bytes()
     if hashlib.sha256(data).hexdigest() != spec[1]:
         raise ValueError(f'{spec[0]}: sha256 differs from the pinned contract; refusing to serve')
@@ -746,14 +753,16 @@ class Workspace:
             if t.get('relation') == 'equivalent_when':
                 docs = {e['source'][len(mine):] for e in t.get('evidence', []) if e['source'].startswith(mine)}
                 cited.setdefault(t['everyday_term'], {}).setdefault(t['official_term'], set()).update(d for d in docs if d in self.meta)
-        # B's applicability records for documents without one of their own (never replacing an existing record).
-        backfill = pinned_jsonl(applies_backfill)
+        # B's applicability records for documents without one (or whose record says 'unknown'); an existing stated
+        # scope is never replaced. Each record quotes the source's own 적용범위/목적 text (B's checker located it).
         filled = 0
-        for entry in backfill:
-            for d in entry['doc_ids']:
-                if d in self.meta and not isinstance(self.meta[d].get('applies_to'), dict):
-                    self.meta[d]['applies_to'] = dict(entry['applies_to'], source='B DATA-CONTINUE-007 backfill')
-                    filled += 1
+        for spec in applies_backfill or []:
+            for entry in pinned_jsonl(spec):
+                for d in entry['doc_ids']:
+                    current = self.meta.get(d, {}).get('applies_to')
+                    if d in self.meta and (not isinstance(current, dict) or current.get('scope') == 'unknown'):
+                        self.meta[d]['applies_to'] = dict(entry['applies_to'], source=f'B backfill {Path(spec[0]).parent.name}')
+                        filled += 1
         self.domain = {'term_map': len(terms), 'applies_backfilled': filled, 'form_passages': int(self.form_mask.sum())}
         # B's per-passage review (search-corpus-v4 metadata; texts and ids unchanged, so vectors stay valid): a
         # privacy-review passage is never retrieved (no model context, answer or source text); a value-hold passage's
@@ -834,6 +843,9 @@ class Workspace:
         prefixes = {name for name in self.institutions if len(name) >= 3}
         self.specific = {d for d, t in self.norm_titles.items()
                          if d not in self.qa_docs and any(t[:k] in prefixes for k in range(3, min(len(t), 30) + 1))}
+        # B's record that a rule applies only within its institution (제1조·제2조 적용범위) says the same as its title
+        # would: an institution's own rule, so a general question prefers common rules over it.
+        self.specific |= {d for d in self.meta if d not in self.qa_docs and self.applies(d).get('scope') == 'institution'}
         areas = ROOT / 'trid/service/reference/admin-areas.json'
         # City → its legal category (서울 → 특별시, 부산 → 광역시) for reading rule tables; '도' is too common to use.
         self.area_category = ({k: v for k, v in json.loads(areas.read_text())['areas'].items() if len(v) >= 3}
@@ -1309,6 +1321,14 @@ class Workspace:
                 applied = common[0]
         if general and applied in self.specific:
             result['scope_note'] = 'specific'
+        conditioned = self.unstated_table_condition(applied, best, question)
+        if conditioned:
+            # "공공기관 출장비 지급 기준" ranked 공무원 여비 규정 [별표 8] (상시 출장 공무원의 여비 지급 기준표) first: a table
+            # for a condition the question does not state is not answered in place of its rule, whose body cites the
+            # table that applies (and brings it in as a linked table).
+            result['table_condition'] = {'table': self.meta[applied]['title'], 'unstated': conditioned[1],
+                                         'answered_from': self.meta[conditioned[0]]['title']}
+            applied = conditioned[0]
         if AMOUNT_ASKED.search(question):
             standard = self.standard_source(applied, passing, best)
             if standard:
@@ -1406,6 +1426,33 @@ class Workspace:
         if self.private_mask[used].any():  # invariant: never reachable; fail the request rather than serve it
             raise RuntimeError('privacy-review passage reached the answer context')
         return {**result, 'status': 'answer', 'applied': applied, 'chunks': chunks}
+
+    def unstated_table_condition(self, applied, best, question):
+        """(body doc, condition nouns) when `applied` is a rule's table (별표) whose caption states a condition the
+        question does not, and the rule's body also passed; else None. The condition nouns are the caption's nouns minus
+        the rule's own name, the table's type (…표), nouns shared by at least half of the rule's table captions (지급,
+        여비 …) and anything in the question. 별표 8 "상시 출장 공무원의 여비 지급 기준표" → 상시: a question that says
+        neither is not about that table. Nothing is matched against fixed words or table numbers."""
+        if applied not in self.annex_id:
+            return None
+        base = self.rule_of.get(applied)
+        docs = self.rule_names.get(base, set())
+        body = next((d for d in docs if d not in self.annex_id and d in best), None)
+        if body is None:
+            return None
+        from trid.korean_quality import kiwi
+        caption = lambda d: re.sub(r'\([^)]*\)', '', self.meta[d]['title'].split(']', 1)[-1])
+        nouns = lambda text: {t.form for t in kiwi().tokenize(text) if t.tag in ('NNG', 'NNP') and len(t.form) >= 2}
+        annexes = [d for d in docs if d in self.annex_id]
+        counts = {}
+        for d in annexes:
+            for n in nouns(caption(d)):
+                counts[n] = counts.get(n, 0) + 1
+        shared = {n for n, c in counts.items() if c * 2 >= len(annexes)}
+        name = nouns(self.meta[body]['title'])
+        unstated = sorted(n for n in nouns(caption(applied)) - shared - name
+                          if not n.endswith('표') and n not in question)
+        return (body, unstated) if unstated else None
 
     def linked_tables(self, applied, chunks, scores, per_table=2, max_tables=2):
         """Passages of the tables (별표) that the chosen statute-body passages cite by annex id ("별표 2", "별표 6의2"),

@@ -14,6 +14,24 @@ from trid.prompts import rag_prompt
 from trid.extractive import passage_spans
 from test_pdf_documents import CharTokenizer
 
+# Tests use 'http://127.0.0.1:1' as a model server that does not exist and rely on the call failing at once. Where
+# loopback connections are dropped instead of refused, an unpatched call (e.g. prompt_tokens) would wait for the
+# request timeout; the failure is raised directly here, without a socket, so the suite does not depend on that.
+_PLACEHOLDER_MODEL = 'http://127.0.0.1:1'
+
+
+def setUpModule():
+    import scripts.shared_demo as sd
+    real = sd.llama_request
+
+    def no_network(base, *args, **kwargs):
+        if base == _PLACEHOLDER_MODEL:
+            raise ConnectionRefusedError('placeholder model server (test)')
+        return real(base, *args, **kwargs)
+    patcher = patch('scripts.shared_demo.llama_request', side_effect=no_network)
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
 
 class SharedDemoTests(unittest.TestCase):
     def setUp(self):
@@ -465,6 +483,26 @@ class AskBackAnnexTests(WorkspaceTests.__base__):
         titles = [c['title'] for c in r['candidates']]
         # the top institution's body, then its own annex (where the amounts are), then the other institution's rule
         self.assertEqual(titles, ['가기관 여비 규정', '가기관 여비 규정 [별표 2] 국내 여비 지급표', '나기관 여비 규칙'])
+
+
+class TableConditionTests(WorkspaceTests.__base__):
+    """RETRIEVAL-ROOT-009: a rule's table whose caption states a condition the question does not (상시 출장) is not
+    answered in place of the rule's body; a question stating it keeps the table."""
+    TEXTS = {'a': ('가기관 여비 규정', '제10조(식비) 국내 출장 식비는 별표 2에 따른다.\n제29조(상시 출장) 상시 출장 직원의 여비는 별표 8에 따른다.'),
+             'a1': ('가기관 여비 규정 [별표 1] 여비 지급 구분표', '■ 가기관 여비 규정 [별표 1] 여비 지급 구분표 1호 2호'),
+             'a2': ('가기관 여비 규정 [별표 2] 국내 여비 지급표', '■ 가기관 여비 규정 [별표 2] 국내 여비 지급표 식비 하루 25,000원'),
+             'a8': ('가기관 여비 규정 [별표 8] 상시 출장 직원의 여비 지급 기준표',
+                    '■ 가기관 여비 규정 [별표 8] 상시 출장 직원의 여비 지급 기준표 월 15일 이상 전액')}
+    setUp = WorkspaceTests.setUp
+
+    def test_special_table_gives_way_to_its_rule_unless_the_question_states_its_condition(self):
+        both = {'a8': 0.9, 'a': 0.8}
+        body, unstated = self.ws.unstated_table_condition('a8', both, '출장 여비 지급 기준')
+        self.assertEqual(body, 'a')
+        self.assertIn('상시', unstated)
+        self.assertIsNone(self.ws.unstated_table_condition('a8', both, '상시 출장 직원 여비 지급 기준'))
+        self.assertIsNone(self.ws.unstated_table_condition('a2', {'a2': 0.9, 'a': 0.8}, '국내 출장 식비'))
+        self.assertIsNone(self.ws.unstated_table_condition('a8', {'a8': 0.9}, '출장 여비 지급 기준'))  # body did not pass
 
 
 class DomainContractTests(WorkspaceTests.__base__):
