@@ -496,8 +496,11 @@ class RuleNameBoundaryTests(WorkspaceTests.__base__):
     """A rule's name names it only from a word start: "지방공무원 여비 규정" is not "공무원 여비 규정" (whose 제1조 limits
     it to 국가공무원), so a local-government question is not answered from the central rule (MODEL-RESUME-A-024)."""
     TEXTS = {'law': ('공무원 여비 규정', '제1조(목적) 이 영은 국가공무원의 여비를 정한다. 제16조(숙박비) 숙박비는 별표 2에 따른다.'),
-             'b': ('나기관 출장 규정', '제1조(숙박) 출장 숙박비는 실비로 한다.')}
-    META = {'law': {'institution': '인사혁신처'}, 'b': {'institution': '나기관'}}
+             'b': ('나기관 출장 규정', '제1조(숙박) 출장 숙박비는 실비로 한다.'),
+             'pay': ('공무원수당 등에 관한 규정', '제1조(목적) 이 영은 공무원의 수당을 정한다. 제7조(정근수당) 정근수당은 연 2회 지급한다.'),
+             'duty': ('국가공무원 복무규정', '제1조(목적) 이 영은 국가공무원의 복무를 정한다. 제15조(연가) 연가 일수는 재직기간에 따른다.')}
+    META = {'law': {'institution': '인사혁신처'}, 'b': {'institution': '나기관'}, 'pay': {'institution': '인사혁신처'},
+            'duty': {'institution': '인사혁신처'}}
     setUp = WorkspaceTests.setUp
 
     def test_rule_name_inside_a_longer_word_does_not_name_the_rule(self):
@@ -514,6 +517,13 @@ class RuleNameBoundaryTests(WorkspaceTests.__base__):
         # a qualified name of a held rule whose scope fits, the held name itself, a reference, no rule name
         for q in ('국가공무원 여비 규정 숙박비', '공무원 여비 규정에서 숙박비는?', '그 규정에서 숙박비는?', '출장 숙박비는?'):
             self.assertNotEqual(self.ws.select(q).get('reason'), 'rule_not_found', q)
+
+    def test_abbreviated_name_of_a_held_rule_is_not_reported_missing(self):
+        # C-026 3 (V6): units of the name in order in a held rule's name, words left out, scope checked
+        self.ws.meta['law']['applies_to'] = {'scope': 'central_government', 'basis': '제1조(목적)'}
+        for q in ('공무원수당 규정에서 정근수당은 어떻게 지급하나요?', '공무원 복무규정 연가 일수', '국가공무원 여비 규정 숙박비'):
+            self.assertNotEqual(self.ws.select(q).get('reason'), 'rule_not_found', q)
+        self.assertEqual(self.ws.select('지방공무원 여비 규정에서 일비는?').get('reason'), 'rule_not_found')
 
 
 

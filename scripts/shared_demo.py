@@ -686,6 +686,18 @@ def _names_table(question, annex):
     return re.search(r'별표\s*' + r'\s*의\s*'.join(map(re.escape, annex.split('의'))) + r'(?![\d의])', question) is not None
 
 
+def _in_order(units, text):
+    """True when every unit occurs in the normalised `text` in the given order, other words between or before them
+    left out ("공무원·수당·규정" in 공무원수당등에관한규정)."""
+    at = 0
+    for unit in units:
+        at = text.find(unit, at)
+        if at < 0:
+            return False
+        at += len(unit)
+    return bool(units)
+
+
 def _lines(path):
     """The lines of `Path(path).read_text().splitlines()`, read a line at a time instead of holding the whole file and
     its line list (SITE-MEMORY-023): the same text decoding and newline translation, then the same splitlines()
@@ -1309,13 +1321,17 @@ class Workspace:
     RULE_SUFFIX = ('시행규칙', '시행령', '규정', '규칙', '지침', '훈령', '예규', '내규', '세칙', '요령')
 
     def unheld_rule_name(self, question):
-        """The rule name the question gives ("지방공무원 여비 규정": nouns ending in 규정/규칙/지침 …, at least two before
-        the ending) when no title in the corpus contains it and it is no qualified form of a held rule whose scope fits
-        the question ("국가공무원 여비 규정" → 공무원 여비 규정, 제1조 국가공무원; not "지방공무원 …"); else None. The
-        answer then says the search corpus does not hold it — never that no such rule exists (C-025 4.3)."""
+        """(rule name the question gives, its noun units) when the corpus holds no rule by that name; else None. A
+        rule name is nouns ending in 규정/규칙/지침 … with at least two before the ending ("지방공무원 여비 규정"). It is
+        held when a title contains it, when its noun units occur in order in a held rule's name with words left out
+        ("공무원수당 규정" → 공무원수당 등에 관한 규정, "공무원 복무규정" → 국가공무원 복무규정; C-026 3), or when it is
+        a qualified form of a held rule ("국가공무원 여비 규정" → 공무원 여비 규정) — each only for a rule whose scope
+        fits the question ("지방공무원 …" never reads as 공무원 여비 규정, 제1조 국가공무원). The answer then says the
+        search corpus does not hold it — never that no such rule exists (C-025 4.3)."""
         from trid.korean_quality import kiwi
         tokens = kiwi().tokenize(question)
         noun = lambda t: t.tag in ('NNG', 'NNP')
+        fits = lambda n: not self.scope_conflict(question, next(iter(self.rule_names[n])))
         for k, t in enumerate(tokens):
             if not (noun(t) and t.form.endswith(self.RULE_SUFFIX)):
                 continue
@@ -1325,12 +1341,12 @@ class Workspace:
             before = (k - j) + (1 if len(t.form) > max(len(s) for s in self.RULE_SUFFIX if t.form.endswith(s)) else 0)
             phrase = question[tokens[j].start:t.start + t.len]
             name = _norm(phrase)
+            units = [tokens[i].form for i in range(j, k + 1)]
             if before < 2 or any(name in title for title in self.norm_titles.values()):
                 continue
-            held = [n for n in self.rule_names if len(n) >= 6 and name.endswith(n)
-                    and not self.scope_conflict(question, next(iter(self.rule_names[n])))]
+            held = [n for n in self.rule_names if len(n) >= 6 and (name.endswith(n) or _in_order(units, n)) and fits(n)]
             if not held:
-                return phrase
+                return phrase, units
         return None
 
     def select(self, question, pinned=None, context_doc=None):
@@ -1355,10 +1371,14 @@ class Workspace:
                 return {**result, 'status': 'unknown_institution', 'reason': 'unrecognized'}
             return {**result, 'status': 'unknown_institution'}
         missing = None if (named or unknown or titled or pinned) else self.unheld_rule_name(question)
-        if missing:
-            return {**result, 'status': 'not_found', 'reason': 'rule_not_found', 'rule_name': missing}
         restrict = {pinned} if pinned else (titled or allowed)
         everywhere, cos, tokens, hidden = self.scores(question, protected=True)
+        if missing:
+            # double check (C-026 3): a top-ranked document whose title holds the name's units in order is that rule
+            top = {str(self.passage_doc[i]) for i in np.argsort(-everywhere, kind='stable')[:20]}
+            if not any(d not in self.qa_docs and _in_order(missing[1], self.norm_titles.get(d, ''))
+                       and not self.scope_conflict(question, d) for d in top):
+                return {**result, 'status': 'not_found', 'reason': 'rule_not_found', 'rule_name': missing[0]}
         topical = self.topical(question, named + unknown)
         result['retrieval'] = {'mode': 'hybrid' if cos is not None else 'bm25', 'topical_words': list(topical),
                                'best_cosine': round(float(cos.max()), 3) if cos is not None else None}
