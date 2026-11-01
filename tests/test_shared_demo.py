@@ -85,10 +85,14 @@ class SharedDemoTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/api/ask', question, b)[0], 409)
         self.assertEqual(self.request('POST', '/api/sample', {}, {**b, 'X-Trid-Token': a['X-Trid-Token']})[0], 403)
         self.request('POST', '/api/sample', {}, b)
-        self.request('POST', '/api/clear', {}, a)
         sessions = list(self.state.sessions.values())
+        sessions[0].pinned_doc, sessions[0].offered_docs = 'law', ['law', 't2']
+        sessions[1].pinned_doc = 'law'
+        self.request('POST', '/api/clear', {}, a)
         self.assertIsNone(sessions[0].document)
-        self.assertIsNotNone(sessions[1].document)
+        self.assertEqual((sessions[0].pinned_doc, sessions[0].offered_docs, sessions[0].history), (None, [], []))
+        self.assertIsNotNone(sessions[1].document)  # the other visitor's chat keeps its document and pin
+        self.assertEqual(sessions[1].pinned_doc, 'law')
         self.assertEqual(self.request('POST', '/api/ask', question, a)[0], 409)
 
     def test_expired_session_and_invalid_input(self):
@@ -433,6 +437,14 @@ class CivilServiceScopeTests(WorkspaceTests.__base__):
         self.assertEqual((r['status'], r['applied']), ('answer', 'b'))
         self.assertEqual(self.ws.select('공무원 출장 식비는 하루 얼마인가요?')['status'], 'clarify')  # no population named
 
+    def test_follow_up_naming_the_other_civil_service_population_leaves_the_previous_rule(self):
+        self.ws.meta['a']['applies_to'] = {'scope': 'central_government', 'basis': '제1조(목적) names 국가공무원'}
+        self.ws.meta['b']['applies_to'] = {'scope': 'local_government', 'basis': '제1조(목적) names 지방공무원'}
+        r = self.ws.select('지방공무원 출장 식비는 하루 얼마인가요?', context_doc='a')
+        self.assertEqual((r['status'], r['applied'], r.get('continued')), ('answer', 'b', None))
+        self.assertFalse(self.ws.continues('지방공무원 출장 식비는 하루 얼마인가요?', 'a'))
+        self.assertTrue(self.ws.select('그럼 출장 식비는 하루 얼마인가요?', context_doc='a').get('continued'))
+
 
 class RuleRoleTests(WorkspaceTests.__base__):
     """Within one institution's rule set, an amount question goes to the instrument that sets the amount, not to a
@@ -469,6 +481,20 @@ class TitleFragmentTests(WorkspaceTests.__base__):
         self.assertEqual(self.ws.constraints('국외 업무협의 처리 방법')[3], {'b'})
 
 
+class RuleNameBoundaryTests(WorkspaceTests.__base__):
+    """A rule's name names it only from a word start: "지방공무원 여비 규정" is not "공무원 여비 규정" (whose 제1조 limits
+    it to 국가공무원), so a local-government question is not answered from the central rule (MODEL-RESUME-A-024)."""
+    TEXTS = {'law': ('공무원 여비 규정', '제1조(목적) 이 영은 국가공무원의 여비를 정한다. 제16조(숙박비) 숙박비는 별표 2에 따른다.'),
+             'b': ('나기관 출장 규정', '제1조(숙박) 출장 숙박비는 실비로 한다.')}
+    setUp = WorkspaceTests.setUp
+
+    def test_rule_name_inside_a_longer_word_does_not_name_the_rule(self):
+        for q in ('공무원 여비 규정에서 숙박비는?', '「공무원여비규정」의 숙박비', '공무원 여비규정상 숙박비'):
+            self.assertEqual(self.ws.constraints(q)[3], {'law'}, q)
+        for q in ('지방공무원 여비 규정에서 숙박비는?', '국가공무원 여비 규정 숙박비'):
+            self.assertFalse(self.ws.constraints(q)[3], q)
+
+
 
 class AskBackAnnexTests(WorkspaceTests.__base__):
     """An ask-back over institutions lists each one's own annex with its body when both passed (C-030 L1/S3)."""
@@ -483,6 +509,15 @@ class AskBackAnnexTests(WorkspaceTests.__base__):
         titles = [c['title'] for c in r['candidates']]
         # the top institution's body, then its own annex (where the amounts are), then the other institution's rule
         self.assertEqual(titles, ['가기관 여비 규정', '가기관 여비 규정 [별표 2] 국내 여비 지급표', '나기관 여비 규칙'])
+
+    def test_annex_for_an_unstated_condition_is_not_offered_with_its_body(self):
+        # "출장비" listed 공무원 여비 규정 with its [별표 8] 상시 출장 table (MODEL-RESUME-A-024)
+        from unittest.mock import patch
+        with patch.object(type(self.ws), 'unstated_table_condition',
+                          lambda ws, d, best, q: ('a', ['상시']) if d == 'a2' else None):
+            r = self.ws.select('국내 출장 식비는 하루 얼마인가요?')
+        self.assertEqual(r['status'], 'clarify')
+        self.assertEqual([c['title'] for c in r['candidates']], ['가기관 여비 규정', '나기관 여비 규칙'])
 
 
 class TableConditionTests(WorkspaceTests.__base__):
@@ -503,6 +538,15 @@ class TableConditionTests(WorkspaceTests.__base__):
         self.assertIsNone(self.ws.unstated_table_condition('a8', both, '상시 출장 직원 여비 지급 기준'))
         self.assertIsNone(self.ws.unstated_table_condition('a2', {'a2': 0.9, 'a': 0.8}, '국내 출장 식비'))
         self.assertIsNone(self.ws.unstated_table_condition('a8', {'a8': 0.9}, '출장 여비 지급 기준'))  # body did not pass
+
+    def test_set_aside_table_is_not_linked_back_through_its_body(self):
+        # the body cites 별표 2 and 별표 8; the table set aside for its unstated condition is not brought back
+        from types import SimpleNamespace
+        everywhere = self.ws.scores('출장 여비 지급 기준')[0]
+        body = [SimpleNamespace(text=p.text) for p in self.ws.index.passages if p.doc_id == 'a']
+        linked = lambda exclude: {str(self.ws.passage_doc[i]) for i in self.ws.linked_tables('a', body, everywhere, exclude=exclude)}
+        self.assertEqual(linked(()), {'a2', 'a8'})
+        self.assertEqual(linked({'a8'}), {'a2'})
 
 
 class DomainContractTests(WorkspaceTests.__base__):
@@ -975,6 +1019,17 @@ class InstitutionSnapshotApiTests(unittest.TestCase):
         self.assertIn('임원 업무추진비의 실제 집행내역(2026-09 집행분', r['answer'])
         self.assertNotIn('37,778', body)  # a computed figure appears nowhere, raw output included
         self.assertNotEqual(r['status'], 'answer')
+
+    def test_explicit_rule_or_population_switch_leaves_the_snapshot_and_a_follow_up_stays(self):
+        from scripts.shared_demo import institution_indexes
+        shared, inst = self.state.workspace, self.state.institution_workspaces['C0150']
+        ctx = next(d for d, m in inst.meta.items() if m['title'] == '한국부동산원_여비규정')
+        pick = lambda q, c=ctx: institution_indexes(self.state, shared, q, c)
+        self.assertIs(pick('그럼 숙박비는?'), inst)  # a follow-up keeps the institution
+        self.assertIs(pick('한국부동산원 숙박비는?', None), inst)
+        self.assertIsNone(pick('공무원 여비 규정에서 국내 출장 식비는?'))  # names another rule
+        self.assertIsNone(pick('지방공무원 여비 규정에서 숙박비는?'))  # names a population the institution's rule is not for
+        self.assertIsNone(pick('그럼 숙박비는?', None))  # new chat: no previous document
 
 if __name__ == '__main__':
     unittest.main()

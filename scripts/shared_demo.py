@@ -588,7 +588,13 @@ REVIEWED = 'ai_visual_review_match'
 DOMAIN_CONTRACT = ROOT / 'reports/coordination/DATA-CONTINUE-007'
 TERM_MAP = (DOMAIN_CONTRACT / 'term-map.jsonl', '531b654b373f5208273fcba2fcdaeebfca091c93c3631d700e12dd0875303897')
 APPLIES_BACKFILL = [(DOMAIN_CONTRACT / 'applies-to-backfill.jsonl',
-                     'f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4')]
+                     'f649524b3acb243b41b993b2b16250c5aee120c38786fa66f89b5e0c07288de4'),
+                    # DATA-GAPS-008: 선관위·방사청 국제계약지원단 (institution), 행안부 복식부기·교육비특별회계
+                    # (local_government). Rows 1-3 quote v5 text verbatim; row 4 (교육비 "1. 목적") quotes a span the index
+                    # leaves out for evaluation exposure — promoted as applies_to metadata only, verbatim at this sha
+                    # (MODEL-RESUME-C-024 1.2); the span itself stays unindexed, and a changed quote needs C's judgment again.
+                    (ROOT / 'reports/coordination/DATA-GAPS-008/applies-to-backfill.jsonl',
+                     '4f45cbf3c63d279f626ee769ecbdf63b8f7c4009c1b96b1913d8407378ce5827')]
 # A form (서식) passage — the index path's last part is "서식 N" (B: the index's own structure, not a word list) — is a
 # blank template: what to fill in, never a rule, an amount or a standard. It is evidence only for a question asking
 # for a form; otherwise documents are judged by their rule text (DATA-CONTINUE-007 T04).
@@ -618,6 +624,14 @@ NORMALIZE = re.compile(r'[\s·ㆍ・「」『』()（）\[\]〈〉<>,.\-]')
 
 def _norm(text):
     return NORMALIZE.sub('', text or '')
+
+
+def _names_at_word(question, name):
+    """True when the normalised rule `name` occurs in `question` starting a word — not as the tail of a longer word:
+    "지방공무원 여비 규정" does not name "공무원 여비 규정" (a different body's rule). Characters NORMALIZE drops may sit
+    between its letters ("공무원 여비 규정", "「공무원여비규정」")."""
+    gap = NORMALIZE.pattern + '*'
+    return re.search(r'(?<![0-9A-Za-z가-힣])' + gap.join(map(re.escape, name)), question) is not None
 
 
 def _annex(text):
@@ -750,6 +764,8 @@ class Workspace:
         mine = 'inst:' if self.manifest.get('separate') else f'{self.name}:'
         cited = {}
         for t in terms:
+            # only equivalent_when rows and their evidence source ids are read: the not_equivalent rows (term-map line 6
+            # quotes a held REB 행동강령 text) are kept unconsumed — reading them needs C's judgment again (MODEL-RESUME-C-024)
             if t.get('relation') == 'equivalent_when':
                 docs = {e['source'][len(mine):] for e in t.get('evidence', []) if e['source'].startswith(mine)}
                 cited.setdefault(t['everyday_term'], {}).setdefault(t['official_term'], set()).update(d for d in docs if d in self.meta)
@@ -757,11 +773,12 @@ class Workspace:
         # scope is never replaced. Each record quotes the source's own 적용범위/목적 text (B's checker located it).
         filled = 0
         for spec in applies_backfill or []:
+            folder = Path(spec[0]).parent.name
             for entry in pinned_jsonl(spec):
                 for d in entry['doc_ids']:
                     current = self.meta.get(d, {}).get('applies_to')
                     if d in self.meta and (not isinstance(current, dict) or current.get('scope') == 'unknown'):
-                        self.meta[d]['applies_to'] = dict(entry['applies_to'], source=f'B backfill {Path(spec[0]).parent.name}')
+                        self.meta[d]['applies_to'] = dict(entry['applies_to'], source=f'B backfill {folder}')
                         filled += 1
         self.domain = {'term_map': len(terms), 'applies_backfilled': filled, 'form_passages': int(self.form_mask.sum())}
         # B's per-passage review (search-corpus-v4 metadata; texts and ids unchanged, so vectors stay valid): a
@@ -1196,7 +1213,7 @@ class Workspace:
         mentioned = found + mentioned
         # An exact canonical rule name ("공무원 여비 규정") names the rule whatever its length; only otherwise are
         # shared title fragments of TITLE_MIN+ characters read as naming a document.
-        exact = [n for n in self.rule_names if len(n) >= 6 and n in q]
+        exact = [n for n in self.rule_names if len(n) >= 6 and n in q and _names_at_word(question, n)]
         exact = [n for n in exact if not any(n != m and n in m for m in exact)]
         titled = set().union(*(self.rule_names[n] for n in exact)) if exact else None
         if titled and allowed is not None:
@@ -1232,7 +1249,15 @@ class Workspace:
         named, unknown, allowed, titled = self.constraints(question)
         if named or unknown or titled or allowed is not None or context_doc not in self.meta:
             return False
-        return self._context_relevant(self.scores(question)[0], context_doc)
+        return self._context_relevant(self.scores(question)[0], context_doc) and not self.scope_conflict(question, context_doc)
+
+    def scope_conflict(self, question, doc):
+        """True when the question names 지방공무원 / 국가공무원 and `doc`'s rule is recorded (B applies_to) for another
+        population: it is then no follow-up of `doc` ("지방공무원 여비 규정에서 숙박비는?" after 공무원 여비 규정, whose
+        제1조 limits it to 국가공무원, or after 한국부동산원 여비규정; MODEL-RESUME-A-024)."""
+        subject = self.civil_service_subject(question)
+        scope = rule_scope(self, doc) if subject and doc in self.meta else None
+        return bool(scope) and scope != subject
 
     def select(self, question, pinned=None, context_doc=None):
         """dict(status, applied, chunks, others, institutions, retrieval, ...). status: 'answer' | 'clarify' |
@@ -1262,7 +1287,8 @@ class Workspace:
                                'best_cosine': round(float(cos.max()), 3) if cos is not None else None}
         if everywhere.max() <= 0:
             return {**result, 'status': 'not_found'}
-        if restrict is None and not unknown and self._context_relevant(everywhere, context_doc):
+        if (restrict is None and not unknown and self._context_relevant(everywhere, context_doc)
+                and not self.scope_conflict(question, context_doc)):
             restrict = {context_doc}
             result['continued'] = True
         scores = everywhere
@@ -1322,13 +1348,15 @@ class Workspace:
         if general and applied in self.specific:
             result['scope_note'] = 'specific'
         conditioned = self.unstated_table_condition(applied, best, question)
+        set_aside = None
         if conditioned:
             # "공공기관 출장비 지급 기준" ranked 공무원 여비 규정 [별표 8] (상시 출장 공무원의 여비 지급 기준표) first: a table
             # for a condition the question does not state is not answered in place of its rule, whose body cites the
-            # table that applies (and brings it in as a linked table).
+            # table that applies (and brings it in as a linked table) — never that set-aside table again, whose
+            # passages and reviewed rows would hand the model its figures anyway (MODEL-RESUME-A-024 smoke).
             result['table_condition'] = {'table': self.meta[applied]['title'], 'unstated': conditioned[1],
                                          'answered_from': self.meta[conditioned[0]]['title']}
-            applied = conditioned[0]
+            set_aside, applied = applied, conditioned[0]
         if AMOUNT_ASKED.search(question):
             standard = self.standard_source(applied, passing, best)
             if standard:
@@ -1347,10 +1375,12 @@ class Workspace:
             if rivals:
                 options = [inst(applied)] + list(rivals)[:3]
                 # each option with its own annex when that passed too: a common law's 별표 holds the amounts asked
-                # for, and listing only its body hides them (C-030 L1/S3)
+                # for, and listing only its body hides them (C-030 L1/S3) — but not a table for a condition the
+                # question does not state (공무원 여비 규정 [별표 8] 상시 출장 for "출장비"; MODEL-RESUME-A-024)
                 shown = [applied] + list(rivals.values())[:3]
                 annexes = [next((d for d in best if d not in shown and self.meta[d]['title'].startswith(self.meta[s]['title'])
-                                 and '[별표' in self.meta[d]['title']), None) for s in shown]
+                                 and '[별표' in self.meta[d]['title'] and not self.unstated_table_condition(d, best, question)),
+                                None) for s in shown]
                 return {**result, 'status': 'clarify', 'institutions': options,
                         'candidates': [c for s, a in zip(shown, annexes)
                                        for c in [self.describe(s, best[s])] + ([self.describe(a, best[a])] if a else [])]}
@@ -1359,7 +1389,7 @@ class Workspace:
                                 self.index.passages[i].id in self.tables, self.index.passages[i].id in self.value_hold),
                   float(scores[i]))
                   for i in passing[applied]]
-        linked = self.linked_tables(applied, [c for c, _ in chunks], everywhere)
+        linked = self.linked_tables(applied, [c for c, _ in chunks], everywhere, exclude={set_aside})
         if linked:
             result['linked_tables'] = sorted({str(self.passage_doc[i]) for i in linked})
             chunks += [(PassageChunk(self.index.passages[i].text, 1, self.index.passages[i].char_start,
@@ -1380,7 +1410,7 @@ class Workspace:
             # "…는 별표1에 따른다" inside the document that itself holds that table (institution rules): that table
             annexes |= {_annex(n) for n in re.findall(r'별표\s*(\d+(?:\s*의\s*\d+)?)', c.text)
                         if self.row_links.get((scope, _annex(n)), {}).get('doc') == d}
-            for n in annexes:
+            for n in annexes - ({self.annex_id[set_aside]} if set_aside and scope == self.rule_of.get(set_aside) else set()):
                 link = self.row_links.get((scope, n))
                 body = (link and d not in self.annex_id and self.meta[d].get('effective_date')
                         and self.meta[d].get('effective_date') == link['statute_effective_date'])
@@ -1454,7 +1484,7 @@ class Workspace:
                           if not n.endswith('표') and n not in question)
         return (body, unstated) if unstated else None
 
-    def linked_tables(self, applied, chunks, scores, per_table=2, max_tables=2):
+    def linked_tables(self, applied, chunks, scores, per_table=2, max_tables=2, exclude=()):
         """Passages of the tables (별표) that the chosen statute-body passages cite by annex id ("별표 2", "별표 6의2"),
         from the same rule — the best-scoring `per_table` of each (privacy passages excluded), for the `max_tables`
         cited tables whose best passage scores highest — so "식비는 별표 2에 따른다" comes with 별표 2."""
@@ -1466,7 +1496,7 @@ class Workspace:
         ranked = []
         for n in sorted(cited):
             doc = tables.get(n)
-            if doc:
+            if doc and doc not in exclude:
                 idx = np.flatnonzero((self.passage_doc == doc) & ~self.private_mask)
                 if len(idx):
                     ranked.append([int(i) for i in idx[np.argsort(-scores[idx], kind='stable')][:per_table]])
@@ -1601,19 +1631,24 @@ def expenditure_guard(result, m):
 
 def institution_indexes(state, workspace, question, context_doc):
     """The separate snapshot index (B: index institution_rules_separate) of the institution the question names by
-    its official ALIO id — or, for a follow-up naming no institution, of the previous answer's document — else None."""
+    its official ALIO id — or, for a follow-up naming no institution and no document, of the previous answer's
+    document — else None. A question that names a rule or document ("공무원 여비 규정에서 …") switches to it: it is
+    not a follow-up of the previous institution's snapshot even without naming an institution. Nor is one that names
+    지방공무원 / 국가공무원 when the previous document's scope (B applies_to) is not theirs ("지방공무원 여비 규정에서
+    숙박비는?" after 한국부동산원 여비규정): the answer must not mix the institution's scope into theirs (MODEL-RESUME-A-024)."""
     indexes = getattr(state, 'institution_workspaces', None) or {}
     if not indexes:
         return None
-    named, unknown, _, _ = workspace.constraints(question)
+    named, unknown, _, titled = workspace.constraints(question)
     for name in named + unknown:
         entry = workspace.institutions.get(name) or {}
         alio = (entry.get('alio') or {}).get('id') or entry.get('alio_id')
         if alio in indexes:
             return indexes[alio]
-    if not named and not unknown and context_doc:
-        return next((ws for ws in indexes.values() if context_doc in ws.meta), None)
-    return None
+    if named or unknown or titled or not context_doc:
+        return None
+    snapshot = next((ws for ws in indexes.values() if context_doc in ws.meta), None)
+    return None if snapshot is None or snapshot.scope_conflict(question, context_doc) else snapshot
 
 
 def institution_statistic_reply(ws, question, shown=20):
@@ -2014,8 +2049,11 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                 raise DocumentError('직전 답변에 표시된 다른 후보 문서 번호를 골라 주세요.')
                         result = {'pinned': workspace.describe(session.pinned_doc) if session.pinned_doc else None}
                     elif path == '/api/clear':
+                        # a new chat starts with no context: the document, the conversation, and the pinned/offered
+                        # documents of the previous chat (a pin kept answering from that document; MODEL-RESUME-A-024)
                         with state.lock:
-                            session.document = session.document_id = None
+                            session.document = session.document_id = session.pinned_doc = None
+                            session.offered_docs = []
                             session.history.clear()
                         result = {'cleared': True}
                     elif path == '/api/ask':
@@ -2240,6 +2278,13 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                     result['scope'] += (f" 질문이 금액·기준을 물었고, 처음 고른 「{ws.meta[sc['from']]['title']}」의 구간이 "
                                                         f"그 금액을 「{ws.meta[sc['to']]['title']}」의 별표에 따르도록 정하고 있어 같은 기관의 "
                                                         '그 규정을 근거로 골랐습니다. 처리지침의 사례·공제 예시는 사례를 묻는 질문에 씁니다.')
+                                if selection.get('table_condition'):
+                                    # RETRIEVAL-ROOT-009: why the rule's body, not its best-scoring table, was used. The
+                                    # caption nouns stay in the response field; the visible note names the table itself.
+                                    tc = result['table_condition'] = selection['table_condition']
+                                    result['scope'] += (f" 가장 가깝게 검색된 「{tc['table']}」는 질문에 적히지 않은 대상·조건에 "
+                                                        f"관한 표라서, 그 표를 정한 규정 본문 「{tc['answered_from']}」을 근거로 "
+                                                        '골랐습니다.')
                         population_notice(result, question, inst_ws, ws, selection)
                         if workspace_mode and result.get('status') != 'chat':
                             asked = _norm(question)
