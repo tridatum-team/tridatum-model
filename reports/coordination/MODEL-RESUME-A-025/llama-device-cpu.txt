@@ -1,0 +1,5 @@
+0.00.074.606 I cmn  common_param:   - MTL0    : Apple M5 (25559 MiB, 25558 MiB free)
+0.00.652.113 I llama_kv_cache:        CPU KV buffer size =   448.00 MiB
+0.00.230.018 I load_tensors:   CPU_Mapped model buffer size =   315.30 MiB
+0.00.230.017 I load_tensors: offloaded 0/29 layers to GPU
+0.00.653.631 I sched_reserve:        CPU compute buffer size =    60.02 MiB

@@ -1,0 +1,11 @@
+0.00.043.471 I cmn  common_param:   - MTL0    : Apple M5 (25559 MiB, 25558 MiB free)
+0.08.010.621 I common_memory_breakdown_print: |   - MTL0 (Apple M5)    | 25559 = 23310 + (2247 =  1743 +     448 +      56) +           0 |
+0.00.108.788 I common_memory_breakdown_print: |   - MTL0 (Apple M5)    | 25559 = 25558 + (2247 =  1743 +     448 +      56) +       -2247 |
+0.00.043.220 I ggml_metal_device_init: GPU name:   MTL0 (Apple M5)
+0.00.245.980 I llama_kv_cache:       MTL0 KV buffer size =   448.00 MiB
+0.00.129.096 I llama_prepare_model_devices: using device MTL0 (Apple M5) (unknown id) - 25558 MiB free
+0.00.220.660 I load_tensors:   CPU_Mapped model buffer size =   315.30 MiB
+0.00.220.660 I load_tensors:  MTL0_Mapped model buffer size =  1743.77 MiB
+0.00.220.655 I load_tensors: offloaded 29/29 layers to GPU
+0.00.250.964 I sched_reserve:        CPU compute buffer size =    20.02 MiB
+0.00.250.960 I sched_reserve:       MTL0 compute buffer size =    56.01 MiB
