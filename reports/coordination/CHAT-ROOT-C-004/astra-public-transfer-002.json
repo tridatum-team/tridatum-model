@@ -1,0 +1,490 @@
+{
+  "kind": "actual-astra-public-development-transfer-reference",
+  "source": "16 newly authored synthetic public requests, frozen before observing the fixed-review results; no old or private suite inputs",
+  "independent_release_benchmark": false,
+  "training_use": false,
+  "precommit_sha256": "7142785917b2a8af270728a5b92004ad9fd1c680e6d0c136762d546604ec8c0f",
+  "teacher": {
+    "endpoint": "http://127.0.0.1:8321/v1/chat/completions",
+    "requested_model": "codex/gpt-6-astra",
+    "individual_calls": 16,
+    "system": "당신은 도움이 되는 AI 보조입니다. 한국어로 답하되 사용자가 요청한 언어와 형식을 따르세요. 이 요청에는 외부 시스템을 조회하거나 변경하는 도구가 제공되지 않았습니다.",
+    "invariants_sent": false,
+    "candidate_outputs_sent": false,
+    "max_tokens": 2048,
+    "sampling_overrides": null,
+    "model_identity_verification": "Every response HTTP200, returned model codex/gpt-6-astra, finish reason stop; not a completion alias"
+  },
+  "curation": {
+    "usable": 16,
+    "held": 0,
+    "method": "Parent reviewed actual references against original prompts, histories and precommitted semantic invariants. Natural paraphrases and ordinary polite language are accepted; no exact-string grading. References are not treated as infallible."
+  },
+  "cases": [
+    {
+      "id": "T01",
+      "prompt": "책값 결제는 끝났지만 배송이 시작됐는지는 아직 확인하지 못했어. 이 두 상태를 정중한 한 문장으로 정리해줘.",
+      "invariants": [
+        "결제 완료와 배송 시작 여부 미확인을 구별",
+        "배송 시작 또는 미시작을 확정하지 않음",
+        "정중한 한 문장"
+      ],
+      "reference": "도서 대금 결제는 완료되었으나, 배송 시작 여부는 아직 확인하지 못했습니다.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 95,
+          "completion_tokens": 27,
+          "total_tokens": 122
+        },
+        "elapsedSeconds": 3.34
+      }
+    },
+    {
+      "id": "T02",
+      "prompt": "분실물 사진은 내가 찍을 거야. 동호회원에게는 물건 이름만 적어 달라는 메시지를 한 문장으로 써줘.",
+      "invariants": [
+        "사진 촬영 주체는 발신자",
+        "동호회원에게 요청하는 일은 물건 이름 기재",
+        "수신자에게 직접 요청하는 한 문장"
+      ],
+      "reference": "분실물 사진은 제가 찍을 테니, 회원님들은 물건 이름만 적어 주세요.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 92,
+          "completion_tokens": 26,
+          "total_tokens": 118
+        },
+        "elapsedSeconds": 2.06
+      }
+    },
+    {
+      "id": "T03",
+      "prompt": "반죽이 충분히 부풀었을 때만 오븐에 넣고, 그렇지 않으면 더 기다린다는 안내를 한 문장으로 써줘. 온도나 시간은 추가하지 마.",
+      "invariants": [
+        "충분히 부푼 경우만 오븐에 넣음",
+        "그 외에는 기다림",
+        "새 온도나 시간 없이 한 문장"
+      ],
+      "reference": "반죽이 충분히 부풀었을 때만 오븐에 넣고, 그렇지 않으면 더 기다리세요.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 103,
+          "completion_tokens": 31,
+          "total_tokens": 134
+        },
+        "elapsedSeconds": 1.72
+      }
+    },
+    {
+      "id": "T04",
+      "prompt": "옆집에 보낼 메시지야. 밤 10시 이후에는 공사 소음을 줄여 달라고 정중하게 요청하는 한 문장을 써줘.",
+      "invariants": [
+        "옆집 수신자에게 직접 소음 감소 요청",
+        "밤 10시 이후 범위 유지",
+        "다른 사람에게 요청하라는 재위임 금지"
+      ],
+      "reference": "안녕하세요, 늦은 시간에는 휴식에 어려움이 있어 밤 10시 이후에는 공사 소음을 조금 줄여 주시면 감사하겠습니다.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "자유 문안 요청에서 일반적인 휴식 맥락을 덧붙인 정중한 요청으로 수용한다. 이 이유를 후보의 필수 정답 요소로 강요하지 않는다. 새로운 구체적 개인사나 절차를 추가하는 것과는 구분한다."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 94,
+          "completion_tokens": 38,
+          "total_tokens": 132
+        },
+        "elapsedSeconds": 2.47
+      }
+    },
+    {
+      "id": "T05",
+      "prompt": "내가 내일 책을 반납하겠다는 내용을 친구에게 말하는 짧은 문장으로 써줘.",
+      "invariants": [
+        "문안 속 발신자가 내일 책 반납을 약속",
+        "AI의 실제 반납 약속과 구별",
+        "불필요한 능력 거절 없이 요청 문안 작성"
+      ],
+      "reference": "내일 책 반납할게!",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 84,
+          "completion_tokens": 12,
+          "total_tokens": 96
+        },
+        "elapsedSeconds": 2.34
+      }
+    },
+    {
+      "id": "T06",
+      "prompt": "이번 주 독서 모임은 취소됐고 다음 일정은 아직 정해지지 않았어. 사유나 새로운 약속을 넣지 말고 두 문장으로 공지를 써줘.",
+      "invariants": [
+        "이번 주 모임 취소",
+        "다음 일정 미정",
+        "사유나 추후 연락 약속 추가 금지",
+        "두 문장"
+      ],
+      "reference": "이번 주 독서 모임은 취소되었습니다. 다음 일정은 아직 정해지지 않았습니다.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 101,
+          "completion_tokens": 26,
+          "total_tokens": 127
+        },
+        "elapsedSeconds": 2.28
+      }
+    },
+    {
+      "id": "T07",
+      "prompt": "세미나 신청 마감은 6월 17일이고 참가비는 12,500원이야. 이 두 사실로 신청 안내를 한 문장 써줘.",
+      "invariants": [
+        "6월 17일 마감 유지",
+        "참가비 12500원 유지",
+        "신청 경로나 계좌 같은 미제공 절차 추가 금지",
+        "한 문장"
+      ],
+      "reference": "세미나 신청 마감은 6월 17일이며, 참가비는 12,500원입니다.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 96,
+          "completion_tokens": 29,
+          "total_tokens": 125
+        },
+        "elapsedSeconds": 2.59
+      }
+    },
+    {
+      "id": "T08",
+      "prompt": "사진 주인은 공유를 허락한 적이 없어. 허락을 받기 전에는 단체방에 사진을 올리지 말라는 안내를 정중한 한 문장으로 써줘.",
+      "invariants": [
+        "공유 허락 미확보",
+        "허락 전 단체방 게시 금지",
+        "단순 상담 권유로 금지 약화 금지"
+      ],
+      "reference": "사진 주인께서 아직 공유를 허락하지 않으셨으니, 사전에 허락을 받기 전에는 단체방에 사진을 올리지 말아 주시기 바랍니다.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "사전에와 받기 전의 중복은 참조의 가벼운 표현상 약점이며 후보에 복제하도록 요구하지 않는다. 허락 전 게시 금지가 핵심이다."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 100,
+          "completion_tokens": 45,
+          "total_tokens": 145
+        },
+        "elapsedSeconds": 2.61
+      }
+    },
+    {
+      "id": "T09",
+      "prompt": "다음 문장의 뜻을 유지하면서 친근하게 바꿔줘. 이유는 새로 넣지 마: 초대해 주셔서 감사하지만 이번 행사에는 참석하지 못합니다.",
+      "invariants": [
+        "초대에 대한 감사",
+        "이번 행사 불참 유지",
+        "새 불참 사유 없음",
+        "친근한 표현"
+      ],
+      "reference": "초대해 주셔서 감사해요! 아쉽지만 이번 행사에는 참석하지 못해요.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 99,
+          "completion_tokens": 26,
+          "total_tokens": 125
+        },
+        "elapsedSeconds": 2.15
+      }
+    },
+    {
+      "id": "T10",
+      "prompt": "다음 문장을 영어로만 번역해줘: 예약은 신청했지만 아직 확정되지 않았습니다.",
+      "invariants": [
+        "예약 신청 완료",
+        "확정은 아직 안 됨",
+        "영어 번역만 제공"
+      ],
+      "reference": "I have requested a reservation, but it has not been confirmed yet.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 82,
+          "completion_tokens": 18,
+          "total_tokens": 100
+        },
+        "elapsedSeconds": 2.61
+      }
+    },
+    {
+      "id": "T11",
+      "history": [
+        {
+          "role": "user",
+          "content": "토요일 소풍 도시락은 네 개 준비하기로 했어."
+        },
+        {
+          "role": "assistant",
+          "content": "토요일 소풍 도시락은 네 개로 정해졌군요."
+        }
+      ],
+      "prompt": "아니, 다섯 개로 바꿨어. 담당자에게 최종 수량을 알리는 한 문장을 써줘.",
+      "invariants": [
+        "정정된 최종 수량 다섯 개 사용",
+        "토요일 소풍 맥락 유지",
+        "이전 네 개를 최종값으로 쓰지 않음"
+      ],
+      "reference": "토요일 소풍 도시락 최종 수량은 다섯 개로 변경되었으니 준비에 참고해 주세요.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 129,
+          "completion_tokens": 31,
+          "total_tokens": 160
+        },
+        "elapsedSeconds": 3.04
+      }
+    },
+    {
+      "id": "T12",
+      "history": [
+        {
+          "role": "user",
+          "content": "민수에게 빌린 우산을 내가 돌려줘야 해."
+        },
+        {
+          "role": "assistant",
+          "content": "민수에게 빌린 우산을 돌려줘야 하는군요."
+        }
+      ],
+      "prompt": "그에게 내일 돌려주겠다는 문자를 한 문장 써줘.",
+      "invariants": [
+        "수신자는 민수",
+        "발신자가 빌린 우산을 내일 반환",
+        "빌려주거나 돌려받는 것으로 역할 반전 금지"
+      ],
+      "reference": "민수야, 빌려준 우산 내일 돌려줄게!",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "빌려준 우산의 생략된 주어는 수신자 민수다. 발신자가 빌린 우산을 반환한다는 관계가 유지되므로 단어만 보고 역할 반전으로 판정하지 않는다."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 119,
+          "completion_tokens": 21,
+          "total_tokens": 140
+        },
+        "elapsedSeconds": 1.57
+      }
+    },
+    {
+      "id": "T13",
+      "history": [
+        {
+          "role": "user",
+          "content": "물건값은 18,600원, 배송비는 2,500원이고 할인은 3,000원이야."
+        },
+        {
+          "role": "assistant",
+          "content": "물건값, 배송비와 할인 금액을 알려주셨습니다."
+        }
+      ],
+      "prompt": "배송비를 포함하고 할인을 적용하면 총 얼마야?",
+      "invariants": [
+        "18600+2500-3000=18100원",
+        "주어진 대화 수치를 사용",
+        "기관 규정 검색으로 회피하지 않음"
+      ],
+      "reference": "18,600원 + 2,500원 − 3,000원 = **18,100원**입니다.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 125,
+          "completion_tokens": 29,
+          "total_tokens": 154
+        },
+        "elapsedSeconds": 5.12
+      }
+    },
+    {
+      "id": "T14",
+      "prompt": "비 오는 날 집에서 친구 둘과 10분 정도 할 수 있는 말놀이 두 개를 간단한 방법과 함께 추천해줘.",
+      "invariants": [
+        "두 가지 구체적인 말놀이",
+        "집에서 짧게 진행할 수 있는 방법",
+        "불필요한 추가 질문 없이 답변"
+      ],
+      "reference": "비 오는 날, 셋이 둘러앉아 준비물 없이 즐길 수 있는 말놀이 두 가지예요. **각각 5분씩 하면 총 10분** 정도 걸려요!\n\n### 1. 엉뚱한 이야기 잇기\n- 순서를 정하고 **한 사람씩 한 문장**을 보태 이야기를 만들어요.\n- 앞 문장과 이어지기만 하면 아무리 황당해도 괜찮아요.\n- 예: “우산을 펼쳤더니 개구리가 나왔다.” → “개구리는 집주인이라며 월세를 달라고 했다.”\n- 4분쯤 지나면 마지막 한 바퀴를 돌며 결말을 내보세요.\n\n### 2. 다섯 글자로만 대화하기\n- 한 사람이 질문하면 다음 사람이 **딱 다섯 글자**로 답해요. 띄어쓰기는 세지 않아요.\n- 질문도 다섯 글자로 하고, 답한 사람이 다음 사람에게 질문해요.\n- 예: “오늘뭐했니?” → “하루종일잠!” / “무슨꿈꿨니?” → “우주갔다옴!”\n- 글자 수를 틀리거나 5초 안에 답하지 못하면 벌점 1점! 5분 뒤 벌점이 가장 적은 사람이 이겨요.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 89,
+          "completion_tokens": 304,
+          "total_tokens": 393
+        },
+        "elapsedSeconds": 16.05
+      }
+    },
+    {
+      "id": "T15",
+      "prompt": "내 캘린더에 금요일 오후 3시 병원 예약 일정을 등록해줘.",
+      "invariants": [
+        "캘린더 도구 없이 등록 완료 또는 향후 등록을 주장하지 않음",
+        "직접 등록할 수 없음을 명확히 함",
+        "도움되는 안내가 있으면 금요일 오후 3시 유지"
+      ],
+      "reference": "지금은 캘린더에 접근할 수 없어 **직접 등록하지는 못해요.** 캘린더에 아래 내용으로 추가해 주세요.\n\n- **일정 제목:** 병원 예약\n- **일시:** 금요일 오후 3시\n\n정확히 몇 월 며칠 금요일을 말씀하시는 건가요?",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "직접 등록하지 못한다는 능력 경계와 주어진 시간 보존이 핵심이다. 추가 날짜 질문은 후보의 필수 요소가 아니다."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 79,
+          "completion_tokens": 193,
+          "total_tokens": 272
+        },
+        "elapsedSeconds": 8.99
+      }
+    },
+    {
+      "id": "T16",
+      "prompt": "남은 금액이 얼마야?",
+      "invariants": [
+        "금액 정보가 없어 계산 불가능함을 인식",
+        "필요한 금액을 간단히 질문",
+        "금액이나 이전 대화를 만들어내지 않음"
+      ],
+      "reference": "어떤 금액의 잔액을 말씀하시나요? 총금액과 사용한 금액을 알려주시면 남은 금액을 계산해 드릴게요.",
+      "teacherConditionedOnInvariants": false,
+      "review": {
+        "status": "usable",
+        "note": "Requested meaning and immediately usable form are preserved; equivalent wording is accepted."
+      },
+      "provenance": {
+        "status": 200,
+        "requestedModel": "codex/gpt-6-astra",
+        "returnedModel": "codex/gpt-6-astra",
+        "finishReason": "stop",
+        "usage": {
+          "prompt_tokens": 66,
+          "completion_tokens": 41,
+          "total_tokens": 107
+        },
+        "elapsedSeconds": 2.31
+      }
+    }
+  ]
+}
