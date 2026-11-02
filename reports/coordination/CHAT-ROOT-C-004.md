@@ -224,6 +224,64 @@ CPU loader 준비 중 optional `accelerate` 요구와 set형 진단 메타데이
 - 원본 revision: `7df4bc35ccd610e451809d7106e1c3cf82bfd44c`, 공개 Apache-2.0.
 - 가중치 SHA-256: `9a9d12e01656388e49114191ab235b8bec3b2214264341732798c698f0dd039f`. 가중치와 tokenizer의 실제 hash·크기를 공식 LFS 메타데이터와 대조해 일치했다.
 - 다운로드 8개 파일, 합계 `4,650,978,030` bytes. 인증 토큰을 사용하지 않았다.
-- **이 시점은 원본 확보이지 품질 합격이 아니다.** 새 학습·운영 접근·배포는 하지 않았다. 다운로드 횟수는 이제 1이며 앞 절의 기존 파일만 사용한 실행과 구분한다.
+- 원본 확보만으로 품질 합격을 주장하지 않는다. 새 학습·운영 접근·배포는 하지 않았다. 이 단계까지 모델 다운로드는 1회이며 앞 절의 기존 파일만 사용한 실행과 구분한다.
+
+### 변환과 실제 대화 결과
+
+고정 converter의 Q8_0 직접 변환을 CPU·임시 파일 모드로 완료했다. 결과는 `2,469,819,168` bytes, SHA-256 `ebba2cdcbebd6a88ab418d243c8ee0b427f690020d9042776623241efbdfb427`이다. 준비 단계에서 `sentencepiece` 누락과 Transformers 5.21의 명시적 head dimension 설정 거부가 발생했다. 두 번 모두 추론은 0회다. converter의 명시된 호환 tokenizer 의존성을 임시 `PYTHONPATH`에 격리해 해결했으며, 원본 config·검증 코드·프로젝트 runtime을 수정하지 않았다.
+
+같은 수정 계약과 실제 `chat_reply(thinking=False)`로 4건을 완료했다. D03은 접수 완료와 한 문장을 지켰다. 그러나 D06은 안내 방향을 바꾸고 새로운 문의 지시를 넣었으며, D20도 요청한 신청 안내 대신 문의·상세 안내를 받으라는 지시를 생성했다. **원본 역시 미채택**이며 조건부 잔여 14건은 실행하지 않았다. 모두 EOS 종료, 제어 기호 없는 최종 답, pressure 1·포트 해제였다. 과거 미세학습 산출물만의 문제라고 단정할 수 없지만, 미세학습·양자화·모델 크기 각각의 인과 효과를 분리했다고 주장하지 않는다.
+
+## 14. 최신 소형 후보의 권리·실행 조건 확인
+
+Kanana-2-3B도 확인했지만 [라이선스 3.1·4.1](https://huggingface.co/kakaocorp/kanana-2-3b-instruct/blob/main/LICENSE)은 표시 의무와 API/cloud·SI/on-premise 등 명시된 제3자 제공 유형의 별도 상업 라이선스를 요구한다. 이를 Apache-2.0과 같다고 취급하거나 사용자 대신 상업 사용 승인을 가정하지 않았다. 해당 가중치는 받지 않고, [공식 Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B/tree/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a)의 Apache-2.0 후보를 선택했다. 공개 benchmark는 이번 문안 품질의 증거로 사용하지 않는다.
+
+[Unsloth 고정 GGUF release](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/tree/e87f176479d0855a907a41277aca2f8ee7a09523)의 Q8_0 파일을 받았다. `4,482,403,488` bytes, SHA-256 `10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1`이며 실제 bytes를 발행자의 LFS hash와 대조했다. 공식 원본과의 tensor parity까지 확인했다고 주장하지 않는다. vision projector·새 학습·운영 배포 없이 text 경로만 사용했다. 모델 다운로드는 이 단계까지 총 2회다. 고정 [llama.cpp architecture 표](https://github.com/ggml-org/llama.cpp/blob/8ca4060/src/llama-arch.cpp)에도 `qwen35` 지원이 있다.
+
+같은 수정 계약·같은 네 공개 입력으로 공식 mode별 sampling 수치를 사용한 두 구성을 먼저 고정했다. GGUF와 공식 template의 기본 thinking 설정은 다를 수 있으므로 실제 `/apply-template`의 명시적 mode별 접미부 일치를 확인한 뒤에만 생성했다. 이는 모델·sampling·출력 예산을 포함한 실제 구성 비교이지 thinking 하나만의 인과 실험이 아니다.
+
+| 관측 구성 | CPU 단건 최소 초 | CPU 단건 최대 초 | 실제 최종 출력의 판정 |
+|---|---:|---:|---|
+| nonthinking / presence penalty 1.5 | 5.022 | 6.365 | D06의 안내 방향 변경, D20의 새 직접 신청 지시로 미채택 |
+| thinking / reasoning budget 384 | 28.994 | 29.730 | 핵심 역할·미정 상태는 일부 보존하나, 메일의 주어 연결 오류와 원칙을 가능 여부로 바꾼 문안으로 미채택 |
+| nonthinking / presence penalty만 0으로 변경 | 5.036 | 6.010 | D03·D12·D20은 통과. D06은 항목 안내를 항목 제출로 바꿔 미채택 |
+
+각 4개 단일 seed 관측일 뿐 percentile이나 운영 GPU 지연으로 일반화하지 않는다. 이 세 구성의 12회는 정상 종료·pressure 1·포트 해제를 확인했다. 내부 reasoning은 별도 field 존재만 확인하고 원문은 버렸다. 잔여 14건이나 독립 평가 점수로 승격하지 않았다.
+
+이후 precision-oriented sampling과 reasoning 강제 종료 제거를 묶어 한정된 실제 예산에서 확인했다. D03 한 건이 총 출력 한도 2,048 tokens를 모두 사용하고 `finish_reason=length`, 최종 본문 없음으로 끝났다. 실제 앱은 `Native chat returned no final answer` 오류를 반환했으며 내부 추론을 답변으로 대신하지 않았다. 나머지 세 건은 실행하지 않았고 pressure 1·포트 해제를 확인했다. 이 구성도 미채택이며, 출력 예산 확대만으로 해결됐다고 주장하지 않는다.
+
+## 15. 같은 메모리 가드에서 확인한 9B 후보
+
+[공식 Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B/tree/c202236235762e1c871ad0ccb60c8ee5ba337b9a)의 Apache-2.0 모델에 대해 [고정 Unsloth Q4_K_M](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/tree/3885219b6810b007914f3a7950a8d1b469d598a5)을 확보했다. 실제 파일은 `5,680,522,464` bytes, SHA-256 `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8`로 발행자 LFS 값과 일치했다. 이 단계까지 모델 다운로드는 3회다. 원본 tensor parity 검증이나 파라미터 수만의 인과 비교가 아니라 모델·양자화 패키지의 비교다.
+
+GGUF의 embedding 4096, 32 layers, vocabulary 248320, 저장 tensor elements 8953803264를 확인했다. 처음 EOS 검사에서는 model config의 endoftext `248044`와 chat tokenizer의 im_end `248046`을 혼동했다. [공식 tokenizer metadata](https://huggingface.co/Qwen/Qwen3.5-9B/blob/c202236235762e1c871ad0ccb60c8ee5ba337b9a/tokenizer_config.json)를 확인해 검사를 고쳤으며 모델 EOS를 덮어쓰지 않았다. 진단 JSON의 uint64 직렬화와 명령 경로 오타도 추론 전에 바로잡았다.
+
+| 실제 확인한 구성 | 네 진단 문항에서의 잔여 문제 |
+|---|---|
+| 기존 수정 계약·nonthinking·greedy | 세 건 통과. D06은 내부 담당자를 항목 전달 수신자로만 적고 보완 책임을 누락 |
+| 기존 간결 계약 | D06의 첨부·재제출 추가, 서문·인사말을 포함한 형식 위반 |
+| 기존 실제 Astra 네 예시 포함 계약 | D06의 연결이 어색하며, D20은 담당 부서를 신청 경유 창구로 변경 |
+| 새 compact 계약 | D06의 안내 방향 변경, D20의 신청 경유 창구 추가 |
+| 기존 수정 계약·precision thinking·budget 768 | D03·D06·D12는 통과하나 D20에 원문 밖 추후 공지 확인 지시 추가 |
+
+첫 세 구성은 stateless 보조 검토도 받았다. 검토는 D06의 실제 보완 책임과 단순 수신자 표기를 구별했고, 초기 계약의 D20 담당 업무 서술은 허용 가능한 바꿔 쓰기로 판단했다. 반면 예시 계약의 신청 경유 창구 추가는 구별해 지적했다. 이 보조 검토를 새로운 Astra provenance나 독립 release 평가라고 부르지 않는다.
+
+위 20회는 모두 실제 `chat_reply`에서 완료했고 정상 종료·pressure 1·포트 해제를 확인했다. thinking 구성의 네 CPU 관측은 63.836–65.605초였으며 운영 GPU 성능을 측정한 것은 아니다. **서로 다른 구성에서 잘된 답만 골라 합격 후보를 만들지 않는다.** 아직 모든 진단을 통과한 단일 구성은 없으며 잔여 참조·실 UI·운영 승인으로 승격하지 않았다.
+
+구조화된 원문 계약의 이전 parser도 같은 9B에서 실제로 비교했다. 기존 JSON 입력과 native role 입력의 nonthinking 각 5건은 문안 요청을 일반 응답으로 오분류했다. native role 입력에 reasoning 384를 적용한 5건은 문안/계산 구분은 맞췄지만, D06에서 언급하지 않은 수신자·제목·자료 내용을 미정이라고 만들어 넣었다. 이 15회는 생산자 진단이며 최종 문안의 end-to-end 통과 수에 넣지 않았다. 계약을 수동으로 고쳐 소비자 입력으로 승인하지도 않았다.
+
+중복된 unknown/change slot을 없앤 계약도 5건 생성했다. 미언급 정보를 미정으로 채우던 문제는 이 관측에서 사라졌지만, D06의 작성 지시 두 개가 사실 목록에 들어가 생산자는 여전히 미승인이다. 이 결함을 사전에 명시하고, 계약을 고치지 않은 진단용 실제 소비자 5건까지 실행했다. 네 문안의 의미와 형식, 계산 대조의 합계·단위는 보존됐으나 D03·D20의 사무 문구는 어색했다. 별도 stateless 보조 검토도 같은 두 자연스러움 partial을 판정했다. JSON만 보고 합격시키지 않았고, 최종 문안까지 확인한 뒤에도 기능을 승격하지 않았다.
+
+[HyperCLOVA X SEED Omni 8B의 라이선스](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Omni-8B/blob/main/LICENSE)도 확인했다. 조항 4의 사용자 규모·NAVER 서비스와의 경쟁 조건과 별도 라이선스 요구를 확인하지 않은 채 상용 권리를 가정하지 않았다. 이 모델의 가중치는 받지 않았고, Apache-2.0 대안의 검토를 유지했다.
+
+## 16. 한국어 8B 후보와 운영 메모리 경계
+
+[공식 Kanana 1.5 8B](https://huggingface.co/kakaocorp/kanana-1.5-8b-instruct-2505/tree/c963a5f4f6496c749f94064a20b33028b0db9f19)의 고정 Apache-2.0 라이선스를 읽고, [DevQuasar 고정 Q4_K_M 패키지](https://huggingface.co/DevQuasar/kakaocorp.kanana-1.5-8b-instruct-2505-GGUF/tree/4ac8eab32701b37555f225ee2c34dfa4edcdc99d)를 확보했다. `4,920,765,472` bytes, SHA-256 `f7ae0cc1de2396647dce4a82fb4943136bcc785339ee8944c6818184c983d287`로 발행자 LFS와 일치했다. 소스 config의 embedding 4096·32 layers·vocabulary 128259·BOS 128000·EOS 128009와 GGUF가 일치했고, 저장 tensor elements는 8030285824였다. chat template도 고정 공식 tokenizer와 같았다. 이는 tensor parity 검증이나 품질 승인이 아니다. 이 단계까지 새 모델 다운로드는 4회다.
+
+이미 확인한 Kanana native EOS 문제를 피하기 위해 문자열을 지우는 후처리가 아니라 기존 `/completion` 경로를 사용했다. 기존 수정 계약의 첫 4건은 D20이 두 문장이라 실패했다. 기존 간결 계약은 D03에 추가 질문을 붙이고 두 문장을 출력했다. 기존 compact 계약도 D03의 한 문장 요구를 어겼다. D03의 부연 내용 자체를 무근거로 다시 판정한 것은 아니다. 이 12건은 실제 `chat_reply`·정상 종료·pressure 1·포트 해제를 확인했으며, 서로 다른 계약에서 잘된 문항만 합치지 않았다.
+
+같은 실제 Astra 네 예시를 재사용한 추가 4건도 D03의 한 문장 요구를 어겼다. 예시 D01·D08·D10·D17은 평가에서 제외했으며, 나머지 전이 10건으로 승격하지 않았다. 이 구성도 정상 완료·pressure 1·포트 해제를 확인했지만 품질은 미달이다.
+
+개발기 실측 물리 메모리는 32 GiB지만, [기존 운영 문서](../../docs/SHARING.md)의 맥미니는 **16 GB이며 다른 서비스가 함께 돈다**. 개발기에서 압력이 정상이라는 사실을 운영 여유의 증거로 대체하지 않는다. 운영 맥미니 접속·부하 시험·배포는 하지 않았다.
 
 SUPERVISION_REPORT_READY CHAT-ROOT-C-004
