@@ -21,12 +21,15 @@
    "run_id": "aws-eval-006-smoke-20261102T050819Z",
    "mode": "smoke",
    "max_minutes": 60,
-   "reserved_minutes": 70,
+   "reserved_minutes": 21,
    "reserved_utc": "2026-11-02T05:08:21Z",
-   "state": "launched; hard stop scheduled",
+   "state": "failed in setup (transformers 5.21.0 needs Python >=3.11; DLAMI python3 is 3.10); self-terminated (Client.InstanceInitiatedShutdown); settled",
    "instance_id": "i-008eccd96cec002ff",
    "launched_utc": "2026-11-02T05:08:23Z",
-   "hard_stop_utc": "2026-11-02T06:18:23Z"
+   "hard_stop_utc": "2026-11-02T06:18:23Z",
+   "failed_phase_utc": "2026-11-02T05:21:52Z",
+   "terminated_observed_utc": "2026-11-02T05:28:49Z",
+   "settlement": "launch 05:08:23Z to terminated observed 05:28:49Z, rounded up (billing ends at shutting-down ~05:22Z; over-counted on purpose)"
   }
  ]
 }

@@ -75,12 +75,16 @@ SERVER=/opt/llama.cpp/build/bin/llama-server
 { nvcc --version; nvidia-smi; } > "$WORK/out/cuda.txt" 2>&1 || true
 
 phase setup "python tokenizer env and pinned assets"
-# The pinned DLAMI's python3 has no ensurepip (python3-venv not installed): smoke aws-eval-006-smoke-20261102T044859Z
-# failed here after a good build (MODEL-RESUME-A-031). Install it from the Ubuntu archive, time-bounded.
-python3 -c 'import ensurepip' 2>/dev/null || { timeout 300 apt-get -o DPkg::Lock::Timeout=240 -y -q update >/dev/null && \
-  timeout 300 apt-get -o DPkg::Lock::Timeout=240 -y -q install python3-venv >/dev/null; } || fail "python3-venv install"
-python3 -m venv /opt/venv && /opt/venv/bin/pip -q install transformers==5.21.0 tokenizers==0.23.3 jinja2==3.1.6 \
-  > /tmp/pip.log 2>&1 || { tail -30 /tmp/pip.log; fail "pip"; }
+# The runner's tokenizer stack (transformers 5.21.0) needs Python >= 3.11; the pinned DLAMI ships 3.10 without venv
+# support. Smoke attempts 1 and 2 failed here (MODEL-RESUME-A-031: no ensurepip, then no transformers 5.21.0 for 3.10).
+# The env is built with a pinned, checksum-verified uv on the same CPython 3.12.13 as the local verified runs.
+UV_URL=https://github.com/astral-sh/uv/releases/download/0.11.28/uv-x86_64-unknown-linux-gnu.tar.gz
+fetch "$UV_URL" /tmp/uv.tar.gz e490a6464492183c5d4534a5527fb4440f7f2bb2f228162ad7e4afe076dc0224
+tar -xzf /tmp/uv.tar.gz -C /tmp || fail "uv extract"
+UV=/tmp/uv-x86_64-unknown-linux-gnu/uv
+{ UV_PYTHON_INSTALL_DIR=/opt/uv-python timeout 600 "$UV" venv -q --python 3.12.13 /opt/venv && \
+  timeout 600 "$UV" pip install -q --python /opt/venv/bin/python transformers==5.21.0 tokenizers==0.23.3 jinja2==3.1.6; } \
+  > /tmp/pip.log 2>&1 || { tail -30 /tmp/pip.log; fail "python env"; }
 while IFS=$'\t' read -r url path sha; do
   [ -z "$url" ] || fetch "$url" "$WORK/$path" "$sha"
 done < "$WORK/assets.tsv"

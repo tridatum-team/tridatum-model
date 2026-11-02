@@ -1,0 +1,4 @@
+{"checked": "2026-11-02T05:08:30Z", "instances": [["i-008eccd96cec002ff", "pending", "2026-11-02T05:08:23+00:00"]], "phase": null, "objects": []}
+{"checked": "2026-11-02T05:09:33Z", "instances": [["i-008eccd96cec002ff", "running", "2026-11-02T05:08:23+00:00"]], "phase": null, "objects": []}
+{"checked": "2026-11-02T05:10:34Z", "instances": [["i-008eccd96cec002ff", "running", "2026-11-02T05:08:23+00:00"]], "phase": {"run_id": "aws-eval-006-smoke-20261102T050819Z", "mode": "smoke", "phase": "build", "utc": "2026-11-02T05:10:05Z", "detail": "llama.cpp 8ca4060b7e30e76baaa5670ee1ec1b760b7f8552 CUDA arch 89 "}, "objects": [["phase.json", 194]]}
+{"checked": "2026-11-02T05:21:58Z", "instances": [["i-008eccd96cec002ff", "running", "2026-11-02T05:08:23+00:00"]], "phase": {"run_id": "aws-eval-006-smoke-20261102T050819Z", "mode": "smoke", "phase": "failed", "utc": "2026-11-02T05:21:52Z", "detail": "exit 1 "}, "objects": [["bootstrap.log", 3544], ["phase.json", 138]]}
