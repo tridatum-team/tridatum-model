@@ -1,0 +1,80 @@
+# CHAT-ROOT-C-004 — 기존 로컬 후보 비교와 버전별 대화 계약 연결
+
+## 판정
+
+- **원본 Qwen의 프롬프트만 조금 더 고치는 안은 채택하지 않았다.** 고정한 두 예시를 넣어도 검토 완료·공유 승인 사실을 모두 보존하지 못했다. 추가 문구 튜닝은 중단했다.
+- 이미 로컬에 있던 **Gemma-4-E4B Q4_0 + 고정된 CHAT-CAPABILITY-006 계약**은 이번 공개 의미보존 과업 4개를 직접 검토한 범위에서 모두 통과했다. 모델·시스템·샘플링이 함께 다른 후보 묶음의 결과이며, 모델 크기나 특정 요소의 인과 효과가 아니다.
+- 실제 `shared_demo` 일반 대화 함수 경로에서도 검토 완료·공유 승인 두 사실을 유지했고, 다음 턴의 두 문장 분리 요청에서도 유지했다. 이후 전역 변수 덮어쓰기 없이 같은 계약을 연결하는 **실제 코드 변경과 재검증까지 완료**했다.
+- 코드: `chat-contract-profile-004`, **`78d4c3b`**, 기준 `2b8ba92`. 변경은 `scripts/shared_demo.py`, `docs/SHARING.md` 두 파일이다. 원격 브랜치에 push했다. 운영 versions/기본 모델/사이트는 수정·배포하지 않았다.
+- **일반 대화 전체 합격이나 운영 교체 승인은 아니다.** 기존 공개 20문항 평가의 `55/63 FAIL` 판정은 그대로다. E1을 새로 실행하지 않았다. 4개 과업의 결과를 통계적 개선으로 표현하지 않는다.
+
+## 1. 문제와 이번 변경의 경계
+
+기존 감사 [C001](CHAT-ROOT-C-001.md), [C002](CHAT-ROOT-C-002.md), [C003](CHAT-ROOT-C-003.md), [A001](CHAT-ROOT-A-001.md)을 이어갔다. template/HF 토큰·role·EOS 검증을 반복하지 않았다. 현재 서비스의 nonthinking 설정, GGUF/runtime, 원모델 실행 차이는 원인 미확정이다. 동일 GGUF와 nonthinking을 공유한 이전 여러 프롬프트/디코딩 실패를 모델 자체 결함의 독립 증명으로 취급하지 않는다.
+
+후보 계약을 검증해도 서비스의 전역 `CHAT_SYSTEM`/`CHAT_SAMPLING`만 쓰면 그 계약 그대로 연결할 수 없었다. 이번 코드는 버전별 선택 필드를 전달하는 작은 연결 변경이다. 원본 모델의 가중치나 생성 능력을 고쳤다는 뜻이 아니다. 다른 버전의 전역 설정을 바꾸거나 업무 검색 수정이 일반 대화 개선인 것처럼 표시하지 않는다.
+
+## 2. 이미 가진 공개 자산만 사용한 비교
+
+| 실행 | 실제 답변 생성 | 관찰과 결정 |
+|---|---:|---|
+| 기존 Gemma3-4B Q4_K_M, 고정 greedy | 2 | 요청은 유지했으나 확정문에서 검토 완료·외부 공유 정보를 누락하고 확인 요청을 덧붙였다. 채택하지 않음 |
+| 원본 Qwen, 고정 두 예시 편집 지시의 새 전이 과업: baseline/candidate | 4 | 수리 완료·부품 보관, 손상 검사 후 조건부 이동은 양쪽 모두 의미 유지. 후보 우위 증거 아님 |
+| 같은 편집 지시, 기존 공개 요청/확정 쌍의 변경 조건만 실행 | 2 | 확정문에서 검토 완료·승인 사실 보존 실패. 저장된 baseline 재사용, 동일 baseline 재실행 없음. 후보 폐기 |
+| Gemma-4-E4B Q4_0, 기존 006 계약 그대로 | 4 | 요청/완료·승인/수리·보관/조건부 이동 4개 모두 의미 유지 |
+| 배포 기준 소스의 실제 함수 경로, 평가 프로세스 안에서만 계약 교체 | 2 | 첫 턴의 검토 완료·승인과 다음 턴의 두 문장 분리 모두 유지 |
+| 새 코드의 명시적 버전 프로필 인자, 전역 계약 변경 없음 | 2 | 같은 두 턴 의미 유지. 각 턴에서 전역 기본값 불변 확인 |
+
+답변 생성 **16회**, 마지막 두 실행의 실제 분류 호출 **각 2회**를 더해 모델 completion **총 20회**다. 마지막 두 실행은 같은 2턴의 연결 검증이지 새로운 독립 과업 4개가 아니다. 이전 공개 20문항은 열거나 실행·튜닝하지 않았다. 새로운 문항을 계속 늘리지 않았다.
+
+### 후보 provenance와 계약
+
+- 최신 후보 파일: `runs/base-resume-004/gemma-4-E4B_q4_0-it.gguf`
+- SHA-256: `676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee`
+- 공개 provenance: [BASE-RESUME-004-RESULT](BASE-RESUME-004-RESULT.md). 기존 보고의 공식 Google QAT GGUF revision `4b4a2c1d584be7264f87aac328a1bc739ce81b6c`, Apache-2.0 자산이다. 파일을 새로 받지 않았다.
+- 고정 시스템: [CHAT-CAPABILITY-006/chat-system-candidate.txt](CHAT-CAPABILITY-006/chat-system-candidate.txt). 이번 결과에 맞춰 수정하지 않았다.
+- 생성: temperature `1`, top_p `.95`, top_k `64`, min_p `0`, presence_penalty `0`; 평가 seed `1`, nonthinking, 기본 출력 한도 `384`. repeat penalty는 실행 서버 기본값 `1`이다. 실제 서비스의 random seed 정책은 코드에서 변경하지 않았다.
+- 원본 Qwen 비교와 모델 외 시스템·샘플링 조건도 다르므로 크기·양자화·system·sampling 개별 원인 분리는 하지 못한다.
+- 이전 Gemma3 자산은 [GEMMA-LICENSE-001](GEMMA-LICENSE-001.md)의 내부 비교 범위만 사용했다. 배포·학습·증류에 사용하지 않았다.
+
+## 3. 코드 변경과 실제 검증
+
+### 변경
+
+- `chat_complete(..., sampling=None)`: 미지정이면 기존 `CHAT_SAMPLING`, 지정하면 해당 버전 객체를 사용한다. 일부 키를 기존 객체에 합치지 않는다.
+- `chat_reply(..., system_prompt=None, sampling=None)`: 미지정 system은 기존 `CHAT_SYSTEM`. 명시적 일반 설명의 `EXPLAIN_SYSTEM`은 유지한다.
+- HTTP handler의 일반 대화 및 검색 실패 후 대화 전환 두 callsite가 관리자 버전 설정의 `chat_system`, `chat_sampling`을 전달한다. 사용자 HTTP 요청으로 system/sampling을 받지 않는다.
+- 라우팅, 검색·분류 프롬프트/디코딩, 첫 턴 안내, history 포함·절삭, 근거 없는 업무 숫자 문장 후처리, 출력 한도, 캐시·seed 정책을 바꾸지 않았다. 새 로그·재시도·답변 교체 규칙도 없다.
+- 재현 가능한 설정 객체: [chat-profile.json](CHAT-ROOT-C-004/chat-profile.json). 이는 검증 프로필이며 운영 버전 등록/모델 선택 변경이 아니다.
+
+### 관측한 경로
+
+실제 로컬 CPU 모델 서버와 변경 모듈을 실행했다. `request_type` → `route` → `conversation_turns` → `chat_reply` → 후처리 → 표시 응답의 history 저장/절삭 경로를 사용했다. 첫 턴 안내를 유지한 상태에서도 완료·승인 사실이 보존됐다. 다음 턴에서는 그 표시 응답을 history로 넣어 두 문장 분리 요청을 수행했다. 변경 코드 실행은 `CHAT_SYSTEM`/`CHAT_SAMPLING`을 덮어쓰지 않고 새 인자를 전달했다.
+
+**검증하지 않은 범위:** HTTP 서버·브라우저 UI·CSRF·검색 fallback 실추론·clear/다중 세션·운영 mini. 이번 결과를 이 범위까지 통과한 것으로 확대하지 않는다. 기존 기관 범위/종료 테스트/알려진 F4 실패를 재실행하지 않았다.
+
+기존 `ChatBackendTests` 중 변경 함수의 기본 안전 동작을 다루는 다음 **5개만 실행, 5개 통과**했다.
+
+- `test_chat_reply_withholds_unsourced_rule_facts`
+- `test_chat_keeps_everyday_figures_but_not_rule_claims`
+- `test_chat_drops_the_oldest_turns_when_the_conversation_does_not_fit`
+- `test_chat_keeps_numbers_the_visitor_gave`
+- `test_chat_keeps_arithmetic_of_visitor_figures_but_not_other_numbers`
+
+처음 throwaway runner가 잘못된 테스트 클래스를 선택해 테스트 실행 전에 중단됐다. 클래스 선택을 고친 뒤 위 5개를 한 번 실행했다. 이를 모델/서비스 회귀로 세지 않는다. 전달 인자를 그대로 확인하는 새 mock 테스트는 추가하지 않았다.
+
+## 4. 의미 판정과 독립성 한계
+
+이번 판정은 C의 직접 의미 검토다. 요청을 확정으로 바꾸지 않는지, 이미 완료된 검토·승인을 누락하지 않는지, 조건과 보관 사실을 유지하는지, 없는 요청을 보태지 않는지를 보았다. 단순 문자열 일치/빈 응답 여부로 통과시키지 않았다.
+
+별도 작업자와 label-masked reviewer를 요청했지만 공급자 `429`로 실행 전에 모두 실패했다. 독립 검토 완료라고 주장하지 않는다. 성공한 리뷰 결과가 없으며 재시도하지 않았다. 최신 후보의 4개 통과는 작고 과업이 제한된 관찰이다. 이전 전체 gate를 대체하거나 모델 크기/학습량 부족을 원인으로 확정할 수 없다.
+
+## 5. 자원·보존·인계
+
+- 기존 로컬 llama-server와 CPU만 사용했다. 각 실행 뒤 해당 프로세스를 종료하고 `51992` 포트가 해제된 것을 확인했다. 메모리 pressure는 각 실행 전후 정상 `1`이었다.
+- AWS/새 CPU·GPU 인스턴스/운영 mini 접근·배포/다운로드/학습은 하지 않았다. 유효한 GPU smoke 인계나 전송도 수행하지 않았다.
+- 비공개 문항·정답·결과·매핑·봉인 자료에 접근하지 않았다. 서비스 영구 로그를 추가하지 않았다. 모델 답변 원문은 `/private/tmp/chat-root-c-004/`의 일시적 평가 결과에만 보관했다. repo에는 system 설정과 원문을 뺀 실행 메타데이터만 남긴다.
+- 정리된 증거: [evidence.json](CHAT-ROOT-C-004/evidence.json). 실제 raw/변경 코드 실행은 각각 `latest-results.json`, `service-results.json`, `profile-results.json`; 다른 실행의 파일명은 임시 디렉터리에 보존했다.
+- **A/총괄 인계:** `78d4c3b`는 버전별 계약 연결 코드로 검토·통합 가능한 상태다. 운영 설정이 없으면 기존 계약이 유지된다. 최신 후보로의 운영 기본값 전환은 포함하지 않았고, 전체 gate 미통과를 무시한 자동 교체를 하지 않는다. 추가 대규모 평가나 20문항 맞춤 튜닝 대신, 이번 관찰과 기존 E1/전체 gate의 차이를 승인된 개선 판단에 사용해야 한다.
+
+SUPERVISION_REPORT_READY CHAT-ROOT-C-004

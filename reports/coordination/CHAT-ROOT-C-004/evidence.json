@@ -1,0 +1,190 @@
+{
+  "scope": "Public local development checks. Final answers remain temporary. No independent reviewer output or production approval.",
+  "code_branch": "chat-contract-profile-004",
+  "code_commit": "78d4c3b",
+  "runs": {
+    "older_alternative": {
+      "contract_sha256": "775311e9ef7d7f2ddf4cafc3f90db34c7d2ab01334789ef2a6727d5ec297f00d",
+      "pressure_before": "1",
+      "build_info": "b1-8ca4060",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "stop": "eos",
+          "tokens_predicted": 33,
+          "prompt_tokens": 142,
+          "seconds": 2.2
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "stop": "eos",
+          "tokens_predicted": 16,
+          "prompt_tokens": 140,
+          "seconds": 1.57
+        }
+      ]
+    },
+    "rewrite_transfer": {
+      "contract_sha256": "86c9d35e343cb63eb13776b83daf603e062c84f1689b85b69a9547f0295a186a",
+      "pressure_before": "1",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "transfer-completed-repair",
+          "arm": "baseline",
+          "stop": "eos",
+          "tokens_predicted": 29,
+          "seconds": 1.09
+        },
+        {
+          "id": "transfer-completed-repair",
+          "arm": "rewrite_examples",
+          "stop": "eos",
+          "tokens_predicted": 26,
+          "seconds": 1.32
+        },
+        {
+          "id": "transfer-conditional-handling",
+          "arm": "baseline",
+          "stop": "eos",
+          "tokens_predicted": 34,
+          "seconds": 1.2
+        },
+        {
+          "id": "transfer-conditional-handling",
+          "arm": "rewrite_examples",
+          "stop": "eos",
+          "tokens_predicted": 36,
+          "seconds": 1.59
+        }
+      ]
+    },
+    "rewrite_changed_candidate": {
+      "contract_sha256": "54f1d506a5d19c56fd3096095ca5190a56623401a54dd98f26ff5912a6ff4ece",
+      "pressure_before": "1",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "stop": "eos",
+          "tokens_predicted": 35,
+          "seconds": 1.58
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "stop": "eos",
+          "tokens_predicted": 16,
+          "seconds": 1.09
+        }
+      ]
+    },
+    "latest_frozen_candidate": {
+      "contract_sha256": "cbfcbe0a3f4f168da97bbab9a70eec04b30e8b126651e0d58d8c286f2c98b239",
+      "pressure_before": "1",
+      "build_info": "b1-8ca4060",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "unexpected_reasoning_marker": false,
+          "stop": "eos",
+          "tokens_predicted": 39,
+          "prompt_tokens": 409,
+          "seconds": 4.86
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "unexpected_reasoning_marker": false,
+          "stop": "eos",
+          "tokens_predicted": 20,
+          "prompt_tokens": 407,
+          "seconds": 3.95
+        },
+        {
+          "id": "transfer-completed-repair",
+          "unexpected_reasoning_marker": false,
+          "stop": "eos",
+          "tokens_predicted": 24,
+          "prompt_tokens": 406,
+          "seconds": 3.93
+        },
+        {
+          "id": "transfer-conditional-handling",
+          "unexpected_reasoning_marker": false,
+          "stop": "eos",
+          "tokens_predicted": 30,
+          "prompt_tokens": 408,
+          "seconds": 4.89
+        }
+      ]
+    },
+    "actual_functions_with_global_override": {
+      "contract_sha256": "e9920a990f949ba91237c56275475b4c0e576bef5abc9597f3b98d41f7dd86a6",
+      "pressure_before": "1",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "service-statement",
+          "kind": null,
+          "intent": "chat",
+          "status": "chat",
+          "answer_mode": "chat",
+          "notes": [],
+          "seconds": 6.98
+        },
+        {
+          "id": "service-followup",
+          "kind": null,
+          "intent": "chat",
+          "status": "chat",
+          "answer_mode": "chat",
+          "notes": [],
+          "seconds": 7.44
+        }
+      ]
+    },
+    "explicit_version_profile": {
+      "contract_sha256": "80fbddf80b3bc6a0ba88f72fc684a5ecdb8f603c80ad4def4b61b9a6973d7b8e",
+      "pressure_before": "1",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "service-statement",
+          "kind": null,
+          "intent": "chat",
+          "global_defaults_unchanged": true,
+          "status": "chat",
+          "answer_mode": "chat",
+          "notes": [],
+          "seconds": 6.99
+        },
+        {
+          "id": "service-followup",
+          "kind": null,
+          "intent": "chat",
+          "global_defaults_unchanged": true,
+          "status": "chat",
+          "answer_mode": "chat",
+          "notes": [],
+          "seconds": 7.43
+        }
+      ]
+    }
+  },
+  "target_generation_calls": 20,
+  "visible_answer_generations": 16,
+  "routing_generations": 4,
+  "test_result": {
+    "class": "ChatBackendTests",
+    "selected_existing_tests": 5,
+    "passed": 5,
+    "scope": "unchanged default filtering/context behavior under changed candidate module"
+  }
+}
