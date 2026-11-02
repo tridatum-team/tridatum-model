@@ -196,5 +196,90 @@ class LocalModeTests(unittest.TestCase):
         self.assertEqual(json.loads(out.stdout.strip().splitlines()[-1]), [])
 
 
+def zip_bytes(members):
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        for name, body in members:
+            z.writestr(zipfile.ZipInfo(name), body)  # ZipInfo: no UTF-8 flag needed for ASCII names
+    return buf.getvalue()
+
+
+def xlsx_bytes(rows):
+    shared = sorted({c for r in rows for c in r})
+    sst = ''.join(f'<si><t>{s}</t></si>' for s in shared)
+    cells = ''.join('<row>' + ''.join(f'<c t="s"><v>{shared.index(c)}</v></c>' for c in r) + '</row>' for r in rows)
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    return zip_bytes([('xl/sharedStrings.xml', f'<sst {ns}>{sst}</sst>'),
+                      ('xl/worksheets/sheet1.xml', f'<worksheet {ns}><sheetData>{cells}</sheetData></worksheet>')])
+
+
+def hwp_ole(flags):
+    header = b'HWP Document File'.ljust(32, b'\0') + bytes([0, 5, 0, 5]) + flags.to_bytes(4, 'little')
+    return b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1' + b'\0' * 504 + header
+
+
+class ReextractTests(unittest.TestCase):
+    def test_kinds_come_from_bytes(self):
+        self.assertEqual(kind_of(b'\x9b DRMONE  This Document is encrypted', 'x.pdf'), 'drm:drmone')
+        self.assertEqual(kind_of(hwp_ole(1), 'x.hwpx'), 'hwp')  # HWP bytes under a .hwpx name
+        self.assertEqual(kind_of(b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1other', 'x.hwpx'), 'ole:hwpx')
+        self.assertEqual(kind_of(b'PK\x03\x04', 'x.xlsx'), 'xlsx')
+
+    def test_protected_hwp_and_drm_are_unextractable_with_a_reason(self):
+        metrics = Metrics()
+        with tempfile.TemporaryDirectory() as d:
+            store = ci.LocalStore(d, 10 ** 6)
+            rec = ci.text_record(store, metrics, 'p', '1', 'a', 'hwp', hwp_ole(0b101))  # compressed + distribution
+            self.assertEqual((rec['extract_status'], rec['extract_reason']), ('unextractable', 'hwp_distribution_protected'))
+            rec = ci.text_record(store, metrics, 'p', '1', 'b', 'drm:drmone', b'\x9b DRMONE')
+            self.assertEqual((rec['extract_status'], rec['extract_reason']), ('unextractable', 'drm_drmone_encrypted'))
+            self.assertNotIn('text_key', rec)
+
+    def test_xlsx_rows_and_nested_zips_are_read(self):
+        self.assertEqual(ci.xlsx_text(xlsx_bytes([['구분', '전결'], ['예산', '팀장']])), '구분\t전결\n예산\t팀장')
+        inner = zip_bytes([('a.xlsx', xlsx_bytes([['x', 'y']]))])
+        with tempfile.TemporaryDirectory() as d:
+            store = ci.LocalStore(d, 10 ** 6)
+            members = ci.zip_members(store, Metrics(), 'p', '1', '9', zip_bytes([('in.zip', inner)]))
+        self.assertEqual(members[0]['kind'], 'zip:zip')
+        self.assertEqual(members[0]['members'][0]['extract_status'], 'ok')
+        self.assertEqual(members[0]['extract_status'], 'ok')
+
+    def test_reextract_reads_stored_bytes_keeps_ok_records_and_signs_only_the_delta(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(ci, 'REPORTS', Path(d)):
+            store = ci.LocalStore(Path(d) / 's', 10 ** 7)
+            archive = zip_bytes([('ok.xlsx', xlsx_bytes([['ok']])), ('t.xlsx', xlsx_bytes([['표', '값']]))])
+            sha, key = store.raw('corpus/reserved/r/raw/7/5.zip', archive)
+            store.text('corpus/reserved/r/text/7/5-m000.txt', b'kept')
+            import hashlib
+            member = lambda i, name, body, status: {'member': name, 'member_index': i, 'kind': 'zip:xlsx',
+                                                    'member_sha256': hashlib.sha256(body).hexdigest(),
+                                                    'extract_status': status}
+            import io
+            import zipfile
+            z = zipfile.ZipFile(io.BytesIO(archive))
+            ok = {**member(0, 'ok.xlsx', z.read('ok.xlsx'), 'ok'), 'text_key': 'corpus/reserved/r/text/7/5-m000.txt'}
+            state = {'doc_family_id': 'institutions:alio-rule:7', 'seq': '7', 'status': 'partial',
+                     'reserved_business_group': 'g', 'licence_status': 'unconfirmed', 'files': [
+                {'file_no': '5', 'file_name': 'a.zip', 'url': 'u', 'download_status': 'ok', 'raw_key': key,
+                 'raw_sha256': sha, 'kind': 'zip:zip', 'extract_status': 'partial',
+                 'members': [ok, member(1, 't.xlsx', z.read('t.xlsx'), 'failed')]}]}
+            store.put('corpus/reserved/r/state/7.json', json.dumps(state).encode())
+            changed = ci.reextract_local(store, 'r', Metrics(), 'r-test', 'B-027')
+            self.assertEqual(changed, [{'seq': '7', 'before': 'partial', 'after': 'text_acquired'}])
+            st = json.loads(store.read('corpus/reserved/r/state/7.json'))
+            first, second = st['files'][0]['members']
+            self.assertEqual(first, ok)  # an ok record is left exactly as it was
+            self.assertEqual(second['reextract']['previous']['extract_status'], 'failed')
+            self.assertEqual(store.read(second['text_key']).decode(), '표\t값')
+            out = Path(d) / 'delta.jsonl.gz'
+            ci.sign_input(store, 'r', out, 'reextracted')
+            import gzip
+            rows = [json.loads(line) for line in gzip.decompress(out.read_bytes()).decode().splitlines()]
+            self.assertEqual([r['doc_id'] for r in rows], ['institutions:alio-rule:7:file:5:member:1'])
+
+
 if __name__ == '__main__':
     unittest.main()

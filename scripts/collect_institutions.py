@@ -19,6 +19,13 @@
                (bytes under DIR) would be passed. Families already acquired elsewhere (--skip-acquisition, the S3
                run's status JSONL) are skipped; files are written atomically (temp file + link, never replaced) under
                validated keys. Status goes to reports/coordination/<reservation>-local-acquisition{,-summary}.json*.
+  reserved-reextract --local DIR --report STEM
+               offline, no client: every file or zip member that is not 'ok' is read again from the stored raw
+               bytes (sha256 checked) with content-based kinds (DRM wrapper, HWP bytes under .hwpx, xlsx), nested
+               zips (up to 3 levels) and OCR for PDFs without a text layer (kordoc --ocr, cached local model,
+               recorded as ocr). Protected HWP (password/배포용/DRM flags in the FileHeader) and DRM files are
+               recorded as 'unextractable' with the reason; no lock is removed. 'ok' records are left as they were.
+               reserved-sign-input --only-reextracted then writes just that new text (a delta manifest input).
 
 Licence evidence: ALIO 저작권정책 (https://www.alio.go.kr/notice/copyright.do) - public data free to use including
 commercial use under 공공데이터법; ALIO-owned works under 저작권법 제24조의2; third-party rights and 비공개 정보 excluded.
@@ -138,19 +145,96 @@ def kind_of(data, name):
     ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
     if data[:4] == b'%PDF':
         return 'pdf'
+    if b'DRMONE' in data[:16]:  # DRM wrapper ("This Document is encrypted"), not a PDF/HWP stream (B-027)
+        return 'drm:drmone'
     if data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
-        return 'hwp' if ext == 'hwp' else f'ole:{ext}'
+        # HWP 5 is an OLE file whose FileHeader stream starts with this signature; some institutions upload HWP
+        # bytes under a .hwpx name (B-027)
+        return 'hwp' if ext == 'hwp' or b'HWP Document File' in data else f'ole:{ext}'
     if data[:2] == b'PK':  # HWPX is a zip; some institutions upload HWPX bytes under a .hwp name
-        return 'hwpx' if ext in ('hwpx', 'hwp') else f'zip:{ext}'
+        return 'hwpx' if ext in ('hwpx', 'hwp') else 'xlsx' if ext == 'xlsx' else f'zip:{ext}'
     return f'unknown:{ext}'
+
+
+class Unextractable(Exception):
+    """The bytes are a known format whose text cannot be read without removing a protection (password, 배포용
+    distribution lock, DRM) or without a reader that is not available; the reason is recorded, never hidden."""
+
+
+HWP_FLAGS = {0: 'compressed', 1: 'password', 2: 'distribution', 4: 'drm', 8: 'cert_encrypted', 10: 'cert_drm'}
+
+
+def hwp_flags(data):
+    """Property flags of the HWP 5 FileHeader stream (signature, version, then a 32-bit flag word)."""
+    i = data.find(b'HWP Document File')
+    if i < 0 or len(data) < i + 40:
+        return None
+    prop = int.from_bytes(data[i + 36:i + 40], 'little')
+    return [name for bit, name in HWP_FLAGS.items() if prop >> bit & 1]
+
+
+def xlsx_text(data):
+    """Cell text of every worksheet, one tab-joined line per row (shared strings and inline strings resolved)."""
+    import io
+    import zipfile
+    from xml.etree import ElementTree as ET
+    ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+    z = zipfile.ZipFile(io.BytesIO(data))
+    shared = []
+    if 'xl/sharedStrings.xml' in z.namelist():
+        for si in ET.fromstring(z.read('xl/sharedStrings.xml')).iter(f'{ns}si'):
+            shared.append(''.join(t.text or '' for t in si.iter(f'{ns}t')))
+    sheets = sorted((n for n in z.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml', n)),
+                    key=lambda n: int(re.search(r'\d+', n.rsplit('/', 1)[1]).group()))
+    lines = []
+    for name in sheets:
+        for row in ET.fromstring(z.read(name)).iter(f'{ns}row'):
+            cells = []
+            for c in row.iter(f'{ns}c'):
+                v, kind = c.find(f'{ns}v'), c.get('t')
+                if kind == 's' and v is not None:
+                    cells.append(shared[int(v.text)])
+                elif kind == 'inlineStr':
+                    cells.append(''.join(t.text or '' for t in c.iter(f'{ns}t')))
+                elif v is not None and v.text:
+                    cells.append(v.text)
+            if any(x.strip() for x in cells):
+                lines.append('\t'.join(cells))
+    return '\n'.join(lines)
+
+
+KORDOC = Path.home() / '.npm/_npx/09d8021b8ad008ca/node_modules/.bin/kordoc'  # kordoc 4.24.23, as in B-015
+
+
+def ocr_text(data, timeout=1800):
+    """Scanned/outlined PDF with no text layer: kordoc --ocr (built-in PP-OCRv5 korean, models cached locally under
+    ~/.cache/kordoc; B-015 used the same tool). The result is OCR, recorded as such; never treated as born-digital."""
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        src, out = Path(d) / 'in.pdf', Path(d) / 'out.md'
+        src.write_bytes(data)
+        subprocess.run([str(KORDOC), '--ocr', '-o', str(out), str(src)], check=True, capture_output=True,
+                       timeout=timeout)
+        return out.read_text()
 
 
 def extract(kind, data):
     from trid.service.ingest import hwpx_text, normalize, tool_text
     if kind == 'hwpx':
         return normalize(hwpx_text(data))
-    if kind in ('hwp', 'pdf'):
+    if kind == 'hwp':
+        flags = hwp_flags(data) or []
+        for flag in ('password', 'distribution', 'drm', 'cert_encrypted', 'cert_drm'):
+            if flag in flags:  # body streams are encrypted: reading them means removing the lock (not done here)
+                raise Unextractable(f'hwp_{flag}_protected')
         return normalize(tool_text(kind, data))
+    if kind == 'pdf':
+        return normalize(tool_text(kind, data))
+    if kind == 'xlsx':
+        return normalize(xlsx_text(data))
+    if kind.startswith('drm:'):
+        raise Unextractable(f'{kind.replace(":", "_")}_encrypted')
     raise ValueError(f'no extractor for {kind}')
 
 
@@ -330,42 +414,152 @@ def acquire_family(client, store, metrics, rid, fam, budget=None):
         metrics.add('s3_s', time.monotonic() - t)
         if rec['kind'] == 'zip:zip':
             rec['members'] = zip_members(store, metrics, prefix, seq, no, data)
-            states = Counter(x.get('extract_status') for x in rec['members'])
-            rec['extract_status'] = ('empty_archive' if not rec['members'] else 'ok' if states == {'ok': len(rec['members'])}
-                                     else 'partial' if states.get('ok') else 'failed')
+            rec['extract_status'] = zip_status(rec['members'])
         else:
             rec.update(text_record(store, metrics, prefix, seq, no, rec['kind'], data))
-    ok = [x for x in state['files'] if x.get('extract_status') == 'ok']
-    state['status'] = ('no_files' if not state['files'] else 'text_acquired' if len(ok) == len(state['files'])
-                       else 'partial' if ok else 'extraction_failed'
-                       if all(x.get('download_status') == 'ok' for x in state['files']) else 'download_failed')
+    state['status'] = family_status(state['files'])
     return state
 
 
-EXTRACTOR = {'hwp': 'rhwp export-doclang', 'pdf': 'pdftotext', 'hwpx': 'hwpx section XML'}
+def family_status(files):
+    ok = [x for x in files if x.get('extract_status') == 'ok']
+    return ('no_files' if not files else 'text_acquired' if len(ok) == len(files)
+            else 'partial' if ok else 'extraction_failed'
+            if all(x.get('download_status') == 'ok' for x in files) else 'download_failed')
+
+
+def redo_member(store, metrics, prefix, seq, stem, old, body, depth):
+    """Re-extract one stored zip member that was not 'ok' (its bytes come from the stored zip, never the network)."""
+    rec = {k: v for k, v in old.items() if k not in ('extract_status', 'extract_error', 'extract_reason', 'members')}
+    rec['kind'] = kind_of(body, old.get('member') or '')
+    if rec['kind'] == 'zip:zip' and depth < MAX_ZIP_DEPTH:
+        rec['members'] = zip_members(store, metrics, prefix, seq, stem, body, depth + 1)
+        rec['extract_status'] = zip_status(rec['members'])
+    else:
+        rec.update(text_record(store, metrics, prefix, seq, stem, rec['kind'], body))
+    return rec
+
+
+def reextract_local(store, rid, metrics, report, by):
+    """Offline: for every local family with a file or zip member that is not 'ok', read the stored raw bytes again
+    and extract them with the current kind detection and extractors. Records that were 'ok' are kept as they were
+    (their text keys are write-once). Each changed record carries `reextract` {by, at, previous kind/status/error}."""
+    import io
+    import zipfile
+    states, changed = load_states(store, rid), []
+    at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
+    note = lambda old: {'by': by, 'at': at, 'previous': {k: old.get(k) for k in
+                                                         ('kind', 'extract_status', 'extract_error', 'extract_reason')}}
+    for seq, st in sorted(states.items(), key=lambda kv: int(kv[0])):
+        prefix, before = f'corpus/reserved/{rid}', st['status']
+        touched = False
+        for f in st['files']:
+            if f.get('extract_status') == 'ok' or f.get('download_status') != 'ok':
+                continue
+            data = store.read(f['raw_key'])
+            if 'members' in f:
+                archive = zipfile.ZipFile(io.BytesIO(data))
+                infos = [m for m in archive.infolist() if not m.is_dir()]
+                for j, m in enumerate(f['members']):
+                    if m.get('extract_status') == 'ok' or m.get('member_index') is None:
+                        continue
+                    i = m['member_index']
+                    body = archive.read(infos[i]) if infos[i].file_size <= 200 * 1024 * 1024 else b''
+                    if hashlib.sha256(body).hexdigest() != m['member_sha256']:
+                        raise ValueError(f'{seq}/{f["file_no"]} member {i}: bytes differ from the recorded sha256')
+                    f['members'][j] = {**redo_member(store, metrics, prefix, seq, f'{f["file_no"]}-m{i:03d}', m, body, 1),
+                                       'reextract': note(m)}
+                old_status = f['extract_status']
+                f['extract_status'] = zip_status(f['members'])
+                if f['extract_status'] != old_status:
+                    f['reextract'] = {**note({**f, 'extract_status': old_status}), 'members_only': True}
+            else:
+                if hashlib.sha256(data).hexdigest() != f['raw_sha256']:
+                    raise ValueError(f'{seq}/{f["file_no"]}: stored bytes differ from the recorded sha256')
+                old = dict(f)
+                for k in ('extract_status', 'extract_error', 'extract_reason'):
+                    f.pop(k, None)
+                f['kind'] = kind_of(data, f['file_name'])
+                f.update(text_record(store, metrics, prefix, seq, f['file_no'], f['kind'], data))
+                f['reextract'] = note(old)
+            touched = True
+        if touched:
+            st['status'] = family_status(st['files'])
+            st['reextracted'] = {'by': by, 'at': at, 'previous_status': before}
+            store.put(f'corpus/reserved/{rid}/state/{seq}.json', json.dumps(st, ensure_ascii=False).encode())
+            changed.append({'seq': seq, 'before': before, 'after': st['status']})
+    summary = publish(store, rid, states, len(states), metrics, report=report,
+                      extra={'reextract': {'by': by, 'at': at, 'families_changed': len(changed),
+                                           'status_changes': dict(Counter(f"{c['before']}->{c['after']}" for c in changed))}})
+    print(json.dumps({'families_changed': len(changed), 'status': summary['family_status'],
+                      'disk_bytes': store.disk_bytes}, ensure_ascii=False), flush=True)
+    return changed
+
+
+def text_docs(st):
+    """(record, doc_id, source_url, re-extracted) for every file and (nested) zip member of a family state; a member
+    found inside a re-extracted record counts as re-extracted too."""
+    def walk(recs, base, url, inherited):
+        for r in recs:
+            doc_id, redo = f"{base}:member:{r['member_index']}", inherited or 'reextract' in r
+            yield r, doc_id, url, redo
+            yield from walk(r.get('members', []), doc_id, url, redo)
+    for f in st['files']:
+        base = f"{st['doc_family_id']}:file:{f['file_no']}"
+        redo = 'reextract' in f and not f['reextract'].get('members_only')
+        yield f, base, f['url'], redo
+        yield from walk(f.get('members', []), base, f['url'], redo)
+
+
+EXTRACTOR = {'hwp': 'rhwp export-doclang', 'pdf': 'pdftotext', 'hwpx': 'hwpx section XML', 'xlsx': 'xlsx sheet XML'}
+OCR_EXTRACTOR = 'kordoc 4.24.23 --ocr (PP-OCRv5 korean)'
+MAX_ZIP_DEPTH = 3
 
 
 def text_record(store, metrics, prefix, seq, stem, kind, data):
-    """Extract one document; text stored at <prefix>/text/<seq>/<stem>.txt. Failures are recorded, never promoted."""
+    """Extract one document; text stored at <prefix>/text/<seq>/<stem>.txt. Failures are recorded, never promoted:
+    'unextractable' (protected/encrypted, with extract_reason), 'failed' (extractor error), 'empty_text'. A PDF
+    without a text layer is read by OCR and marked ocr: true."""
+    from trid.service.ingest import normalize
     rec, t = {}, time.monotonic()
+    extractor = EXTRACTOR.get(kind)
     try:
         text = unicodedata.normalize('NFC', extract(kind, data))
         rec['extract_status'] = 'ok' if text.strip() else 'empty_text'
+    except Unextractable as exc:
+        text, rec['extract_status'], rec['extract_reason'] = '', 'unextractable', str(exc)
     except Exception as exc:
         text, rec['extract_status'], rec['extract_error'] = '', 'failed', repr(exc)[:300]
+    if kind == 'pdf' and rec['extract_status'] == 'empty_text':
+        try:
+            text = unicodedata.normalize('NFC', normalize(ocr_text(data)))
+        except Exception as exc:
+            rec['ocr_error'] = repr(exc)[:300]
+        else:
+            rec['ocr'], extractor = True, OCR_EXTRACTOR
+            rec['extract_status'] = 'ok' if text.strip() else 'empty_text'
+            if not text.strip():
+                rec['extract_reason'] = 'ocr_found_no_text'
     metrics.add('parse_s', time.monotonic() - t)
     if text.strip():
         t = time.monotonic()
         rec['text_sha256'] = store.text(f'{prefix}/text/{seq}/{stem}.txt', text.encode())
         metrics.add('s3_s', time.monotonic() - t)
-        rec.update({'text_key': f'{prefix}/text/{seq}/{stem}.txt', 'chars': len(text), 'extractor': EXTRACTOR[kind],
+        rec.update({'text_key': f'{prefix}/text/{seq}/{stem}.txt', 'chars': len(text), 'extractor': extractor,
                     'effective_clauses': [line.strip() for line in text.splitlines() if '시행한다' in line][:8],
                     'mentions_kogl': '공공누리' in text})
     return rec
 
 
-def zip_members(store, metrics, prefix, seq, no, data):
-    """Archived revisions/attachments (e.g. "…(개정 전).zip"): one record per file member; the zip itself is the raw."""
+def zip_status(members):
+    states = Counter(x.get('extract_status') for x in members)
+    return ('empty_archive' if not members else 'ok' if states == {'ok': len(members)}
+            else 'partial' if states.get('ok') else 'failed')
+
+
+def zip_members(store, metrics, prefix, seq, no, data, depth=1):
+    """Archived revisions/attachments (e.g. "…(개정 전).zip"): one record per file member; the zip itself is the raw.
+    A zip inside the zip is opened the same way (up to MAX_ZIP_DEPTH levels; member stems <no>-m001-m002)."""
     import io
     import zipfile
     members = []
@@ -384,7 +578,11 @@ def zip_members(store, metrics, prefix, seq, no, data):
         m = DATE_IN_NAME.search(name)
         rec = {'member': name, 'member_index': i, 'bytes': info.file_size, 'kind': kind_of(body, name),
                'member_sha256': hashlib.sha256(body).hexdigest(), 'filename_date_text': m.group(0) if m else None}
-        rec.update(text_record(store, metrics, prefix, seq, f'{no}-m{i:03d}', rec['kind'], body))
+        if rec['kind'] == 'zip:zip' and depth < MAX_ZIP_DEPTH:
+            rec['members'] = zip_members(store, metrics, prefix, seq, f'{no}-m{i:03d}', body, depth + 1)
+            rec['extract_status'] = zip_status(rec['members'])
+        else:
+            rec.update(text_record(store, metrics, prefix, seq, f'{no}-m{i:03d}', rec['kind'], body))
         members.append(rec)
     return members
 
@@ -539,19 +737,18 @@ def reserved_local(client, store, metrics, reservation, skip_acquisition, max_by
     return summary
 
 
-def sign_input(store, rid, local_out=None):
+def sign_input(store, rid, local_out=None, only=None):
     """A's check_reserved_overlap.py `sign` input: one row per extracted file {family_id, text, doc_id, source_url,
     group}. S3 run: written to S3 and data/<rid>/sign-input.jsonl.gz (gitignored). Local run: written only to
-    `local_out`, never over an existing file. Reserved text never goes under corpus/clean."""
+    `local_out`, never over an existing file. only='reextracted': just the records a re-extraction produced text for
+    (a delta for a new candidate manifest). Reserved text never goes under corpus/clean."""
     states = load_states(store, rid)
     rows = []
     for st in states.values():
-        for f in st['files']:
-            for doc, doc_id in [(f, f"{st['doc_family_id']}:file:{f['file_no']}")] + [
-                    (m, f"{st['doc_family_id']}:file:{f['file_no']}:member:{m['member_index']}") for m in f.get('members', [])]:
-                if doc.get('text_key'):
-                    rows.append({'family_id': st['doc_family_id'], 'text': store.read(doc['text_key']).decode(),
-                                 'doc_id': doc_id, 'source_url': f['url'], 'group': st['doc_family_id']})
+        for doc, doc_id, url, redo in text_docs(st):
+            if doc.get('text_key') and (only != 'reextracted' or redo):
+                rows.append({'family_id': st['doc_family_id'], 'text': store.read(doc['text_key']).decode(),
+                             'doc_id': doc_id, 'source_url': url, 'group': st['doc_family_id']})
     body = gzip.compress(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows).encode(), mtime=0)
     if local_out:
         local, digest, remote = Path(local_out), hashlib.sha256(body).hexdigest(), None
@@ -615,14 +812,16 @@ GiB = 1 << 30
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('action', choices=['agencies', 'rules-index', 'reserved', 'reserved-sign-input', 'reserved-hosts'])
+    p.add_argument('action', choices=['agencies', 'rules-index', 'reserved', 'reserved-sign-input', 'reserved-hosts',
+                                      'reserved-reextract'])
     p.add_argument('--interval', type=float, default=1.0)
     p.add_argument('--max-pages', type=int)
     p.add_argument('--workers', type=int, default=1)
     p.add_argument('--reservation', type=Path, default=ROOT / 'reports/coordination/benchmark-reserve-001.jsonl')
     p.add_argument('--limit', type=int)
     p.add_argument('--retry-status', nargs='*', default=[], help='re-fetch families whose state has these statuses')
-    p.add_argument('--local', type=Path, help='store under this folder; never S3 (reserved, reserved-sign-input only)')
+    p.add_argument('--local', type=Path,
+                   help='store under this folder; never S3 (reserved, reserved-sign-input, reserved-reextract only)')
     p.add_argument('--skip-acquisition', type=Path,
                    default=ROOT / 'reports/coordination/benchmark-reserve-001-acquisition.jsonl',
                    help='status JSONL of families already acquired elsewhere (the S3 run); not fetched again')
@@ -630,17 +829,26 @@ def main():
     p.add_argument('--max-disk-bytes', type=int, default=2 * GiB, help='bytes under --local')
     p.add_argument('--max-network-failures', type=int, default=3, help='consecutive network failures that stop the run')
     p.add_argument('--sign-out', type=Path, help='reserved-sign-input --local: output file (never overwritten)')
+    p.add_argument('--only-reextracted', action='store_true',
+                   help='reserved-sign-input: only text produced by reserved-reextract (a delta manifest input)')
+    p.add_argument('--report', help='reserved-reextract: status-file stem under reports/coordination')
+    p.add_argument('--by', default='reextract', help='reserved-reextract: task id recorded on every changed record')
     args = p.parse_args()
     metrics = Metrics()
     if args.local:
-        if args.action not in ('reserved', 'reserved-sign-input'):
-            p.error('--local supports reserved and reserved-sign-input only')
+        if args.action not in ('reserved', 'reserved-sign-input', 'reserved-reextract'):
+            p.error('--local supports reserved, reserved-sign-input and reserved-reextract only')
         store = LocalStore(args.local, args.max_disk_bytes)
         rid = args.reservation.name.removesuffix('.jsonl')
         if args.action == 'reserved-sign-input':
             if not args.sign_out:
                 p.error('--sign-out is required with --local')
-            return sign_input(store, rid, args.sign_out)
+            return sign_input(store, rid, args.sign_out, 'reextracted' if args.only_reextracted else None)
+        if args.action == 'reserved-reextract':  # offline: stored bytes only, no client is created
+            if not args.report:
+                p.error('--report is required with reserved-reextract')
+            reextract_local(store, rid, metrics, args.report, args.by)
+            return 0
         if args.workers != 1 or args.interval < 1.0:
             p.error('--local runs one request at a time with --interval >= 1.0')
         free = shutil.disk_usage(store.root).free

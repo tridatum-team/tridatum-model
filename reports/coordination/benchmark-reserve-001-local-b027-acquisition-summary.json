@@ -1,0 +1,69 @@
+{
+ "reservation": "benchmark-reserve-001",
+ "reserved_families": 852,
+ "families_attempted": 852,
+ "families_pending": 0,
+ "family_status": {
+  "text_acquired": 843,
+  "partial": 9
+ },
+ "family_status_by_group": {
+  "교육·연구 | text_acquired": 107,
+  "고용·인사 | text_acquired": 105,
+  "공기업 운영·서비스 | text_acquired": 104,
+  "보훈·복지 | text_acquired": 103,
+  "계약·조달 | text_acquired": 104,
+  "회계·예산 | text_acquired": 107,
+  "주거·부동산 | text_acquired": 106,
+  "보건·안전 | text_acquired": 107,
+  "보훈·복지 | partial": 3,
+  "계약·조달 | partial": 2,
+  "고용·인사 | partial": 1,
+  "공기업 운영·서비스 | partial": 3
+ },
+ "licence_status": {
+  "unconfirmed": 852
+ },
+ "files": 3973,
+ "file_kinds": {
+  "pdf": 1417,
+  "hwp": 2324,
+  "hwpx": 128,
+  "zip:zip": 101,
+  "drm:drmone": 3
+ },
+ "file_download_status": {
+  "ok": 3973
+ },
+ "file_extract_status": {
+  "ok": 3958,
+  "unextractable": 14,
+  "partial": 1
+ },
+ "archive_members": 1015,
+ "archive_member_extract_status": {
+  "ok": 1013,
+  "unextractable": 2
+ },
+ "text_chars": 94936926,
+ "files_mentioning_kogl": 1,
+ "updated_at": "2026-11-02T02:40:20+00:00",
+ "reextract": {
+  "by": "MODEL-RESUME-B-027",
+  "at": "2026-11-02T01:57:56+00:00",
+  "families_changed": 23,
+  "status_changes": {
+   "partial->text_acquired": 14,
+   "partial->partial": 9
+  }
+ },
+ "metrics": {
+  "requests": 0,
+  "wait_s": 0.0,
+  "response_s": 0.0,
+  "bytes": 0,
+  "parse_s": 274.93904566485435,
+  "s3_s": 0.1301013776101172,
+  "status": {}
+ }
+}
