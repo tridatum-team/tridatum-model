@@ -439,8 +439,8 @@ def route(base, family, context, history, question, continues=None):
     return 'chat'
 
 
-def chat_complete(base, messages, family, max_tokens, context):
-    """Conversation completion: the model's native template (Qwen3 without thinking) and CHAT_SAMPLING.
+def chat_complete(base, messages, family, max_tokens, context, sampling=None):
+    """Conversation completion: the native template (Qwen3 without thinking) and version sampling, or CHAT_SAMPLING.
     {'generated', 'truncated_output'}; {'skipped_context': True} when the prompt leaves no room for `max_tokens`."""
     prompt = llama_request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}})['prompt']
     if family == 'qwen3' and not prompt.endswith(QWEN3_NO_THINK):
@@ -449,7 +449,8 @@ def chat_complete(base, messages, family, max_tokens, context):
     if len(tokens) + max_tokens > context:
         return {'skipped_context': True}
     c = llama_request(base, '/completion', dict(prompt=tokens, n_predict=max_tokens, cache_prompt=False,
-                                                 seed=secrets.randbelow(2 ** 31), **CHAT_SAMPLING))
+                                                 seed=secrets.randbelow(2 ** 31),
+                                                 **(CHAT_SAMPLING if sampling is None else sampling)))
     return {'generated': c['content'].strip(), 'truncated_output': c['stop_type'] == 'limit'}
 
 
@@ -461,7 +462,8 @@ def conversation_turns(history, recall):
     return history if recall else [h for h in history if h.get('kind') != 'search']
 
 
-def chat_reply(base, family, context, history, question, max_tokens=384, explain=False, first_turn=None):
+def chat_reply(base, family, context, history, question, max_tokens=384, explain=False, first_turn=None,
+               system_prompt=None, sampling=None):
     """General conversation (or, with `explain`, a general explanation citing no institution) with the model's native
     chat template and the given earlier turns — all of them that fit the context, the oldest dropped first. Not
     grounded: a sentence making a rule claim — a number with a unit in a sentence about rules, rates or entitlements
@@ -469,12 +471,12 @@ def chat_reply(base, family, context, history, question, max_tokens=384, explain
     may be repeated or organised); everyday figures stay. On the first turn of a conversation (`first_turn`, default:
     no turns given) the model is told there is nothing earlier, so "제 이름이 뭐라고 했죠?" after a new conversation
     is not answered with a claimed memory."""
-    system = EXPLAIN_SYSTEM if explain else CHAT_SYSTEM
+    system = EXPLAIN_SYSTEM if explain else (CHAT_SYSTEM if system_prompt is None else system_prompt)
     if (not history) if first_turn is None else first_turn:
         system += ' 이 대화는 지금 막 시작되어 앞선 내용이 없습니다. 사용자가 앞에서 한 말을 물으면 아직 들은 적이 없다고 답하세요.'
     turns = list(history)
     while True:
-        r = chat_complete(base, _messages(system, turns, question), family, max_tokens, context)
+        r = chat_complete(base, _messages(system, turns, question), family, max_tokens, context, sampling)
         if not r.get('skipped_context') or not turns:
             break
         turns = turns[2:]
@@ -2341,7 +2343,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                         elif intent == 'chat':
                             result = chat_reply(version['base'], version['family'], version['context'],
                                                 conversation_turns(history, kind == 'recall'), question, explain=explain,
-                                                first_turn=not history)
+                                                first_turn=not history, system_prompt=version.get('chat_system'),
+                                                sampling=version.get('chat_sampling'))
                         elif workspace_mode and ((kind == 'statistic' and not (inst_ws and not inst_ws.facts
                                                                                and not COMPUTED.search(question)))
                                                  or (inst_ws and inst_ws.facts and '업무추진비' in question)):
@@ -2373,7 +2376,9 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                 # and follow-ups of a search ("다른 등급은?") keep the not-found reply.
                                 intent, selection, others = 'chat', None, []
                                 result = chat_reply(version['base'], version['family'], version['context'],
-                                                    conversation_turns(history, False), question, first_turn=not history)
+                                                    conversation_turns(history, False), question, first_turn=not history,
+                                                    system_prompt=version.get('chat_system'),
+                                                    sampling=version.get('chat_sampling'))
                                 result['scope'] = ('업무 자료에서 맞는 근거를 찾지 못했고 업무 기준을 묻는 말로 보이지 않아 일반 대화로 '
                                                    '답했습니다. ' + result['scope'])
                             elif selection and selection['status'] != 'answer':
