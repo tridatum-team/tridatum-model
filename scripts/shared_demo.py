@@ -1999,8 +1999,8 @@ PUBLIC_FIELDS = ('id', 'label', 'kind', 'base_model', 'license', 'version', 'sta
 class State:
     """Serves the versions listed in a versions file. The first `extractive` entry supplies the chunking tokenizer for
     uploaded documents; `llama` entries talk to a loopback llama.cpp server whose model file hash must match the
-    file (versions on the same model file share one server). The entry marked `"default": true` (else the first) is
-    preselected on the page."""
+    file. Versions with the same model and backend settings share one server. The entry marked `"default": true`
+    (else the first) is preselected on the page."""
     def __init__(self, versions):
         self.versions, self.children, servers = {}, [], {}
         if not any(v['kind'] == 'extractive' for v in versions):
@@ -2014,7 +2014,8 @@ class State:
                     model, tok, device = load_reader(ROOT / meta['run'], device='cpu')
                     self.versions[meta['id']] = dict(meta, model=model, tok=tok, device=device)
                 elif meta['kind'] == 'llama':
-                    key = (meta['model_file'], meta['llama_server'], meta['context'], meta.get('chat_reasoning_budget', -1))
+                    key = (meta['model_file'], meta['llama_server'], meta['context'], meta.get('chat_reasoning_budget', -1),
+                           meta.get('no_repack', False), meta.get('batch_size'), meta.get('ubatch_size'))
                     if key not in servers:
                         servers[key] = self.start_llama(meta)
                     self.versions[meta['id']] = dict(meta, **servers[key])
@@ -2047,6 +2048,12 @@ class State:
                    '-tb', str(meta.get('threads', 4)), '--jinja']
         if 'chat_reasoning_budget' in meta:
             command += ['--reasoning-budget', str(meta['chat_reasoning_budget'])]
+        if meta.get('no_repack', False):
+            command += ['--no-repack']
+        if 'batch_size' in meta:
+            command += ['--batch-size', str(meta['batch_size'])]
+        if 'ubatch_size' in meta:
+            command += ['--ubatch-size', str(meta['ubatch_size'])]
         child = subprocess.Popen(command, stdout=log, stderr=log)
         self.children.append(child)
         base = f'http://127.0.0.1:{port}'
