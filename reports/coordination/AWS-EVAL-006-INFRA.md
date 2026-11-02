@@ -155,11 +155,12 @@ python3 scripts/aws_eval/aws_eval_006.py bootstrap-identity --user-approved
 
 ## 7. 차단 해소 후 순서 (추가 질문 없이 권한 범위 안에서 진행)
 
-1. `preflight`와 `launch --mode smoke --dry-run`(operator 신원)
+1. `preflight`와 `launch --mode smoke --dry-run`(operator 신원). **완료 (MODEL-RESUME-A-028, 2026-11-02 01:53–01:56Z):** preflight 통과, launch·watchdog DryRun 모두 "would succeed", 만든 자원 0.
 2. `watchdog-test`로 독립 종료를 실측한다.
-   - OS 타이머 인스턴스가 3분 뒤 terminated
-   - scheduler 인스턴스가 6분 뒤 terminated
+   - OS 타이머 인스턴스가 3분 뒤 terminated(`StateReason` `Client.InstanceInitiatedShutdown`)
+   - scheduler 인스턴스가 6분 뒤 terminated(`Client.UserInitiatedShutdown`)
    - 일정 자동 삭제 확인
+   - A-028 보완: OS 타이머 인스턴스에도 15분 Scheduler backstop을 둔다. OS 타이머가 실패해도 독립 상한이 있다. 어느 장치가 끝냈는지는 `watchdog-status <stamp>`(읽기 전용)가 상태 사유로 구분한다.
 3. `launch --mode smoke`를 한다. C가 `c_deliver_set.py --smoke`로 공개 2턴을 암호화 전달하고, P와 Q 모두 실행한다. 확인 항목:
    - complete, 렌더 토큰 일치 true, 실효 설정 고정
    - GPU 메모리 최대치(`gpu.csv`), CUDA·드라이버·바이너리 sha

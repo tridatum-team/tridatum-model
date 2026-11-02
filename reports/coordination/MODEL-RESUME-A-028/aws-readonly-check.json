@@ -1,0 +1,170 @@
+{
+ "checked_utc": "2026-11-02T01:54:52Z",
+ "identity": {
+  "UserId": "AIDASFIXCPGI3ZHLPTRMV",
+  "Account": "148761639313",
+  "Arn": "arn:aws:iam::148761639313:user/trid-aws-eval-006-operator"
+ },
+ "instances_not_terminated": [
+  {
+   "id": "i-01e894092261d7f9a",
+   "type": "g6e.xlarge",
+   "state": "stopped",
+   "tags": {
+    "Name": "kms2026-gpu-smoke-20261010"
+   }
+  },
+  {
+   "id": "i-0a4b24516d78b628d",
+   "type": "g6e.xlarge",
+   "state": "stopped",
+   "tags": {
+    "Name": "trid-c-taskgen-01"
+   }
+  },
+  {
+   "id": "i-0bdbf9d10f096dcf2",
+   "type": "g6e.2xlarge",
+   "state": "stopped",
+   "tags": {
+    "Name": "trid-c-taskgen-32b-01"
+   }
+  }
+ ],
+ "volumes": [
+  {
+   "id": "vol-026a5a071748c50db",
+   "size_gb": 300,
+   "state": "in-use",
+   "encrypted": false,
+   "attached_to": [
+    "i-0bdbf9d10f096dcf2"
+   ]
+  },
+  {
+   "id": "vol-0086a86ff09fcf597",
+   "size_gb": 100,
+   "state": "in-use",
+   "encrypted": true,
+   "attached_to": [
+    "i-01e894092261d7f9a"
+   ]
+  },
+  {
+   "id": "vol-0ce46286730c60354",
+   "size_gb": 150,
+   "state": "in-use",
+   "encrypted": false,
+   "attached_to": [
+    "i-0a4b24516d78b628d"
+   ]
+  }
+ ],
+ "eval_tagged_instances_any_state": [],
+ "security_group": [
+  {
+   "id": "sg-0e7e5b23c7c152ebc",
+   "inbound_rules": 0,
+   "outbound": [
+    [
+     "-1",
+     [
+      "0.0.0.0/0"
+     ]
+    ]
+   ]
+  }
+ ],
+ "subnets": [
+  {
+   "id": "subnet-07a376ff8d92d3525",
+   "az": "ap-northeast-2c",
+   "free_ips": 4091,
+   "map_public_ip": true,
+   "vpc": "vpc-0bef0e7b66432d802"
+  },
+  {
+   "id": "subnet-025ee7d30ecf0228c",
+   "az": "ap-northeast-2a",
+   "free_ips": 4088,
+   "map_public_ip": true,
+   "vpc": "vpc-0bef0e7b66432d802"
+  },
+  {
+   "id": "subnet-0811f3a7d5b1eb737",
+   "az": "ap-northeast-2d",
+   "free_ips": 4091,
+   "map_public_ip": true,
+   "vpc": "vpc-0bef0e7b66432d802"
+  }
+ ],
+ "quotas": {
+  "L-DB2E81BA running on-demand G and VT vCPU": 48.0,
+  "L-1216C47A running on-demand standard vCPU": 64.0
+ },
+ "role trid-aws-eval-006-instance": {
+  "trust": {
+   "Version": "2012-10-17",
+   "Statement": [
+    {
+     "Effect": "Allow",
+     "Principal": {
+      "Service": "ec2.amazonaws.com"
+     },
+     "Action": "sts:AssumeRole"
+    }
+   ]
+  },
+  "max_session_s": 3600
+ },
+ "role trid-aws-eval-006-scheduler": {
+  "trust": {
+   "Version": "2012-10-17",
+   "Statement": [
+    {
+     "Effect": "Allow",
+     "Principal": {
+      "Service": "scheduler.amazonaws.com"
+     },
+     "Action": "sts:AssumeRole",
+     "Condition": {
+      "StringEquals": {
+       "aws:SourceAccount": "148761639313",
+       "aws:SourceArn": "arn:aws:scheduler:ap-northeast-2:148761639313:schedule-group/default"
+      }
+     }
+    }
+   ]
+  },
+  "max_session_s": 3600
+ },
+ "instance_profile": [
+  "trid-aws-eval-006-instance"
+ ],
+ "scheduler_get_probe": {
+  "_error": "ResourceNotFound",
+  "_message": "aws: [ERROR]: An error occurred (ResourceNotFoundException) when calling the GetSchedule operation: Schedule trid-aws-eval-006-readonly-probe does not exist."
+ },
+ "scheduler_list": {
+  "_error": "AccessDenied",
+  "_message": "aws: [ERROR]: An error occurred (AccessDeniedException) when calling the ListSchedules operation: User: arn:aws:iam::148761639313:user/trid-aws-eval-006-operator is not authorized to perform: scheduler:ListSchedules on resource: arn:aws:sch"
+ },
+ "watchdog_image": "ami-05becc39a92b78fa5",
+ "watchdog_image_detail": [
+  {
+   "name": "al2023-ami-2023.12.20261102.0-kernel-6.18-x86_64",
+   "state": "available",
+   "owner": "137112412989",
+   "root": "/dev/xvda"
+  }
+ ],
+ "s3_eval_prefix_objects": [],
+ "on_demand_usd_per_hour": {
+  "g6.2xlarge": [
+   1.20208
+  ],
+  "t3.micro": [
+   0.013
+  ]
+ }
+}

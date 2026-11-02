@@ -12,8 +12,9 @@ Subcommands (AWS CLI v2 underneath; region ap-northeast-2, account 148761639313 
                        After the instance starts, a one-time EventBridge Scheduler schedule terminates it at the
                        limit + 10 min, independently of the instance OS and of any Mac; if that schedule cannot be
                        created the instance is terminated at once.
-  watchdog-test        two t3.micro instances that never shut themselves down from a job: one ends only by its OS
-                       timer, the other only by the scheduler (checks both independent limits for cents)
+  watchdog-test        two t3.micro instances that never shut themselves down from a job: one ends by its OS timer
+                       (3 min; scheduler backstop at 15 min), the other only by the scheduler (6 min); cents
+  watchdog-status STAMP  read-only: each watchdog instance's state, which mechanism ended it, schedule deleted or not
   status RUN_ID        instance state, phase object, results listing (never downloads outputs)
   terminate RUN_ID     terminate the run's instance(s) now
 """
@@ -342,9 +343,14 @@ def ledger_update(attempt, **fields):
     LEDGER.write_text(json.dumps({'limit_minutes': GPU_RESERVED_LIMIT_MINUTES, 'entries': entries}, indent=1) + '\n')
 
 
+WATCHDOG_OS_MINUTES, WATCHDOG_SCHEDULER_MINUTES, WATCHDOG_BACKSTOP_MINUTES = 3, 6, 15
+
+
 def watchdog_test(a):
-    """Two t3.micro instances (Amazon Linux 2023): A ends only by its OS timer (no job, no trap), B has no OS timer
-    and ends only by the scheduler. Both tagged and encrypted like the real runs."""
+    """Two t3.micro instances (Amazon Linux 2023): A ends by its OS timer (no job, no trap), B has no OS timer and
+    ends only by the scheduler. Both tagged and encrypted like the real runs. A also gets a later scheduler backstop
+    (MODEL-RESUME-A-028), so no instance of the test is left without an independent limit if its OS timer fails; which
+    mechanism ended each instance is read from its state reason (watchdog-status)."""
     arn = identity()
     gate = cost_gate()
     if not a.dry_run:
@@ -354,10 +360,11 @@ def watchdog_test(a):
     image = aws('ssm', 'get-parameter', '--name', '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64',
                 '--query', 'Parameter.Value')
     stamp = f'{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M%SZ}'
-    cases = {'os-timer': '#!/bin/bash\nshutdown -h +3 "watchdog test"\n',
-             'scheduler': '#!/bin/bash\n# no OS timer: only the EventBridge schedule may end this instance\n'}
-    out = {}
-    for name, script in cases.items():
+    cases = {'os-timer': (f'#!/bin/bash\nshutdown -h +{WATCHDOG_OS_MINUTES} "watchdog test"\n', WATCHDOG_BACKSTOP_MINUTES),
+             'scheduler': ('#!/bin/bash\n# no OS timer: only the EventBridge schedule may end this instance\n',
+                           WATCHDOG_SCHEDULER_MINUTES)}
+    out = {'stamp': stamp}
+    for name, (script, stop_minutes) in cases.items():
         spec = instance_spec(f'aws-eval-006-watchdog-{name}-{stamp}', image, 't3.micro', SUBNETS[0], script, 8)
         if a.dry_run:
             run_instances(spec, True)
@@ -365,9 +372,29 @@ def watchdog_test(a):
             continue
         instance = run_instances(spec, False)
         launched = dt.datetime.now(dt.timezone.utc)
-        if name == 'scheduler':
-            hard_stop(instance['InstanceId'], launched + dt.timedelta(minutes=6))
-        out[name] = {'instance_id': instance['InstanceId'], 'launched_utc': f'{launched:%FT%TZ}'}
+        hard_stop(instance['InstanceId'], launched + dt.timedelta(minutes=stop_minutes))
+        out[name] = {'instance_id': instance['InstanceId'], 'launched_utc': f'{launched:%FT%TZ}',
+                     'schedule': f'trid-aws-eval-006-{instance["InstanceId"]}',
+                     'schedule_utc': f'{launched + dt.timedelta(minutes=stop_minutes):%FT%TZ}'}
+    print(json.dumps(out, indent=1))
+
+
+def watchdog_status(a):
+    """Read-only: each watchdog instance's state, state reason (Client.InstanceInitiatedShutdown = its OS timer;
+    Client.UserInitiatedShutdown = a TerminateInstances call, here the scheduler's) and whether its one-time schedule
+    still exists (it deletes itself after running)."""
+    out = {}
+    for name in ('os-timer', 'scheduler'):
+        rows = aws('ec2', 'describe-instances', '--filters', f'Name=tag:trid:run-id,Values=aws-eval-006-watchdog-{name}-{a.stamp}',
+                   '--query', 'Reservations[].Instances[].[InstanceId,State.Name,LaunchTime,StateReason.Code,StateTransitionReason]')
+        cases = []
+        for iid, state, launched, reason_code, reason in rows:
+            sched = aws('scheduler', 'get-schedule', '--name', f'trid-aws-eval-006-{iid}', check=False, parse=False)
+            cases.append({'instance_id': iid, 'state': state, 'launched': launched, 'state_reason_code': reason_code,
+                          'state_transition_reason': reason,
+                          'schedule': 'exists' if sched.returncode == 0 else
+                          'deleted (not found)' if 'ResourceNotFound' in sched.stderr else sched.stderr.strip()[:160]})
+        out[name] = cases
     print(json.dumps(out, indent=1))
 
 
@@ -411,6 +438,9 @@ def main():
         s = sub.add_parser(name)
         s.add_argument('run_id')
         s.set_defaults(fn=fn)
+    s = sub.add_parser('watchdog-status')
+    s.add_argument('stamp', help='the stamp watchdog-test printed (YYYYMMDDTHHMMSSZ)')
+    s.set_defaults(fn=watchdog_status)
     a = p.parse_args()
     a.fn(a)
 

@@ -1,0 +1,12 @@
+{
+ "run_id": "aws-eval-006-smoke-20261102T015514Z",
+ "mode": "smoke",
+ "max_minutes": 60,
+ "instance_type": "g6.2xlarge",
+ "ami": "ami-032ead1ff8d54d3f5",
+ "code_key": "eval/aws-eval-006/code/aws-eval-006-smoke-20261102T015514Z/code.tar.gz",
+ "code_sha256": "7ef6cb893d8dcff989a356a5f23665cb81632e2034db52df1e9dc07ad8fc26fe",
+ "llama_commit": "8ca4060b7e30e76baaa5670ee1ec1b760b7f8552",
+ "dry_run": true,
+ "dry_run_result": "DryRunOperation (would succeed) in subnet-025ee7d30ecf0228c"
+}
