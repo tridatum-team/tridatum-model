@@ -1,0 +1,191 @@
+{
+  "kind": "C-reviewed-Astra-development-reference-contract",
+  "source": "ASTRA-REFERENCE-001/development-cases.json",
+  "source_sha256": "c67037fb1e96f6e854cd46ffb8b86d8a64a4605a08341cae8111436d9fc613ec",
+  "teacher_provenance": "ASTRA-REFERENCE-001/teacher-responses.json:teacher-development-batch",
+  "requested_and_returned_model": "codex/gpt-6-astra",
+  "teacher_conditioned_on_invariants": true,
+  "independent_benchmark": false,
+  "training_approved": false,
+  "reviewer": "C direct review; not external independent judge",
+  "axes": {
+    "meaning": "Preserve actor, recipient/target/scope, action, certainty/completion, negation, conditions, dates and quantities; presence of a few keywords is insufficient.",
+    "instruction": "Perform only the requested transformation; preserve every non-target fact and condition, including across turns.",
+    "unsupported_additions": "No invented facts, confirmations, deadlines, actions or new requests. Conventional courtesy is not itself a factual invention.",
+    "naturalness": "Usable Korean for the requested format; avoid awkward self-identification, dangling sentence endings and redundant explanation.",
+    "context": "Resolve prior-turn references without discarding qualifiers required in the rewritten standalone text."
+  },
+  "decision_rule": "All substantive facts/constraints and the requested transformation must hold; naturalness is reviewed separately. Never use exact-string agreement with Astra as the sole pass rule. A reference with a style defect is held, not used as a polished target.",
+  "case_reviews": [
+    {
+      "id": "D01",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D02",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D03",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D04",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D05",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "hold",
+      "reference_use": "style_revision_required",
+      "note": "Explicit self-identification is awkward; revise before treating as a polished training target."
+    },
+    {
+      "id": "D06",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D07",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D08",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D09",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D10",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D11",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D12",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D13",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D14",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "hold",
+      "reference_use": "style_revision_required",
+      "note": "Place marker is faithful but the sentence ending is telegraphic; polish before training."
+    },
+    {
+      "id": "D15",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D16",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D17",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D18",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D19",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    },
+    {
+      "id": "D20",
+      "semantic_source_fidelity": "pass",
+      "naturalness": "pass",
+      "reference_use": "approved_development_reference",
+      "note": null
+    }
+  ],
+  "reference_counts": {
+    "reviewed": 20,
+    "usable_as_polished_reference": 18,
+    "style_hold": 2
+  },
+  "observed_candidate_gap": {
+    "source": "CHAT-ROOT-C-004/http-ui-evidence.json",
+    "turn": 2,
+    "preserved": [
+      "review completion",
+      "share approval",
+      "two-sentence format"
+    ],
+    "omitted": [
+      "explicit team-external sharing target"
+    ],
+    "verdict": "Partial source fidelity for standalone rewrite; do not promote to full quality pass.",
+    "related_reference_cases": [
+      "D15",
+      "D17",
+      "D18"
+    ],
+    "not_claimed": "The D15/D17/D18 references are examples of the acceptance contract, not same-input Astra responses to the C004 UI case."
+  },
+  "development_actions": [
+    "Replace the former minimal fact-presence verdict with separate fact/scope, task, style, unsupported-addition and history judgments.",
+    "Hold D05 and D14 instead of treating every Astra answer as an unquestionable polished gold target.",
+    "Do not patch the service with case-specific words or re-run/tune the old public20.",
+    "Do not approve candidate deployment or training from this reference audit."
+  ]
+}

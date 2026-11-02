@@ -1,0 +1,104 @@
+{
+  "code_commit": "78d4c3b",
+  "model": "Gemma-4-E4B Q4_0",
+  "profile": "CHAT-ROOT-C-004/chat-profile.json",
+  "path": "real local HTTPS proxy -> unchanged HTTP/session/CSRF handler -> real route/chat -> browser rendering",
+  "mode": "document-mode general chat; existing extractive reader loaded; public setup document attached through UI; shared workspace index not loaded",
+  "seed_policy": "production random-seed code unchanged; individual seeds not preserved",
+  "answers": [
+    {
+      "status": "chat",
+      "answer_mode": "chat",
+      "candidates": [],
+      "checked_chunks": 0,
+      "commentary_notes": [],
+      "warnings": [],
+      "scope": "일반 대화 응답입니다. 문서 근거를 검색하지 않았고 검증 대상이 아닙니다.",
+      "intent": "chat",
+      "model": "C004 로컬 후보 · 운영 아님",
+      "version": "c004-local-profile",
+      "elapsed_ms": 7389
+    },
+    {
+      "status": "chat",
+      "answer_mode": "chat",
+      "candidates": [],
+      "checked_chunks": 0,
+      "commentary_notes": [],
+      "warnings": [],
+      "scope": "일반 대화 응답입니다. 문서 근거를 검색하지 않았고 검증 대상이 아닙니다.",
+      "intent": "chat",
+      "model": "C004 로컬 후보 · 운영 아님",
+      "version": "c004-local-profile",
+      "elapsed_ms": 7561
+    }
+  ],
+  "direct_semantic_review": [
+    {
+      "turn": 1,
+      "review_completed": true,
+      "share_approved": true,
+      "external_team_target_explicit": true,
+      "invented_confirmation_request": false
+    },
+    {
+      "turn": 2,
+      "review_completed": true,
+      "share_approved": true,
+      "external_team_target_explicit": false,
+      "two_sentences": true,
+      "invented_confirmation_request": false,
+      "verdict": "Explicit external-team qualifier omitted; cannot claim complete standalone rewrite fidelity. Not an observed reversal of approval."
+    }
+  ],
+  "model_generation_tasks": 4,
+  "visible_answers": 2,
+  "routing_tasks": 2,
+  "runtime_releases": [
+    {
+      "task": 0,
+      "n_tokens": 383,
+      "runtime_truncated_flag": 0
+    },
+    {
+      "task": 5,
+      "n_tokens": 459,
+      "runtime_truncated_flag": 0
+    },
+    {
+      "task": 29,
+      "n_tokens": 406,
+      "runtime_truncated_flag": 0
+    },
+    {
+      "task": 34,
+      "n_tokens": 464,
+      "runtime_truncated_flag": 0
+    }
+  ],
+  "ui_badges": {
+    "general_chat_not_verified": 2
+  },
+  "browser_errors": {
+    "entries": [],
+    "nextSeq": 0,
+    "dropped": 0
+  },
+  "ports_free_after": {
+    "51992": true,
+    "51993": true,
+    "51994": true
+  },
+  "pressure_before": 1,
+  "pressure_after": 1,
+  "temp_tls_key_deleted": true,
+  "runner_finalization": "Repeated stop interruption during backend.shutdown prevented final aggregate evidence/history/template/seed snapshot; no rerun. Preserved per-response JSON, UI text/screenshot and runtime task log used instead.",
+  "limits": [
+    "No shared-workspace/fallback/institution/clear/multi-session coverage",
+    "No CSRF rejection/attack cases",
+    "No production deployment",
+    "No independent reviewer",
+    "No statistical model-improvement inference"
+  ],
+  "temporary_screenshot": "/var/folders/sf/w900bk6j6sd98j83d7b4y7r80000gn/T/omp-sshots-15be19ae906364b4.webp"
+}
