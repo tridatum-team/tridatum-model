@@ -1370,7 +1370,7 @@ class Workspace:
             return False
         return bool(bare) and _in_order(bare, text) and rule_scope(self, doc) == subject
 
-    def select(self, question, pinned=None, context_doc=None):
+    def select(self, question, pinned=None, context_doc=None, inherited=()):
         """dict(status, applied, chunks, others, institutions, retrieval, ...). status: 'answer' | 'clarify' |
         'unknown_institution' | 'institution_no_match' | 'not_found' (reason 'irrelevant' when passages were found but
         none can answer: no passage of a candidate document reaches RELEVANT_COS or contains a topical question word).
@@ -1465,7 +1465,16 @@ class Workspace:
                 applied = common[0]
         if general and applied in self.specific:
             result['scope_note'] = 'specific'
-        conditioned = self.unstated_table_condition(applied, best, question)
+        # MODEL-RESUME-A-030: a genuine follow-up of the same document ("그럼 숙박비는?" after "…국내 출장 식비는?")
+        # keeps the table conditions the previous turn stated (`inherited`, from the session) — unless it states a
+        # condition of this rule itself (the current one wins: "그럼 국외는?"). An explicit institution or rule switch
+        # (no continuation), a pin and a new chat (history cleared) carry nothing.
+        own = self.stated_conditions(self.rule_of.get(applied), question)
+        carried = set(inherited) if result.get('continued') and not own else set()
+        if carried:
+            result['conditions_carried'] = sorted(carried)
+        result['conditions'] = sorted(own | carried)
+        conditioned = self.unstated_table_condition(applied, best, question, carried)
         set_aside = None
         if conditioned:
             # "공공기관 출장비 지급 기준" ranked 공무원 여비 규정 [별표 8] (상시 출장 공무원의 여비 지급 기준표) first: a table
@@ -1485,10 +1494,10 @@ class Workspace:
         # not in ask-back or other-document lists: "공무원 여비 규정에서는 숙박비가…" gets neither 별표 2 (국내) nor 별표 4
         # (국외) values, and says why; "국외 출장 숙박비" keeps 별표 4, "국내 …" 별표 2.
         rule = self.rule_of.get(applied)
-        unstated = self.unstated_tables(rule, question) if rule else {}
+        unstated = self.unstated_tables(rule, question, carried) if rule else {}
         unstated.pop(self.annex_id.get(applied), None)  # a table chosen itself (its body did not pass) stays evidence
         dropped = set(unstated) | ({self.annex_id[set_aside]} if set_aside and self.rule_of.get(set_aside) == rule else set())
-        conditional = lambda d: d in self.annex_id and self.annex_id[d] in self.unstated_tables(self.rule_of.get(d), question)
+        conditional = lambda d: d in self.annex_id and self.annex_id[d] in self.unstated_tables(self.rule_of.get(d), question, carried)
         others = [self.describe(d, s) for d, s in best.items() if d != applied and not conditional(d)][:5]
         result.update(others=others)
         # A question about public institutions as a class answered from a rule recorded as applying to 국가/지방공무원
@@ -1611,7 +1620,7 @@ class Workspace:
             raise RuntimeError('privacy-review passage reached the answer context')
         return {**result, 'status': 'answer', 'applied': applied, 'chunks': chunks}
 
-    def unstated_table_condition(self, applied, best, question):
+    def unstated_table_condition(self, applied, best, question, carried=()):
         """(body doc, unstated condition units) when `applied` is a rule's table (별표) whose applicability condition
         (table_conditions) the question does not state, and the rule's body also passed; else None. 별표 8 "상시 출장
         공무원의 여비 지급 기준표" → 상시: a question that says neither is not about that table."""
@@ -1619,20 +1628,28 @@ class Workspace:
             return None
         rule = self.rule_of.get(applied)
         body = next((d for d in self.rule_names.get(rule, ()) if d not in self.annex_id and d in best), None)
-        missing = self.unstated_tables(rule, question).get(self.annex_id[applied]) if body else None
+        missing = self.unstated_tables(rule, question, carried).get(self.annex_id[applied]) if body else None
         return (body, missing) if missing else None
 
-    def unstated_tables(self, rule, question):
+    def unstated_tables(self, rule, question, carried=()):
         """{annex id: unstated condition units} for the tables of `rule` whose condition the question does not state
         (every unit must be stated: 별표 6의2 국외 가족여비 needs both). A question that names the table ("별표 2 식비")
-        states it."""
+        states it; `carried` units (a follow-up's inherited conditions) count as stated."""
         out = {}
         for n, (_, condition) in self.table_conditions(rule).items():
             named = _names_table(question, n)
-            missing = [] if named else sorted(u for u in condition if not _unit_stated(u, question))
+            missing = [] if named else sorted(u for u in condition if u not in carried and not _unit_stated(u, question))
             if missing:
                 out[n] = missing
         return out
+
+    def stated_conditions(self, rule, question):
+        """The condition units of the tables of `rule` whose whole condition the question itself states (or which it
+        names): "국외 출장" states 별표 4 (국외), not 별표 8 (상시·출장) — one shared word is no condition."""
+        if not rule:
+            return set()
+        return {u for n, (_, condition) in self.table_conditions(rule).items() if condition
+                and (_names_table(question, n) or all(_unit_stated(x, question) for x in condition)) for u in condition}
 
     def table_conditions(self, rule):
         """{annex id: (caption, condition units)} of the tables (별표) of `rule` (a rule_of key), cached. A table's
@@ -2295,6 +2312,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                         intent, kind = 'search', None
                         last = next((h for h in reversed(history) if h['role'] == 'assistant'), None)
                         context_doc = last.get('applied_id') if last and last.get('kind') == 'search' else None
+                        # the table conditions the previous search answer stated or carried (MODEL-RESUME-A-030)
+                        inherited = tuple(last.get('conditions') or ()) if context_doc else ()
                         selected, others, selection = None, [], None
                         document = session.document
                         ws = workspace  # the shared index, or a named institution's separate snapshot index
@@ -2314,7 +2333,7 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                 if intent == 'search' and kind == 'explain' and workspace_mode and not inst_ws:
                                     # A definition is answered from the corpus when it covers the term (견책 →
                                     # 징계업무편람); only otherwise as a general explanation citing no institution.
-                                    selection = workspace.select(question, session.pinned_doc, context_doc)
+                                    selection = workspace.select(question, session.pinned_doc, context_doc, inherited)
                                     if selection['status'] not in ('answer', 'clarify'):
                                         intent, selection, explain = 'chat', None, True
                         if intent == 'chat' and kind == 'recall' and not history:
@@ -2336,9 +2355,10 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                     # a named institution whose posted rules/records are a separate snapshot (B: never in
                                     # the shared or evaluation index) is answered from that index only
                                     ws = inst_ws
-                                    selection = inst_ws.select(question, None, context_doc if context_doc in inst_ws.meta else None)
+                                    selection = inst_ws.select(question, None, context_doc if context_doc in inst_ws.meta else None,
+                                                               inherited)
                                 else:
-                                    selection = selection or workspace.select(question, session.pinned_doc, context_doc)
+                                    selection = selection or workspace.select(question, session.pinned_doc, context_doc, inherited)
                                 others = selection['others']
                             if (version.get('assistant') and selection and selection['status'] == 'not_found'
                                     and selection.get('reason') != 'protected' and not inst_ws and not session.pinned_doc
@@ -2503,6 +2523,10 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                     result['scope'] += (f" 가장 가깝게 검색된 「{tc['table']}」는 질문에 적히지 않은 대상·조건에 "
                                                         f"관한 표라서, 그 표를 정한 규정 본문 「{tc['answered_from']}」을 근거로 "
                                                         '골랐습니다.')
+                                if selection.get('conditions_carried'):
+                                    carried = result['conditions_carried'] = selection['conditions_carried']
+                                    result['scope'] += (f" 앞 질문에서 말한 조건({', '.join(carried)})을 이 이어지는 질문에도 "
+                                                        '적용했습니다. 다른 경우면 질문에 그 조건을 적어 주세요.')
                                 if selection.get('tables_set_aside'):
                                     # MODEL-RESUME-A-025: the body cites tables for cases the question does not state
                                     # (국내 별표 2 / 국외 별표 4): their values are not in the evidence, and the visible
@@ -2549,7 +2573,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                 session.history += [{'role': 'user', 'content': question, 'kind': intent},
                                                     {'role': 'assistant', 'content': said[:1500 if intent == 'chat' else 600],
                                                      'kind': intent,
-                                                     'applied_id': applied_doc['doc_id'] if applied_doc else None}]
+                                                     'applied_id': applied_doc['doc_id'] if applied_doc else None,
+                                                     'conditions': (selection or {}).get('conditions') if applied_doc else None}]
                                 del session.history[:-HISTORY_MESSAGES]
                     else:
                         self.respond(404, {'error': '없는 기능입니다.'}); return

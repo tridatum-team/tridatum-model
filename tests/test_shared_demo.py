@@ -638,6 +638,23 @@ class TableConditionEvidenceTests(WorkspaceTests.__base__):
         self.assertNotIn('2', self.ws.unstated_tables(self.ws.rule_of['law'], '가 여비 규정 별표 2 숙박비'))
         self.assertIn('2', self.ws.unstated_tables(self.ws.rule_of['law'], '가 여비 규정 별표 4 숙박비'))
 
+    def test_follow_up_carries_the_stated_case_until_it_states_another_or_leaves(self):
+        # MODEL-RESUME-A-030 (C-026 4: 조건 후속 승계)
+        first = self.ws.select('가 여비 규정에서 국내 출장 숙박비는 얼마인가요?')
+        self.assertEqual(first['conditions'], ['국내'])
+        follow = self.ws.select('그럼 숙박비는 얼마인가요?', context_doc='law', inherited=first['conditions'])
+        self.assertTrue(follow.get('continued'))
+        self.assertEqual(follow.get('conditions_carried'), ['국내'])
+        self.assertNotIn('tables_set_aside', follow)  # the 국내 case is known: no "which case?" note
+        self.assertEqual(follow['conditions'], ['국내'])  # kept for the next follow-up
+        other = self.ws.select('그럼 국외 숙박비는?', context_doc='law', inherited=['국내'])  # the current case wins
+        self.assertNotIn('conditions_carried', other)
+        self.assertEqual(other['conditions'], ['국외'])
+        fresh = self.ws.select('그럼 숙박비는 얼마인가요?', inherited=['국내'])  # no previous document: nothing carried
+        self.assertNotIn('conditions_carried', fresh)
+        shared = self.ws.select('그럼 출장 숙박비는 얼마인가요?', context_doc='law', inherited=['국내'])
+        self.assertEqual(shared.get('conditions_carried'), ['국내'])  # one word of 별표 8 (출장) is no condition
+
 
 class DomainContractTests(WorkspaceTests.__base__):
     """RETRIEVAL-ROOT-008: a blank form is evidence only for a question asking for a form; an everyday word counts as
