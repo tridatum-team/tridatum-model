@@ -52,8 +52,10 @@
     - 선택 설정 `chat_thinking: true`는 `/v1/chat/completions`와 `enable_thinking`을 사용한다. 파싱된 최종 `message.content`만 사용자에게 전달하고 history에 넣으며, `reasoning_content`는 사용하지 않는다. 최종 답이 없으면 내부 추론으로 대신하지 않고 오류로 처리한다. 생각 모드가 켜져 있어도 모델이 매번 내부 추론을 생성하는 것은 아니다.
     - `chat_max_tokens`는 일반 대화의 출력 토큰 예산이며 미지정 시 기존 384다. native 모드에서는 내부 추론과 최종 답이 이 예산을 함께 사용한다. `finish_reason: length`는 기존 출력 잘림 안내로 연결한다.
     - `chat_reasoning_budget`를 지정하면 해당 llama-server에 `--reasoning-budget`를 전달한다. 같은 모델·context라도 이 예산이 다르면 서버를 공유하지 않으므로 다른 port를 지정해야 한다. 모델/template 및 고정 llama.cpp 버전의 지원 여부를 먼저 확인한다.
-    - 프로세스 메모리 설정 `no_repack: true`, `batch_size`, `ubatch_size`를 지정하면 각각 `--no-repack`, `--batch-size`, `--ubatch-size`를 전달한다. 생략한 플래그는 추가하지 않아 기존 실행 기본값을 유지한다. 이 설정은 일반 대화뿐 아니라 같은 서버의 검색·분류에도 적용된다.
-    - 위 세 메모리 설정이 다르면 같은 모델·context라도 서버를 공유하지 않으므로 다른 port가 필요하다. 같은 설정은 기존처럼 공유한다. 실제 `State`에서 각 설정의 공유/분리, 622-token 입력의 생성, 자식 종료를 로컬 CPU로 확인했다. 모델 가중치 파일은 바꾸지 않으며, 개발기 검증은 운영 16GB 맥미니의 메모리 여유나 후보의 문안 품질을 보장하지 않는다.
+    - 프로세스 메모리 설정 `no_repack: true`, `batch_size`, `ubatch_size`, `cache_ram`을 지정하면 각각 `--no-repack`, `--batch-size`, `--ubatch-size`, `--cache-ram`을 전달한다. 생략한 플래그는 추가하지 않아 기존 실행 기본값을 유지한다. 이 설정은 일반 대화뿐 아니라 같은 서버의 검색·분류에도 적용된다.
+    - 이 메모리 설정이 다르면 같은 모델·context라도 서버를 공유하지 않으므로 다른 port가 필요하다. 같은 설정은 기존처럼 공유한다. 실제 `State`에서 앞의 세 설정의 공유/분리, 622-token 입력의 생성, 자식 종료를 로컬 CPU로 확인했다. 모델 가중치 파일은 바꾸지 않으며, 개발기 검증은 운영 16GB 맥미니의 메모리 여유나 후보의 문안 품질을 보장하지 않는다.
+    - `cache_ram`은 [고정 llama.cpp의 RAM prompt cache 상한](https://github.com/ggml-org/llama.cpp/blob/8ca4060/tools/server/README.md)을 MiB로 지정하며 `0`은 해당 캐시를 끈다. 모델 가중치나 실행에 필요한 KV/상태 메모리를 없애는 옵션은 아니다. 지원하는 런타임에서만 지정하고 전체 메모리 압력은 별도로 확인한다.
+    - `cache_ram`도 실제 `State`에서 미지정/0, 0/32의 두 시나리오로 공유·분리를 확인했다. 생략 시 플래그가 없고 0/32가 실제 시작 인자에 전달되었으며, 각 서버에서 계산을 생성한 뒤 자식과 포트를 회수했다. 시작 전·적재 후·종료 후 압력은 1이었다. 이는 실행 경로 검증이며 모델의 불필요한 첫 대화 안내까지 품질 통과로 승인한 것은 아니다.
     - 위 선택 설정을 생략하면 기존 비사고 `/completion` 경로와 예산을 유지한다. C005 로컬 CPU 실 UI에서 native 설정, 최종 답 표시와 후속 대화 연결, 종료를 확인했지만 문안 품질의 잔여 오류가 있어 운영 승인을 뜻하지 않는다.
     - native 경로의 종료 토큰 처리도 모델별로 확인해야 한다. 기존 Kanana Q8에서는 EOS 메타데이터가 정상인데도 `peg-native` 응답 본문에 `<|eot_id|>`가 노출됐다. 같은 가중치의 실제 비사고 `chat_reply` → `/completion` 경로는 EOS를 정상 처리했다. 따라서 native 설정을 다른 모델에 자동 적용하지 않으며, 제어 문자열을 사후 삭제해 품질 통과로 처리하지 않는다.
     - 전역 `CHAT_SYSTEM`/`CHAT_SAMPLING`을 수정하지 않으므로 다른 버전의 대화 계약을 덮어쓰지 않는다. HTTP 요청에서 이 설정을 받지 않는다.

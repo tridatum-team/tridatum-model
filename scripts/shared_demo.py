@@ -2015,7 +2015,7 @@ class State:
                     self.versions[meta['id']] = dict(meta, model=model, tok=tok, device=device)
                 elif meta['kind'] == 'llama':
                     key = (meta['model_file'], meta['llama_server'], meta['context'], meta.get('chat_reasoning_budget', -1),
-                           meta.get('no_repack', False), meta.get('batch_size'), meta.get('ubatch_size'))
+                           meta.get('no_repack', False), meta.get('batch_size'), meta.get('ubatch_size'), meta.get('cache_ram'))
                     if key not in servers:
                         servers[key] = self.start_llama(meta)
                     self.versions[meta['id']] = dict(meta, **servers[key])
@@ -2054,6 +2054,8 @@ class State:
             command += ['--batch-size', str(meta['batch_size'])]
         if 'ubatch_size' in meta:
             command += ['--ubatch-size', str(meta['ubatch_size'])]
+        if 'cache_ram' in meta:
+            command += ['--cache-ram', str(meta['cache_ram'])]
         child = subprocess.Popen(command, stdout=log, stderr=log)
         self.children.append(child)
         base = f'http://127.0.0.1:{port}'
