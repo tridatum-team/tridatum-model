@@ -1243,6 +1243,40 @@
     "training": false,
     "temporary_metadata_evidence": "/private/tmp/chat-root-c-005/qwen35-9b-q6-metadata-verification.json"
   },
+  "qwen35_9b_precision_comparison": {
+    "source_commit": "6edc503",
+    "actual_generations": {"q6_all": 61, "q4_fresh24": 24},
+    "source_render_token_and_completion_vector_matches": 85,
+    "eos_stops": 85,
+    "raw_final_equals_delivered": 85,
+    "reviewer": "existing B session reviewed all85 public development answers; coordinator adjudicated20 flagged answers and11 passing boundaries",
+    "parent_adjustment": "Q6 U20 semantic partial->pass: no unrequested per-step minute allocation; language remains partial; all-three totals unchanged",
+    "scores": {
+      "q6_old18": {"semantic": 16, "naturalness": 16, "form": 15, "all_three": 14},
+      "q6_transfer16": {"semantic": 13, "naturalness": 13, "form": 15, "all_three": 11},
+      "q6_fresh24": {"semantic": 22, "naturalness": 21, "form": 24, "all_three": 20},
+      "q4_fresh24": {"semantic": 20, "naturalness": 22, "form": 24, "all_three": 18}
+    },
+    "matched_fresh24": {
+      "same_inputs_profile_and_server_command_except_weights": true,
+      "q6_only_all_three": ["U10", "U15"],
+      "q4_only_all_three": [],
+      "semantic_regression_q6": "U04 return request changed to borrowing; Q4 preserved return",
+      "neither_all_three": ["U04", "U11", "U13", "U20"]
+    },
+    "central_semantic_failures": {"q6_all": 3, "q4_fresh24": 2},
+    "explicit_fake_action_completion_count": 0,
+    "unlabeled_direct_send_draft_count": 1,
+    "q6_fresh24_median_request_seconds": 11.248,
+    "owned_child_peak_rss_bytes": {"q6_all61": 8149401600, "q4_fresh24": 6270697472},
+    "cpu_evidence": "run_profile.py sets LLAMA_ARG_DEVICE=none and LLAMA_ARG_N_GPU_LAYERS=0 before server start; no direct offload-residency telemetry retained",
+    "pressure_checks": "runner asserts1 before each case; persisted start/end values1; no separate per-case pressure series",
+    "ports_free_after_both_runs": true,
+    "historical_cache_ram_caveat_retained": true,
+    "production_approved": false,
+    "training": false,
+    "temporary_parent_review": "/private/tmp/chat-root-c-005/qwen35-9b-precision-parent-review.json"
+  },
   "limits": {
     "memory_scope": "Development workstation physical memory34359738368 bytes observed. Existing docs/SHARING.md describes a16GB production Mini with other services. Local normal-pressure measurements are not production memory proof.",
     "private_questions_gold_mappings_accessed": false,
