@@ -1028,6 +1028,50 @@
     "temporary_final_only_evidence": "/private/tmp/chat-root-c-005/ax4light-declared-tokenizer-results.json",
     "temporary_parent_review": "/private/tmp/chat-root-c-005/ax4light-declared-tokenizer-parent-review.json"
   },
+  "concise_common_contract_comparison": {
+    "both_plans_frozen_before_either_concise_output": true,
+    "only_system_contract_changed_from_each_original_baseline": true,
+    "sequential_cpu_generations": 74,
+    "ax4light": {
+      "existing_reference_counts": {"cases": 18, "semantic": 15, "naturalness": 16, "usable_form": 16, "all_three": 14},
+      "fresh_transfer_counts": {"cases": 16, "semantic": 12, "naturalness": 13, "usable_form": 13, "all_three": 10},
+      "single_owned_server_peak_rss_bytes": 5781897216,
+      "source_rendering_and_token_ids_checked_for_all_37": true,
+      "temporary_parent_review": "/private/tmp/chat-root-c-005/ax4light-concise-contract-parent-review.json"
+    },
+    "qwen35_9b": {
+      "existing_reference_counts": {"cases": 18, "semantic": 12, "naturalness": 15, "usable_form": 17, "all_three": 11},
+      "fresh_transfer_counts": {"cases": 16, "semantic": 13, "naturalness": 11, "usable_form": 12, "all_three": 8},
+      "single_owned_server_peak_rss_bytes": 6380765184,
+      "temporary_parent_review": "/private/tmp/chat-root-c-005/qwen35-9b-concise-contract-parent-review.json"
+    },
+    "controls": "Both pass arithmetic, ordinary advice, and truthful direct-send boundary. Unsolicited placeholder drafts are not approved as finished artifacts.",
+    "adjudication": "Consistent labels for identical contextual gratitude and prepared-quantity wording. Semantic-only errors do not automatically fail explicit format; no requirement that both proposed games total ten minutes.",
+    "pressure_before_and_after_each_run": 1,
+    "ports_freed_after_each_run": true,
+    "promoted": false,
+    "deployment_versions_changed": false
+  },
+  "qwen35_9b_serialized_source_input_parity": {
+    "source_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    "source_files_acquired": ["tokenizer.json", "tokenizer_config.json", "chat_template.jinja", "config.json"],
+    "source_git_blob_or_lfs_hashes_and_sizes_verified": true,
+    "new_weights_downloaded": false,
+    "canonical_encoder": "tokenizers.Tokenizer.from_file of the pinned serialized source",
+    "template_renderer": "PreTrainedTokenizerFast, runtime TokenizersBackend under Transformers5.21.0",
+    "renderer_core_matches_direct_source_load": true,
+    "renderer_added_token_metadata_identical": false,
+    "encoder_uses_canonical_source_not_renderer_override": true,
+    "original_contract_inputs": 37,
+    "concise_contract_inputs": 37,
+    "all_rendered_prompts_token_ids_completion_vectors_and_message_counts_match": true,
+    "generation_boundary": "Actual chat_reply reaches completion; probe raises before forwarding generation request",
+    "target_generations": 0,
+    "pressure_before_and_after": 1,
+    "ports_freed": true,
+    "original_tensor_or_numeric_kernel_parity_claimed": false,
+    "temporary_evidence": "/private/tmp/chat-root-c-005/qwen35-9b-input-parity-results.json"
+  },
   "limits": {
     "memory_scope": "Development workstation physical memory34359738368 bytes observed. Existing docs/SHARING.md describes a16GB production Mini with other services. Local normal-pressure measurements are not production memory proof.",
     "private_questions_gold_mappings_accessed": false,
