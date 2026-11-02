@@ -1,0 +1,121 @@
+{
+  "note": "Eight completed generations. FP32 reference load aborted before generation. Full final answers remain temporary; no production fix accepted.",
+  "runs": {
+    "gguf": {
+      "contract_sha256": "9d858d866c459b49758a2c1453655b706e5d4741ca0bc664bc55216dc4b52907",
+      "pressure_before": "1",
+      "torch_version": "2.14.1",
+      "transformers_version": "5.21.0",
+      "llama_build": "b1-8ca4060",
+      "llama_port_released": true,
+      "hf_load_seconds": 5.99,
+      "hf_loaded_pressure": "2",
+      "pressure_after": "2",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "engine": "gguf-cpu",
+          "stop": "eos",
+          "generated_tokens": 33,
+          "seconds": 1.19,
+          "semantic_judgment": "pass",
+          "reason": "검토 요청과 검토 전 공개 금지 보존"
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "engine": "gguf-cpu",
+          "stop": "eos",
+          "generated_tokens": 32,
+          "seconds": 1.15,
+          "semantic_judgment": "partial",
+          "reason": "검토 완료 사실 누락; 전체 의미 보존 기준 미충족"
+        }
+      ]
+    },
+    "hf_native": {
+      "contract": {
+        "input_contract_sha256": "9d858d866c459b49758a2c1453655b706e5d4741ca0bc664bc55216dc4b52907",
+        "gguf_results_sha256": "44983d50100281fb9caf4773a6cf9e44d20553c38022b6cbf181914860072000",
+        "reference_compute": "CPU native checkpoint bfloat16; not FP32 upcast",
+        "reason": "FP32 load exceeded memory-pressure safety threshold; zero HF generations completed; reuse both completed GGUF outputs",
+        "max_generations": 2,
+        "decode": "greedy/no penalties",
+        "max_new_tokens": 384
+      },
+      "pressure_before": "1",
+      "load_seconds": 0.9,
+      "loaded_pressure": "1",
+      "dtype": "torch.bfloat16",
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "engine": "hf-cpu-bfloat16",
+          "stop": "eos",
+          "generated_tokens": 33,
+          "seconds": 5.38,
+          "semantic_judgment": "pass",
+          "reason": "검토 요청과 검토 전 공개 금지 보존"
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "engine": "hf-cpu-bfloat16",
+          "stop": "eos",
+          "generated_tokens": 30,
+          "seconds": 5.37,
+          "semantic_judgment": "partial",
+          "reason": "검토 완료 사실 누락; 전체 의미 보존 기준 미충족"
+        }
+      ]
+    },
+    "editor": {
+      "contract_sha256": "41267ae2f19bc8c1dfc958ef5a94080ef59efcd7c005ea6cfa6ddcdfb420fc3b",
+      "pressure_before": "1",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "stop": "eos",
+          "tokens_predicted": 34,
+          "seconds": 1.31,
+          "semantic_judgment": "pass",
+          "reason": "검토 요청과 검토 전 공개 금지 보존",
+          "style_limit": "원문을 거의 그대로 반환; 문체 개선까지 주장하지 않음"
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "stop": "eos",
+          "tokens_predicted": 25,
+          "seconds": 1.08,
+          "semantic_judgment": "partial",
+          "reason": "검토 완료 사실 누락; 전체 의미 보존 기준 미충족"
+        }
+      ]
+    },
+    "source_boundary": {
+      "contract_sha256": "6b107abf1c163215454be41743f91b88ed3124dd322c9b6728f5d75119649403",
+      "pressure_before": "1",
+      "ports_free_after": true,
+      "pressure_after": "1",
+      "records": [
+        {
+          "id": "new-sharing-review-request",
+          "stop": "eos",
+          "tokens_predicted": 32,
+          "seconds": 1.29,
+          "semantic_judgment": "pass",
+          "reason": "검토 요청과 검토 전 공개 금지 보존"
+        },
+        {
+          "id": "new-sharing-approved-statement",
+          "stop": "eos",
+          "tokens_predicted": 25,
+          "seconds": 1.19,
+          "semantic_judgment": "partial",
+          "reason": "검토 완료 사실 누락; 전체 의미 보존 기준 미충족"
+        }
+      ]
+    }
+  }
+}
