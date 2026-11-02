@@ -1,0 +1,477 @@
+{
+ "note": "C-031 sanitized evidence: model commentary/answer text deliberately omitted (kept only in a temporary local artifact). CPU isolated instance, Mac mini 0, one run per build.",
+ "runs": {
+  "2b8ba92": {
+   "meta": {
+    "sha": "2b8ba92d2359550deb5bc5f0d45599feca91bd78",
+    "ports_free_after": true,
+    "pressure_before": "1",
+    "pressure_after": "1"
+   },
+   "turns": [
+    {
+     "tag": "A1 domestic stated",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "A2 follow-up without 그럼 (carry 국내)",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": true,
+     "conditions_carried": [
+      "국내"
+     ],
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": true,
+     "numbers_withheld": true
+    },
+    {
+     "tag": "A3 explicit 국외 overrides",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": true,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "4"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": true,
+     "numbers_withheld": true
+    },
+    {
+     "tag": "A4 follow-up after 국외 (carry 국외)",
+     "http": 200,
+     "status": "quoted",
+     "reason": null,
+     "continued": true,
+     "conditions_carried": [
+      "국외"
+     ],
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "4"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 1,
+     "truncated_256": false,
+     "numbers_withheld": true
+    },
+    {
+     "tag": "D1 other session (no context)",
+     "http": 200,
+     "status": "clarify",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      null,
+      null
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "B1 domestic stated",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "B2 institution switch (no carry)",
+     "http": 200,
+     "status": "chat",
+     "reason": null,
+     "continued": null,
+     "conditions_carried": null,
+     "applied": [
+      null,
+      null
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "B3 rule switch back (no carry)",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": [
+      {
+       "annex": "2",
+       "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+       "unstated": [
+        "국내"
+       ]
+      },
+      {
+       "annex": "4",
+       "table": "국외 여비 지급표(제16조제1항 관련)",
+       "unstated": [
+        "국외"
+       ]
+      }
+     ],
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "C1 domestic stated",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "C2 clear",
+     "http": null,
+     "status": null,
+     "reason": null,
+     "continued": null,
+     "conditions_carried": null,
+     "applied": null,
+     "reviewed_rows_annex": null,
+     "tables_set_aside": null,
+     "quotes_n": null,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "C3 after clear (no carry)",
+     "http": 200,
+     "status": "clarify",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      null,
+      null
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    }
+   ]
+  },
+  "ff59b93": {
+   "meta": {
+    "sha": "ff59b936f43c38b1b63eb3abcc3366c7efb52a40",
+    "ports_free_after": true,
+    "pressure_before": "1",
+    "pressure_after": "1"
+   },
+   "turns": [
+    {
+     "tag": "A1 domestic stated",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "A2 follow-up without 그럼 (carry 국내)",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": true,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": [
+      {
+       "annex": "2",
+       "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+       "unstated": [
+        "국내"
+       ]
+      },
+      {
+       "annex": "4",
+       "table": "국외 여비 지급표(제16조제1항 관련)",
+       "unstated": [
+        "국외"
+       ]
+      }
+     ],
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": true
+    },
+    {
+     "tag": "A3 explicit 국외 overrides",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": true,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "4"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": true,
+     "numbers_withheld": true
+    },
+    {
+     "tag": "A4 follow-up after 국외 (carry 국외)",
+     "http": 200,
+     "status": "quoted",
+     "reason": null,
+     "continued": true,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": [
+      {
+       "annex": "2",
+       "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+       "unstated": [
+        "국내"
+       ]
+      },
+      {
+       "annex": "4",
+       "table": "국외 여비 지급표(제16조제1항 관련)",
+       "unstated": [
+        "국외"
+       ]
+      }
+     ],
+     "quotes_n": 2,
+     "truncated_256": false,
+     "numbers_withheld": true
+    },
+    {
+     "tag": "D1 other session (no context)",
+     "http": 200,
+     "status": "clarify",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      null,
+      null
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "B1 domestic stated",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "B2 institution switch (no carry)",
+     "http": 200,
+     "status": "chat",
+     "reason": null,
+     "continued": null,
+     "conditions_carried": null,
+     "applied": [
+      null,
+      null
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "B3 rule switch back (no carry)",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": [
+      {
+       "annex": "2",
+       "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+       "unstated": [
+        "국내"
+       ]
+      },
+      {
+       "annex": "4",
+       "table": "국외 여비 지급표(제16조제1항 관련)",
+       "unstated": [
+        "국외"
+       ]
+      }
+     ],
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "C1 domestic stated",
+     "http": 200,
+     "status": "unverified",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      "인사혁신처",
+      "공무원 여비 규정"
+     ],
+     "reviewed_rows_annex": [
+      "2"
+     ],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "C2 clear",
+     "http": null,
+     "status": null,
+     "reason": null,
+     "continued": null,
+     "conditions_carried": null,
+     "applied": null,
+     "reviewed_rows_annex": null,
+     "tables_set_aside": null,
+     "quotes_n": null,
+     "truncated_256": false,
+     "numbers_withheld": false
+    },
+    {
+     "tag": "C3 after clear (no carry)",
+     "http": 200,
+     "status": "clarify",
+     "reason": null,
+     "continued": false,
+     "conditions_carried": null,
+     "applied": [
+      null,
+      null
+     ],
+     "reviewed_rows_annex": [],
+     "tables_set_aside": null,
+     "quotes_n": 0,
+     "truncated_256": false,
+     "numbers_withheld": false
+    }
+   ]
+  }
+ }
+}
