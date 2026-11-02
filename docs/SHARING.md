@@ -4,14 +4,19 @@
 
 이 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됩니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
 
-**현재 상태 (2026-11-01)**
-- 운영 코드는 브랜치 `site-memory-022`의 코드 커밋 `6a5eb37`이다. 배포판 `9256df4`에 색인 적재 메모리 절감을 더했으며, 검색 결과, 모델, 정밀도는 같다. main에는 병합하지 않았다.
+**현재 상태 (2026-11-02)**
+- 운영 코드는 브랜치 `model-resume-030-followup`의 커밋 `2b8ba92`이다(2026-11-02 05:37 UTC 반영, MODEL-RESUME-A-032).
+  - 구성: `6a5eb37`(색인 적재 메모리 절감) + ROOT-009 + MODEL-RESUME-A-024–027·030의 검색·라우팅 수정. C-028(`ff59b93`)과 C-031(`2b8ba92`) 독립 확인을 거쳤다.
+  - 모델, 가중치, 정밀도(float32 색인), prompt, 버전 목록(원본 Qwen3-1.7B + reader)은 그대로다. **일반 대화 품질은 바뀌지 않는다.**
+  - main에는 병합하지 않았다. 바뀐 동작은 그 브랜치의 `docs/SHARING.md`에 있다.
+- 이전 운영 `6a5eb37`과 그 이전 `9256df4`는 맥미니 `rollback-6a5eb37/`, `rollback-9256df4/`에 보존했다.
 - 색인: 공유 색인 `runs/workspace-index/v5`, 한국부동산원 별도 색인 `runs/workspace-index/inst-reb-002`, B 검토 메타데이터 search-corpus-v4. C-027 고정 평가 색인 `v3`는 바꾸지 않았다.
 
 **검증 한계**
 - 맥미니 재부팅 뒤 자동 복구는 시험하지 않았다. 자동 로그인 설정만 확인했다.
 - 디스플레이가 꺼진 상태에서 켜지며 배경화면 동영상이 재생되는 순간의 메모리 여유는 새 코드로 재현하지 못했다.
-- 같은 대화에서 다른 기관 규정으로 바꿔 물으면 이전 기관 규정이 이어지는 기존 결함이 있다.
+- 같은 대화에서 다른 기관 규정으로 바꿔 물으면 이전 기관 규정이 이어지던 결함은 `2b8ba92`에서 고쳤다(명시 전환, 진짜 후속 유지, 새 대화 초기화).
+- 일반 대화(검색 아님)는 원본 1.7B의 능력 한계가 그대로다. 예: 메일 다듬기 요청의 뜻을 바꾼다(C-030, 2026-11-02 사용자 관측).
 - CPU 실행이라 기관 질문 답은 약 17–21초 걸린다.
 
 ## 제공 버전 (`deploy/macmini-site/versions.json`)
@@ -120,10 +125,11 @@ PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전
 
 **현재 원점: 맥미니 (2026-11-01 22:08 KST부터, SITE-MEMORY-023).** 맥북 원점(SITE-RECOVERY-010)은 정지·비활성화했다.
 
-- **코드:** 브랜치 `site-memory-022` 커밋 `6a5eb37` = 배포판 `9256df4` + 색인 적재 메모리 절감(022/023).
-  - 검색 결과, 문서 값, 모델, 정밀도, 프롬프트, 컨텍스트 4096은 그대로다.
-  - main에는 아직 병합하지 않았다. 미완성 ROOT-009는 포함하지 않는다.
+- **코드:** 브랜치 `model-resume-030-followup` 커밋 `2b8ba92`(2026-11-02 반영). 직전 운영은 `site-memory-022` `6a5eb37` = 배포판 `9256df4` + 색인 적재 메모리 절감(022/023).
+  - 문서 값, 모델, 정밀도, 프롬프트, 컨텍스트 4096은 그대로다. 검색·라우팅은 바뀌었다(위 현재 상태).
+  - main에는 아직 병합하지 않았다.
   - 맥미니 `~/Services/trid-site/repo`(`DEPLOYED_FROM_COMMIT`)에 있다.
+  - 되돌리기: `rollback-6a5eb37/scripts/`의 두 파일을 `repo/scripts/`로 복사하고, `ADDED-BY-2b8ba92.txt`에 적힌 3개 파일을 제거한다. 그다음 `DEPLOYED_FROM_COMMIT`을 복원하고 `launchctl kickstart -k gui/$(id -u)/co.tridatum.trid.site`를 실행한다.
   - 색인 파생 파일(`dense.f32.npy`, `documents.jsonl`과 기록)은 `python -m trid.service.derived runs/workspace-index/v5 runs/workspace-index/inst-reb-002`로 만든다.
 - **버전 2개만 제공** (`deploy/macmini-site/versions.json`)
   - 기본 Qwen3-1.7B 원본, v0.1 추출 독해기.
