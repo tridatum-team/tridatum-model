@@ -25,7 +25,11 @@
                zips (up to 3 levels) and OCR for PDFs without a text layer (kordoc --ocr, cached local model,
                recorded as ocr). Protected HWP (password/배포용/DRM flags in the FileHeader) and DRM files are
                recorded as 'unextractable' with the reason; no lock is removed. 'ok' records are left as they were.
-               reserved-sign-input --only-reextracted then writes just that new text (a delta manifest input).
+               reserved-sign-input --only-reextracted then writes just that new text (a delta manifest input;
+               --reextracted-by TASK keeps only records that task re-extracted).
+               --image-pages (MODEL-RESUME-B-030) instead checks the 'ok' PDFs (files and zip members): pages
+               carrying a large image are OCR'd one at a time and replace a text layer holding under half of what
+               the OCR reads; the merged text goes to a new <stem>-ocrpages.txt key. New extractions do the same.
   reserved-migrate --local DIR --profile P --manifest-out FILE [--extra FILES] [--dry-run]
                copies a local store (and extra files such as sign inputs/manifests) to S3 under reserved-only
                prefixes with put_new (never replaces an object), checks every object's stored SHA-256 and length
@@ -228,7 +232,79 @@ def ocr_text(data, timeout=1800):
         src.write_bytes(data)
         subprocess.run([str(KORDOC), '--ocr', '-o', str(out), str(src)], check=True, capture_output=True,
                        timeout=timeout)
-        return out.read_text()
+        return strip_image_refs(out.read_text())
+
+
+MD_IMAGE = re.compile(r'!\[[^\]]*\]\([^)]*\)')
+
+
+def strip_image_refs(markdown):
+    """kordoc's markdown keeps a link per embedded picture (`![image](images/out/image_001.png)`, one per text strip
+    in some PDFs); the links are not document text (MODEL-RESUME-B-030)."""
+    return MD_IMAGE.sub('', markdown)
+
+
+# Pages whose images cover at least this share are OCR'd and compared with their text layer (MODEL-RESUME-B-030).
+# Text drawn as image strips covers the page in proportion to its amount of text (7-60% in the stored rules), so the
+# floor only skips pages whose pictures are a logo, seal or signature; the decision itself is fill_image_pages's.
+IMAGE_PAGE_COVER = 0.05
+
+
+def pdf_pages(data, timeout=180):
+    """The raw pdftotext pages (split at form feeds, the same call ingest.tool_text makes) and the 1-based pages whose
+    images cover at least IMAGE_PAGE_COVER of the page (displayed size from pdfimages -list ppi, page size from
+    pdfinfo per page)."""
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / 'in.pdf'
+        src.write_bytes(data)
+        run = lambda *cmd: subprocess.run(cmd, capture_output=True, timeout=timeout, check=True).stdout.decode('utf-8', 'replace')
+        raw = run('pdftotext', '-enc', 'UTF-8', str(src), '-')
+        n = int(re.search(r'^Pages:\s+(\d+)', run('pdfinfo', str(src)), re.M)[1])
+        sizes = {int(p): float(w) * float(h) for p, w, h in
+                 re.findall(r'^Page\s+(\d+) size:\s+([\d.]+) x ([\d.]+)', run('pdfinfo', '-f', '1', '-l', str(n), str(src)), re.M)}
+        cover = Counter()
+        for line in run('pdfimages', '-list', str(src)).splitlines()[2:]:
+            c = line.split()
+            if len(c) > 13 and c[2] == 'image' and float(c[12]) > 0 and float(c[13]) > 0 and sizes.get(int(c[0])):
+                cover[int(c[0])] += (int(c[3]) / float(c[12]) * 72) * (int(c[4]) / float(c[13]) * 72) / sizes[int(c[0])]
+    return raw.split('\f'), sorted(p for p, share in cover.items() if share >= IMAGE_PAGE_COVER)
+
+
+def ocr_page(data, page, timeout=600):
+    """Forced OCR of one PDF page (pdfseparate, then kordoc --ocr-force; kordoc -p is approximate for some PDFs)."""
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        src, one, out = Path(d) / 'in.pdf', Path(d) / 'page.pdf', Path(d) / 'out.md'
+        src.write_bytes(data)
+        subprocess.run(['pdfseparate', '-f', str(page), '-l', str(page), str(src), str(one)], check=True,
+                       capture_output=True, timeout=timeout)
+        subprocess.run([str(KORDOC), '--ocr-force', '-o', str(out), str(one)], check=True, capture_output=True,
+                       timeout=timeout)
+        return strip_image_refs(out.read_text())
+
+
+def fill_image_pages(data):
+    """Body text drawn as an image beside a thin text layer (a typed header or page number, a cover page): such a PDF
+    extracts as 'ok' while most of its text is missing. Every page carrying a large image (IMAGE_PAGE_COVER) is OCR'd
+    and its OCR text replaces that page's text layer when the layer holds fewer than half of the non-space characters
+    the OCR reads there; other pages keep the text layer. Returns (merged text or None if no page changed, candidate
+    pages, replaced pages). Without a replaced page the text equals extract('pdf', data) exactly."""
+    from trid.service.ingest import join_pdf_lines, normalize
+    pages, candidates = pdf_pages(data)
+    dense = lambda s: len(re.sub(r'\s', '', s))
+    replaced = []
+    for p in candidates:
+        if p > len(pages):
+            continue
+        ocr = normalize(ocr_page(data, p))
+        if 2 * dense(pages[p - 1]) < dense(ocr):
+            pages[p - 1], replaced = ocr, replaced + [p]
+    if not replaced:
+        return None, candidates, []
+    return unicodedata.normalize('NFC', normalize(join_pdf_lines('\f'.join(pages)))), candidates, replaced
 
 
 def extract(kind, data):
@@ -268,9 +344,11 @@ def check_response(r, kind):
 
 class S3Store:
     """The pipeline's objects in the training bucket. Raw bytes are written once (If-None-Match; different bytes go
-    beside them as <stem>.<sha16>.<ext>). `max_disk_bytes` caps the bytes this store writes in one run (Stop before
-    the write that would pass it); `disk_bytes` counts them. The names match LocalStore so the bounded loop reports
-    both the same way."""
+    beside them as <stem>.<sha16>.<ext>). `max_disk_bytes` caps the raw and text bytes this store writes in one run
+    (Stop before the write that would pass it); `disk_bytes` counts them. State, summary and budget files (`put`) are
+    rewritten at every checkpoint and are not counted, so a stop can always be checkpointed (MODEL-RESUME-B-029: the
+    first batch stopped inside its final checkpoint when they were). The names match LocalStore so the bounded loop
+    reports both the same way."""
 
     def __init__(self, s3, max_disk_bytes=None):
         self.s3, self.max_disk_bytes, self.disk_bytes = s3, max_disk_bytes, 0
@@ -289,7 +367,7 @@ class S3Store:
         return put_new(self.s3, key, body)
 
     def put(self, key, body):
-        self._reserve(len(body))
+        """Overwritable metadata (state/summary/budget): not counted against max_disk_bytes."""
         self.s3.put_object(Bucket=BUCKET, Key=key, Body=body)
 
     def read(self, key):
@@ -477,13 +555,57 @@ def redo_member(store, metrics, prefix, seq, stem, old, body, depth):
     return rec
 
 
-def reextract_local(store, rid, metrics, report, by):
-    """Offline: for every local family with a file or zip member that is not 'ok', read the stored raw bytes again
-    and extract them with the current kind detection and extractors. Records that were 'ok' are kept as they were
-    (their text keys are write-once). Each changed record carries `reextract` {by, at, previous kind/status/error}."""
+def image_page_pass(store, metrics, prefix, seq, rec, data, note, log, depth=0):
+    """reserved-reextract --image-pages: an 'ok' PDF read from its text layer only (a file, or a member of a stored
+    zip at any depth) is checked with fill_image_pages. When pages change, the merged text goes to a new key
+    <stem>-ocrpages.txt (write-once: the earlier text stays) and `reextract` keeps the previous text key, sha, chars
+    and extractor. Stored bytes are checked against the recorded sha256. Returns True when a record changed."""
     import io
     import zipfile
-    states, changed = load_states(store, rid), []
+    if hashlib.sha256(data).hexdigest() != rec.get('member_sha256' if depth else 'raw_sha256'):
+        raise ValueError(f'{seq}/{rec.get("file_no") or rec.get("member")}: bytes differ from the recorded sha256')
+    if 'members' in rec:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+        infos, changed = [m for m in archive.infolist() if not m.is_dir()], False
+        for m in rec['members']:
+            i = m.get('member_index')
+            if i is None or not ('members' in m or (m.get('kind') == 'pdf' and m.get('extract_status') == 'ok')):
+                continue
+            body = archive.read(infos[i]) if infos[i].file_size <= 200 * 1024 * 1024 else b''
+            changed |= image_page_pass(store, metrics, prefix, seq, m, body, note, log, depth + 1)
+        return changed
+    if rec.get('kind') != 'pdf' or rec.get('extract_status') != 'ok' or rec.get('ocr') or not rec.get('text_key'):
+        return False
+    t = time.monotonic()
+    try:
+        text, candidates, replaced = fill_image_pages(data)
+    except Exception as exc:
+        log.append({'seq': seq, 'text_key': rec['text_key'], 'error': repr(exc)[:300]})
+        return False
+    finally:
+        metrics.add('parse_s', time.monotonic() - t)
+    if candidates:
+        log.append({'seq': seq, 'text_key': rec['text_key'], 'image_pages': candidates, 'ocr_pages': replaced})
+    if not text:
+        return False
+    old, key = dict(rec), rec['text_key'].removesuffix('.txt') + '-ocrpages.txt'
+    rec.update({'text_sha256': store.text(key, text.encode()), 'text_key': key, 'chars': len(text),
+                'extractor': PAGE_OCR_EXTRACTOR, 'ocr': True, 'image_pages': candidates, 'ocr_pages': replaced,
+                **text_fields(text)})
+    rec['reextract'] = {**note(old), 'previous_text': {k: old.get(k) for k in
+                                                       ('text_key', 'text_sha256', 'chars', 'extractor', 'reextract')}}
+    return True
+
+
+def reextract_local(store, rid, metrics, report, by, image_pages=False):
+    """Offline: for every local family with a file or zip member that is not 'ok', read the stored raw bytes again
+    and extract them with the current kind detection and extractors. Records that were 'ok' are kept as they were
+    (their text keys are write-once). Each changed record carries `reextract` {by, at, previous kind/status/error}.
+    image_pages=True runs only image_page_pass over the 'ok' records instead (MODEL-RESUME-B-030); its per-record
+    page log goes to <prefix>/image-pages-<by>.jsonl."""
+    import io
+    import zipfile
+    states, changed, log = load_states(store, rid), [], []
     at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
     note = lambda old: {'by': by, 'at': at, 'previous': {k: old.get(k) for k in
                                                          ('kind', 'extract_status', 'extract_error', 'extract_reason')}}
@@ -491,7 +613,13 @@ def reextract_local(store, rid, metrics, report, by):
         prefix, before = f'corpus/reserved/{rid}', st['status']
         touched = False
         for f in st['files']:
-            if f.get('extract_status') == 'ok' or f.get('download_status') != 'ok':
+            if f.get('download_status') != 'ok':
+                continue
+            if image_pages:
+                if f.get('kind') == 'pdf' or 'members' in f:
+                    touched |= image_page_pass(store, metrics, prefix, seq, f, store.read(f['raw_key']), note, log)
+                continue
+            if f.get('extract_status') == 'ok':
                 continue
             data = store.read(f['raw_key'])
             if 'members' in f:
@@ -525,9 +653,17 @@ def reextract_local(store, rid, metrics, report, by):
             st['reextracted'] = {'by': by, 'at': at, 'previous_status': before}
             store.put(f'corpus/reserved/{rid}/state/{seq}.json', json.dumps(st, ensure_ascii=False).encode())
             changed.append({'seq': seq, 'before': before, 'after': st['status']})
-    summary = publish(store, rid, states, len(states), metrics, report=report,
-                      extra={'reextract': {'by': by, 'at': at, 'families_changed': len(changed),
-                                           'status_changes': dict(Counter(f"{c['before']}->{c['after']}" for c in changed))}})
+    extra = {'by': by, 'at': at, 'families_changed': len(changed),
+             'status_changes': dict(Counter(f"{c['before']}->{c['after']}" for c in changed))}
+    if image_pages:
+        store.put(f'corpus/reserved/{rid}/image-pages-{by}.jsonl',
+                  ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in log).encode())
+        extra['image_pages'] = {'records_with_image_pages': sum('image_pages' in r for r in log),
+                                'image_pages': sum(len(r.get('image_pages', ())) for r in log),
+                                'records_changed': sum(bool(r.get('ocr_pages')) for r in log),
+                                'pages_replaced': sum(len(r.get('ocr_pages', ())) for r in log),
+                                'errors': sum('error' in r for r in log)}
+    summary = publish(store, rid, states, len(states), metrics, report=report, extra={'reextract': extra})
     print(json.dumps({'families_changed': len(changed), 'status': summary['family_status'],
                       'disk_bytes': store.disk_bytes}, ensure_ascii=False), flush=True)
     return changed
@@ -550,13 +686,15 @@ def text_docs(st):
 
 EXTRACTOR = {'hwp': 'rhwp export-doclang', 'pdf': 'pdftotext', 'hwpx': 'hwpx section XML', 'xlsx': 'xlsx sheet XML'}
 OCR_EXTRACTOR = 'kordoc 4.24.23 --ocr (PP-OCRv5 korean)'
+PAGE_OCR_EXTRACTOR = 'pdftotext + kordoc 4.24.23 --ocr-force on image pages (PP-OCRv5 korean)'
 MAX_ZIP_DEPTH = 3
 
 
 def text_record(store, metrics, prefix, seq, stem, kind, data):
     """Extract one document; text stored at <prefix>/text/<seq>/<stem>.txt. Failures are recorded, never promoted:
     'unextractable' (protected/encrypted, with extract_reason), 'failed' (extractor error), 'empty_text'. A PDF
-    without a text layer is read by OCR and marked ocr: true."""
+    without a text layer is read by OCR and marked ocr: true; a PDF with text whose large-image pages hold text the
+    layer lacks gets those pages by OCR (fill_image_pages: ocr: true, ocr_pages)."""
     from trid.service.ingest import normalize
     rec, t = {}, time.monotonic()
     extractor = EXTRACTOR.get(kind)
@@ -577,14 +715,27 @@ def text_record(store, metrics, prefix, seq, stem, kind, data):
             rec['extract_status'] = 'ok' if text.strip() else 'empty_text'
             if not text.strip():
                 rec['extract_reason'] = 'ocr_found_no_text'
+    elif kind == 'pdf' and rec['extract_status'] == 'ok':
+        try:
+            filled, rec['image_pages'], replaced = fill_image_pages(data)
+        except Exception as exc:
+            rec['ocr_error'] = repr(exc)[:300]
+        else:
+            if filled:
+                text, extractor, rec['ocr'], rec['ocr_pages'] = filled, PAGE_OCR_EXTRACTOR, True, replaced
     metrics.add('parse_s', time.monotonic() - t)
     if text.strip():
         t = time.monotonic()
         rec['text_sha256'] = store.text(f'{prefix}/text/{seq}/{stem}.txt', text.encode())
         metrics.add('s3_s', time.monotonic() - t)
         rec.update({'text_key': f'{prefix}/text/{seq}/{stem}.txt', 'chars': len(text), 'extractor': extractor,
-                    'effective_clauses': [line.strip() for line in text.splitlines() if '시행한다' in line][:8],
-                    'mentions_kogl': '공공누리' in text})
+                    **text_fields(text)})
+    return rec
+
+
+def text_fields(text):
+    return {'effective_clauses': [line.strip() for line in text.splitlines() if '시행한다' in line][:8],
+            'mentions_kogl': '공공누리' in text}
     return rec
 
 
@@ -785,7 +936,7 @@ def bounded_collect(client, store, metrics, families, rid, skip_ids, max_bytes, 
     return summary
 
 
-def sign_input(store, rid, local_out=None, only=None):
+def sign_input(store, rid, local_out=None, only=None, by=None):
     """A's check_reserved_overlap.py `sign` input: one row per extracted file {family_id, text, doc_id, source_url,
     group}. S3 run: written to S3 and data/<rid>/sign-input.jsonl.gz (gitignored). Local run: written only to
     `local_out`, never over an existing file. only='reextracted': just the records a re-extraction produced text for
@@ -794,7 +945,8 @@ def sign_input(store, rid, local_out=None, only=None):
     rows = []
     for st in states.values():
         for doc, doc_id, url, redo in text_docs(st):
-            if doc.get('text_key') and (only != 'reextracted' or redo):
+            if doc.get('text_key') and (only != 'reextracted' or redo) and (
+                    by is None or (doc.get('reextract') or {}).get('by') == by):
                 rows.append({'family_id': st['doc_family_id'], 'text': store.read(doc['text_key']).decode(),
                              'doc_id': doc_id, 'source_url': url, 'group': st['doc_family_id']})
     body = gzip.compress(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows).encode(), mtime=0)
@@ -811,17 +963,19 @@ def sign_input(store, rid, local_out=None, only=None):
                       's3': remote, 'local': str(local)}))
 
 
-CREDENTIAL_ENV = ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_PROFILE')
+CREDENTIAL_ENV = ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN')
 
 
 def s3_session_client(profile, region='ap-northeast-2'):
     """S3 client for a named, non-root profile only (MODEL-RESUME-B-028): credentials in the environment are refused
-    (no bypass of the profile), the caller identity is checked with STS and a root identity is refused. HTTPS is
-    boto3's default endpoint. Returns (client, caller ARN)."""
+    (no bypass of the profile), AWS_PROFILE may only name the same profile, the caller identity is checked with STS
+    and a root identity is refused. HTTPS is boto3's default endpoint. Returns (client, caller ARN)."""
     if not profile:
         raise SystemExit('--profile is required (a non-root profile with corpus/* access)')
     if set_env := [k for k in CREDENTIAL_ENV if os.environ.get(k)]:
         raise SystemExit(f'credentials in the environment are not used ({set_env}); unset them and pass --profile')
+    if os.environ.get('AWS_PROFILE') not in (None, '', profile):
+        raise SystemExit(f"AWS_PROFILE={os.environ['AWS_PROFILE']} differs from --profile {profile}")
     import boto3
     session = boto3.Session(profile_name=profile, region_name=region)
     arn = session.client('sts').get_caller_identity()['Arn']
@@ -976,6 +1130,9 @@ def main():
     p.add_argument('--sign-out', type=Path, help='reserved-sign-input --local: output file (never overwritten)')
     p.add_argument('--only-reextracted', action='store_true',
                    help='reserved-sign-input: only text produced by reserved-reextract (a delta manifest input)')
+    p.add_argument('--reextracted-by', help='reserved-sign-input --only-reextracted: only records re-extracted by this --by')
+    p.add_argument('--image-pages', action='store_true',
+                   help='reserved-reextract: OCR large-image pages of the ok PDFs (fill_image_pages) instead')
     p.add_argument('--report', help='reserved-reextract: status-file stem under reports/coordination')
     p.add_argument('--by', default='reextract', help='reserved-reextract: task id recorded on every changed record')
     p.add_argument('--profile', help='reserved-migrate / bucket-check / rules-batch: named non-root AWS profile')
@@ -1049,11 +1206,12 @@ def main():
         if args.action == 'reserved-sign-input':
             if not args.sign_out:
                 p.error('--sign-out is required with --local')
-            return sign_input(store, rid, args.sign_out, 'reextracted' if args.only_reextracted else None)
+            return sign_input(store, rid, args.sign_out, 'reextracted' if args.only_reextracted else None,
+                              args.reextracted_by)
         if args.action == 'reserved-reextract':  # offline: stored bytes only, no client is created
             if not args.report:
                 p.error('--report is required with reserved-reextract')
-            reextract_local(store, rid, metrics, args.report, args.by)
+            reextract_local(store, rid, metrics, args.report, args.by, args.image_pages)
             return 0
         if args.workers != 1 or args.interval < 1.0:
             p.error('--local runs one request at a time with --interval >= 1.0')

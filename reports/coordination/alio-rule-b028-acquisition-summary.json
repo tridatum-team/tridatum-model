@@ -1,0 +1,74 @@
+{
+ "reservation": "alio-rule",
+ "reserved_families": 6990,
+ "families_attempted": 452,
+ "families_pending": 6538,
+ "family_status": {
+  "text_acquired": 448,
+  "partial": 4
+ },
+ "family_status_by_group": {
+  "주거·부동산 | text_acquired": 50,
+  "회계·예산 | text_acquired": 49,
+  "미분류 | text_acquired": 50,
+  "고용·인사 | text_acquired": 50,
+  "공기업 운영·서비스 | text_acquired": 49,
+  "교육·연구 | text_acquired": 50,
+  "보훈·복지 | text_acquired": 50,
+  "보건·안전 | text_acquired": 50,
+  "계약·조달 | text_acquired": 50,
+  "공기업 운영·서비스 | partial": 2,
+  "회계·예산 | partial": 1,
+  "고용·인사 | partial": 1
+ },
+ "licence_status": {
+  "unconfirmed": 452
+ },
+ "files": 2297,
+ "file_kinds": {
+  "hwp": 1448,
+  "pdf": 721,
+  "hwpx": 70,
+  "zip:zip": 57,
+  "ole:xls": 1
+ },
+ "file_download_status": {
+  "ok": 2297
+ },
+ "file_extract_status": {
+  "ok": 2293,
+  "unextractable": 3,
+  "failed": 1
+ },
+ "archive_members": 1038,
+ "archive_member_extract_status": {
+  "ok": 1038
+ },
+ "text_chars": 61348440,
+ "files_mentioning_kogl": 4,
+ "updated_at": "2026-11-02T05:26:15+00:00",
+ "families_acquired_elsewhere": 1000,
+ "budget": {
+  "max_response_bytes": 1073741824,
+  "max_s3_write_bytes": 1073741824,
+  "response_bytes": 835170668,
+  "requests": 2756,
+  "basis": "response_bytes = max(last checkpoint, stored raw bytes); requests from logs/requests-www.alio.go.kr.jsonl"
+ },
+ "run": {
+  "by": "MODEL-RESUME-B-029",
+  "started_at": "2026-11-02T04:21:28+00:00",
+  "finished_at": "2026-11-02T05:24:14+00:00",
+  "done_this_run": 452,
+  "stop": "S3 write budget reached; the stop was raised inside the final checkpoint (metadata rewrites were counted), so this summary was re-published from the stored states by B without any new request"
+ },
+ "metrics": {
+  "requests": 0,
+  "wait_s": 0.0,
+  "response_s": 0.0,
+  "bytes": 0,
+  "parse_s": 0.0,
+  "s3_s": 0.0,
+  "status": {}
+ }
+}

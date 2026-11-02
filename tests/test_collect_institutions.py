@@ -280,6 +280,50 @@ class ReextractTests(unittest.TestCase):
             rows = [json.loads(line) for line in gzip.decompress(out.read_bytes()).decode().splitlines()]
             self.assertEqual([r['doc_id'] for r in rows], ['institutions:alio-rule:7:file:5:member:1'])
 
+    def test_image_pages_replace_only_a_text_layer_thinner_than_the_ocr(self):
+        layer = ['Ⅲ-1 규정\n- 1 -', '제2조(정의) 이 규정에서 쓰는 용어의 뜻은 다음과 같다.', '부 칙']
+        ocr = {1: '제1조(목적) 이 규정은 위원회의 구성과 운영에 필요한 사항을 정한다.', 2: '제2조(정의)'}
+        with mock.patch.object(ci, 'pdf_pages', return_value=(list(layer), [1, 2])), \
+                mock.patch.object(ci, 'ocr_page', side_effect=lambda data, p: ocr[p]):
+            text, candidates, replaced = ci.fill_image_pages(b'%PDF')
+        self.assertEqual((candidates, replaced), ([1, 2], [1]))
+        self.assertIn(ocr[1], text)
+        self.assertIn(layer[1], text)  # a page whose layer already holds the text keeps it
+        self.assertNotIn('Ⅲ-1 규정', text)
+        with mock.patch.object(ci, 'pdf_pages', return_value=(list(layer), [])):
+            self.assertEqual(ci.fill_image_pages(b'%PDF'), (None, [], []))
+        self.assertEqual(ci.strip_image_refs('가\n![image](images/out/image_001.png)\n나'), '가\n\n나')
+
+    def test_image_page_pass_writes_a_new_text_key_and_the_delta_holds_only_that_task(self):
+        import gzip
+        import hashlib
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(ci, 'REPORTS', Path(d)):
+            store = ci.LocalStore(Path(d) / 's', 10 ** 7)
+            sha, key = store.raw('corpus/reserved/r/raw/7/5.pdf', b'%PDF-1.7 stored')
+            store.text('corpus/reserved/r/text/7/5.txt', b'header only')
+            store.text('corpus/reserved/r/text/7/6.txt', b'B-027 text')
+            pdf = {'file_no': '5', 'file_name': 'a.pdf', 'url': 'u5', 'download_status': 'ok', 'raw_key': key,
+                   'raw_sha256': sha, 'kind': 'pdf', 'extract_status': 'ok', 'extractor': 'pdftotext',
+                   'text_key': 'corpus/reserved/r/text/7/5.txt', 'chars': 11}
+            earlier = {'file_no': '6', 'file_name': 'b.hwp', 'url': 'u6', 'download_status': 'ok', 'kind': 'hwp',
+                       'raw_key': 'x', 'raw_sha256': hashlib.sha256(b'').hexdigest(), 'extract_status': 'ok',
+                       'text_key': 'corpus/reserved/r/text/7/6.txt', 'reextract': {'by': 'B-027'}}
+            store.put('corpus/reserved/r/state/7.json', json.dumps(
+                {'doc_family_id': 'institutions:alio-rule:7', 'seq': '7', 'status': 'text_acquired',
+                 'reserved_business_group': 'g', 'licence_status': 'unconfirmed', 'files': [pdf, earlier]}).encode())
+            with mock.patch.object(ci, 'fill_image_pages', return_value=('제1조(목적) 본문', [2, 3], [2])):
+                ci.reextract_local(store, 'r', Metrics(), 'r-test', 'B-030', image_pages=True)
+            rec = json.loads(store.read('corpus/reserved/r/state/7.json'))['files'][0]
+            self.assertEqual(rec['text_key'], 'corpus/reserved/r/text/7/5-ocrpages.txt')
+            self.assertEqual((rec['ocr_pages'], rec['reextract']['previous_text']['text_key']),
+                             ([2], 'corpus/reserved/r/text/7/5.txt'))
+            self.assertEqual(store.read('corpus/reserved/r/text/7/5.txt'), b'header only')  # earlier text kept
+            out = Path(d) / 'delta.jsonl.gz'
+            ci.sign_input(store, 'r', out, 'reextracted', 'B-030')
+            rows = [json.loads(line) for line in gzip.decompress(out.read_bytes()).decode().splitlines()]
+            self.assertEqual([(r['doc_id'], r['text']) for r in rows],
+                             [('institutions:alio-rule:7:file:5', '제1조(목적) 본문')])
+
 
 class FakeS3:
     """put_object with If-None-Match and ChecksumSHA256, head_object with the stored checksum, get_object, listing."""
@@ -357,6 +401,8 @@ class S3MigrationTests(unittest.TestCase):
             ci.s3_session_client('some-profile')
         with self.assertRaises(SystemExit):
             ci.s3_session_client(None)
+        with mock.patch.dict('os.environ', {'AWS_PROFILE': 'default'}), self.assertRaises(SystemExit):
+            ci.s3_session_client('trid-b-corpus')  # AWS_PROFILE may only name the profile passed
 
     def test_root_identity_is_refused(self):
         import types
