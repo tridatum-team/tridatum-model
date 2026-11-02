@@ -1,0 +1,69 @@
+== check at 2026-11-02T04:36:50Z
+{
+ "os-timer": [
+  {
+   "instance_id": "i-0e6945ad10818d1f2",
+   "state": "terminated",
+   "launched": "2026-11-02T04:32:47+00:00",
+   "state_reason_code": "Client.InstanceInitiatedShutdown",
+   "state_transition_reason": "User initiated",
+   "schedule": "exists"
+  }
+ ],
+ "scheduler": [
+  {
+   "instance_id": "i-048546d89da7a64b5",
+   "state": "running",
+   "launched": "2026-11-02T04:32:50+00:00",
+   "state_reason_code": null,
+   "state_transition_reason": "",
+   "schedule": "exists"
+  }
+ ]
+}
+== check at 2026-11-02T04:39:50Z
+{
+ "os-timer": [
+  {
+   "instance_id": "i-0e6945ad10818d1f2",
+   "state": "terminated",
+   "launched": "2026-11-02T04:32:47+00:00",
+   "state_reason_code": "Client.InstanceInitiatedShutdown",
+   "state_transition_reason": "User initiated",
+   "schedule": "exists"
+  }
+ ],
+ "scheduler": [
+  {
+   "instance_id": "i-048546d89da7a64b5",
+   "state": "terminated",
+   "launched": "2026-11-02T04:32:50+00:00",
+   "state_reason_code": "Client.UserInitiatedShutdown",
+   "state_transition_reason": "User initiated (2026-11-02 04:39:15 GMT)",
+   "schedule": "deleted (not found)"
+  }
+ ]
+}
+== check at 2026-11-02T04:48:50Z
+{
+ "os-timer": [
+  {
+   "instance_id": "i-0e6945ad10818d1f2",
+   "state": "terminated",
+   "launched": "2026-11-02T04:32:47+00:00",
+   "state_reason_code": "Client.InstanceInitiatedShutdown",
+   "state_transition_reason": "User initiated",
+   "schedule": "deleted (not found)"
+  }
+ ],
+ "scheduler": [
+  {
+   "instance_id": "i-048546d89da7a64b5",
+   "state": "terminated",
+   "launched": "2026-11-02T04:32:50+00:00",
+   "state_reason_code": "Client.UserInitiatedShutdown",
+   "state_transition_reason": "User initiated (2026-11-02 04:39:15 GMT)",
+   "schedule": "deleted (not found)"
+  }
+ ]
+}

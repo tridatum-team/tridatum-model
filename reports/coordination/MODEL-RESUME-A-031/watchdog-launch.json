@@ -1,0 +1,15 @@
+{
+ "stamp": "20261102T043245Z",
+ "os-timer": {
+  "instance_id": "i-0e6945ad10818d1f2",
+  "launched_utc": "2026-11-02T04:32:47Z",
+  "schedule": "trid-aws-eval-006-i-0e6945ad10818d1f2",
+  "schedule_utc": "2026-11-02T04:47:47Z"
+ },
+ "scheduler": {
+  "instance_id": "i-048546d89da7a64b5",
+  "launched_utc": "2026-11-02T04:32:50Z",
+  "schedule": "trid-aws-eval-006-i-048546d89da7a64b5",
+  "schedule_utc": "2026-11-02T04:38:50Z"
+ }
+}

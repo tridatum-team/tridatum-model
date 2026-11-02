@@ -1,0 +1,20 @@
+{
+ "identity": "arn:aws:iam::148761639313:user/trid-aws-eval-006-operator",
+ "region": "ap-northeast-2",
+ "g_vt_vcpu_quota": 48.0,
+ "running_instance_types": [],
+ "offered_azs": [
+  "ap-northeast-2a",
+  "ap-northeast-2c",
+  "ap-northeast-2d"
+ ],
+ "ami": {
+  "id": "ami-032ead1ff8d54d3f5",
+  "name": "Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) 20261027",
+  "state": "available"
+ },
+ "instance_profile": true,
+ "scheduler_role": true,
+ "security_group": "sg-0e7e5b23c7c152ebc",
+ "cost_gate": "pass"
+}
