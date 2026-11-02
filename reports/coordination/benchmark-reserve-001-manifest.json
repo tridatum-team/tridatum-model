@@ -1,0 +1,35 @@
+{
+  "id": "benchmark-reserve-001",
+  "owner": "supervisor",
+  "status": "provisional_reservation_not_final_test",
+  "selection_seed": "trid-benchmark-reserve-001",
+  "source_inventory": "data/corpus-inventory/inventory-v1/doc-families.jsonl.gz",
+  "source_inventory_sha256": "e59717abf01c7ebfce60985524d1cd88e6cbae9bb27b9d898a64f53bb75ebf2b",
+  "families_file": "reports/coordination/benchmark-reserve-001.jsonl",
+  "families_sha256": "9cf8233b33a790c02be80358c3a94d54ca79af0cea83d6bf5e66c9986ffb9a71",
+  "count": 1000,
+  "business_groups": {
+    "보훈·복지": 125,
+    "주거·부동산": 125,
+    "고용·인사": 125,
+    "계약·조달": 125,
+    "회계·예산": 125,
+    "보건·안전": 125,
+    "교육·연구": 125,
+    "공기업 운영·서비스": 125
+  },
+  "institution_count": 354,
+  "max_documents_per_institution": 5,
+  "source": "ALIO internal regulation catalogue",
+  "original_text_ready": 0,
+  "training_absence_proven": 0,
+  "final_test_eligible": 0,
+  "scope": "All selected family revisions and attachments must be withheld from future training. Existing training contamination remains unknown; check before test eligibility. Retrieval evaluation use is separate from gradient training.",
+  "limitations": [
+    "Only the initial 7990-rule catalogue snapshot; not representative of all public-sector documents.",
+    "Business groups are heuristic classifications needing source review.",
+    "All 1000 are metadata-only entries; original text/licence/prior-training checks pending.",
+    "Do not pass this metadata file to text-signing tools as if it were a text hash manifest.",
+    "No questions or gold answers have been produced."
+  ]
+}

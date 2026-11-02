@@ -29,3 +29,10 @@ deploy/shared-demo/wrangler.json
 reports/*.flag
 reports/*-job.json
 reports/*.tmp
+
+# Local evaluation logs and credentials are not collaboration source.
+.eval-logs/
+.env
+.env.*
+!.env.example
+.dev.vars*
