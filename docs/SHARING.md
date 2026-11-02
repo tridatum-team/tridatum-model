@@ -48,7 +48,11 @@
   - 생성 설정은 Qwen3 비사고 권장 샘플링(temperature 0.7, top_p 0.8, top_k 20, presence_penalty 1.5)이다. 분류와 문서 답변은 그대로 greedy다.
   - 버전별 대화 계약을 검증할 때는 관리자 `versions.json`의 해당 버전에 `chat_system`(문자열), `chat_sampling`(생성 설정 객체)을 지정할 수 있다. 일반 대화와 검색 실패 후 일반 대화 전환 경로가 모두 그 버전의 값을 쓴다. 설정이 없으면 위 기존 계약을 그대로 쓴다.
     - `chat_sampling`은 기존 설정에 일부 키를 합치는 방식이 아니라 해당 객체를 전달한다. temperature/top_p/top_k/min_p/penalty 등 검증한 값을 명시해야 한다.
-    - 첫 턴 안내, history 범위, 숫자 주장 후처리, 기본 384토큰 한도는 그대로다. 일반 설명의 `EXPLAIN_SYSTEM`과 검색·분류 프롬프트도 바꾸지 않는다.
+    - 첫 턴 안내, history 범위, 숫자 주장 후처리는 그대로다. 일반 설명의 `EXPLAIN_SYSTEM`과 검색·분류 프롬프트도 바꾸지 않는다.
+    - 선택 설정 `chat_thinking: true`는 `/v1/chat/completions`와 `enable_thinking`을 사용한다. 파싱된 최종 `message.content`만 사용자에게 전달하고 history에 넣으며, `reasoning_content`는 사용하지 않는다. 최종 답이 없으면 내부 추론으로 대신하지 않고 오류로 처리한다. 생각 모드가 켜져 있어도 모델이 매번 내부 추론을 생성하는 것은 아니다.
+    - `chat_max_tokens`는 일반 대화의 출력 토큰 예산이며 미지정 시 기존 384다. native 모드에서는 내부 추론과 최종 답이 이 예산을 함께 사용한다. `finish_reason: length`는 기존 출력 잘림 안내로 연결한다.
+    - `chat_reasoning_budget`를 지정하면 해당 llama-server에 `--reasoning-budget`를 전달한다. 같은 모델·context라도 이 예산이 다르면 서버를 공유하지 않으므로 다른 port를 지정해야 한다. 모델/template 및 고정 llama.cpp 버전의 지원 여부를 먼저 확인한다.
+    - 위 선택 설정을 생략하면 기존 비사고 `/completion` 경로와 예산을 유지한다. C005 로컬 CPU 실 UI에서 native 설정, 최종 답 표시와 후속 대화 연결, 종료를 확인했지만 문안 품질의 잔여 오류가 있어 운영 승인을 뜻하지 않는다.
     - 전역 `CHAT_SYSTEM`/`CHAT_SAMPLING`을 수정하지 않으므로 다른 버전의 대화 계약을 덮어쓰지 않는다. HTTP 요청에서 이 설정을 받지 않는다.
     - 이는 검증된 계약을 연결하는 기능이지 후보의 운영 합격이나 기본 모델 교체가 아니다. 이번 변경은 배포 versions 파일을 수정하지 않는다.
   - 출력 문자 제한과 반복 재생성은 하지 않는다. 고유명사·번역(일본어·중국어·Café 등)이 그대로 나오고, 모델이 가끔 중국어를 섞거나 직전 답을 되풀이하는 것도 그대로 보인다(모델 한계).

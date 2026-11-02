@@ -439,15 +439,26 @@ def route(base, family, context, history, question, continues=None):
     return 'chat'
 
 
-def chat_complete(base, messages, family, max_tokens, context, sampling=None):
-    """Conversation completion: the native template (Qwen3 without thinking) and version sampling, or CHAT_SAMPLING.
+def chat_complete(base, messages, family, max_tokens, context, sampling=None, thinking=False):
+    """Conversation completion; native chat parsing keeps optional reasoning out of the returned final answer.
     {'generated', 'truncated_output'}; {'skipped_context': True} when the prompt leaves no room for `max_tokens`."""
-    prompt = llama_request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}})['prompt']
-    if family == 'qwen3' and not prompt.endswith(QWEN3_NO_THINK):
+    template_kwargs = {'enable_thinking': thinking}
+    prompt = llama_request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': template_kwargs})['prompt']
+    if family == 'qwen3' and not thinking and not prompt.endswith(QWEN3_NO_THINK):
         raise ValueError('Native Qwen3 no-thinking prefix was not rendered')
     tokens = llama_request(base, '/tokenize', {'content': prompt, 'add_special': True, 'parse_special': True})['tokens']
     if len(tokens) + max_tokens > context:
         return {'skipped_context': True}
+    if thinking:
+        c = llama_request(base, '/v1/chat/completions', dict(
+            model=family, messages=messages, max_tokens=max_tokens, stream=False, cache_prompt=False,
+            chat_template_kwargs=template_kwargs, reasoning_format='deepseek',
+            seed=secrets.randbelow(2 ** 31), **(CHAT_SAMPLING if sampling is None else sampling)))
+        choice = c['choices'][0]
+        final = choice['message'].get('content')
+        if not isinstance(final, str) or not final.strip():
+            raise ValueError('Native chat returned no final answer')
+        return {'generated': final.strip(), 'truncated_output': choice['finish_reason'] == 'length'}
     c = llama_request(base, '/completion', dict(prompt=tokens, n_predict=max_tokens, cache_prompt=False,
                                                  seed=secrets.randbelow(2 ** 31),
                                                  **(CHAT_SAMPLING if sampling is None else sampling)))
@@ -463,7 +474,7 @@ def conversation_turns(history, recall):
 
 
 def chat_reply(base, family, context, history, question, max_tokens=384, explain=False, first_turn=None,
-               system_prompt=None, sampling=None):
+               system_prompt=None, sampling=None, thinking=False):
     """General conversation (or, with `explain`, a general explanation citing no institution) with the model's native
     chat template and the given earlier turns — all of them that fit the context, the oldest dropped first. Not
     grounded: a sentence making a rule claim — a number with a unit in a sentence about rules, rates or entitlements
@@ -476,7 +487,7 @@ def chat_reply(base, family, context, history, question, max_tokens=384, explain
         system += ' 이 대화는 지금 막 시작되어 앞선 내용이 없습니다. 사용자가 앞에서 한 말을 물으면 아직 들은 적이 없다고 답하세요.'
     turns = list(history)
     while True:
-        r = chat_complete(base, _messages(system, turns, question), family, max_tokens, context, sampling)
+        r = chat_complete(base, _messages(system, turns, question), family, max_tokens, context, sampling, thinking)
         if not r.get('skipped_context') or not turns:
             break
         turns = turns[2:]
@@ -2003,7 +2014,7 @@ class State:
                     model, tok, device = load_reader(ROOT / meta['run'], device='cpu')
                     self.versions[meta['id']] = dict(meta, model=model, tok=tok, device=device)
                 elif meta['kind'] == 'llama':
-                    key = (meta['model_file'], meta['llama_server'], meta['context'])
+                    key = (meta['model_file'], meta['llama_server'], meta['context'], meta.get('chat_reasoning_budget', -1))
                     if key not in servers:
                         servers[key] = self.start_llama(meta)
                     self.versions[meta['id']] = dict(meta, **servers[key])
@@ -2031,10 +2042,12 @@ class State:
             pass
         runtime = Path(os.environ.get('TRID_DEMO_RUNTIME', ROOT / '.shared-demo'))  # an isolated instance logs apart
         log = open(runtime / f"llama-{meta['id']}.log", 'wb') if runtime.is_dir() else subprocess.DEVNULL
-        child = subprocess.Popen([str(ROOT / meta['llama_server']), '-m', str(model_file), '--host', '127.0.0.1', '--port', str(port),
-                                  '-c', str(meta['context']), '-np', '1', '-t', str(meta.get('threads', 4)),
-                                  '-tb', str(meta.get('threads', 4)), '--jinja'],
-                                 stdout=log, stderr=log)
+        command = [str(ROOT / meta['llama_server']), '-m', str(model_file), '--host', '127.0.0.1', '--port', str(port),
+                   '-c', str(meta['context']), '-np', '1', '-t', str(meta.get('threads', 4)),
+                   '-tb', str(meta.get('threads', 4)), '--jinja']
+        if 'chat_reasoning_budget' in meta:
+            command += ['--reasoning-budget', str(meta['chat_reasoning_budget'])]
+        child = subprocess.Popen(command, stdout=log, stderr=log)
         self.children.append(child)
         base = f'http://127.0.0.1:{port}'
         for _ in range(240):
@@ -2343,8 +2356,9 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                         elif intent == 'chat':
                             result = chat_reply(version['base'], version['family'], version['context'],
                                                 conversation_turns(history, kind == 'recall'), question, explain=explain,
+                                                max_tokens=version.get('chat_max_tokens', 384),
                                                 first_turn=not history, system_prompt=version.get('chat_system'),
-                                                sampling=version.get('chat_sampling'))
+                                                sampling=version.get('chat_sampling'), thinking=version.get('chat_thinking', False))
                         elif workspace_mode and ((kind == 'statistic' and not (inst_ws and not inst_ws.facts
                                                                                and not COMPUTED.search(question)))
                                                  or (inst_ws and inst_ws.facts and '업무추진비' in question)):
@@ -2377,8 +2391,9 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                 intent, selection, others = 'chat', None, []
                                 result = chat_reply(version['base'], version['family'], version['context'],
                                                     conversation_turns(history, False), question, first_turn=not history,
+                                                    max_tokens=version.get('chat_max_tokens', 384),
                                                     system_prompt=version.get('chat_system'),
-                                                    sampling=version.get('chat_sampling'))
+                                                    sampling=version.get('chat_sampling'), thinking=version.get('chat_thinking', False))
                                 result['scope'] = ('업무 자료에서 맞는 근거를 찾지 못했고 업무 기준을 묻는 말로 보이지 않아 일반 대화로 '
                                                    '답했습니다. ' + result['scope'])
                             elif selection and selection['status'] != 'answer':

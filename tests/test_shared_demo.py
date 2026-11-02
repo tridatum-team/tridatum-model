@@ -187,6 +187,35 @@ class ChatBackendTests(unittest.TestCase):
             result = answer_document_case(document, '상한은?', 'http://127.0.0.1:1', 'qwen3', 4096)
         self.assertNotIn('100만원', result['commentary'] or '')
 
+    def test_native_chat_never_exposes_reasoning_and_reports_final_truncation(self):
+        from scripts.shared_demo import chat_reply
+        for finish, truncated in (('stop', False), ('length', True)):
+            with self.subTest(finish=finish):
+                responses = [
+                    {'prompt': 'rendered'}, {'tokens': [1, 2]},
+                    {'choices': [{'message': {'content': '자료 확인 후 연락드리겠습니다.',
+                                              'reasoning_content': 'PRIVATE_REASONING_SENTINEL'},
+                                  'finish_reason': finish}]},
+                ]
+                with patch('scripts.shared_demo.llama_request', side_effect=responses):
+                    result = chat_reply('http://127.0.0.1:1', 'gemma4', 4096, [], '문안을 다듬어 주세요.',
+                                        max_tokens=768, thinking=True)
+                self.assertNotIn('PRIVATE_REASONING_SENTINEL', json.dumps(result))
+                self.assertEqual(any('잘렸습니다' in note for note in result['commentary_notes']), truncated)
+
+    def test_native_chat_does_not_use_reasoning_as_a_missing_final_answer(self):
+        from scripts.shared_demo import chat_reply
+        responses = [
+            {'prompt': 'rendered'}, {'tokens': [1, 2]},
+            {'choices': [{'message': {'content': None, 'reasoning_content': 'PRIVATE_REASONING_SENTINEL'},
+                          'finish_reason': 'length'}]},
+        ]
+        with patch('scripts.shared_demo.llama_request', side_effect=responses):
+            with self.assertRaises(ValueError) as raised:
+                chat_reply('http://127.0.0.1:1', 'gemma4', 4096, [], '문안을 다듬어 주세요.',
+                           max_tokens=768, thinking=True)
+        self.assertNotIn('PRIVATE_REASONING_SENTINEL', str(raised.exception))
+
     def test_chat_reply_withholds_unsourced_rule_facts(self):
         from scripts.shared_demo import chat_reply
         with patch('scripts.shared_demo.chat_complete', return_value={'generated': '안녕하세요. 출장 식비는 하루 3만 원입니다.\n무엇을 도와드릴까요?'}):
