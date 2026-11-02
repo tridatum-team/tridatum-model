@@ -36,7 +36,7 @@
       "semantic_source_fidelity": "pass",
       "naturalness": "pass",
       "reference_use": "approved_development_reference",
-      "note": null
+      "note": "D03 원문은 '다음 사실' 뒤에 부정 설명도 포함한다. 이를 포함했다는 이유만으로 근거 없는 추가나 의미 오류로 판정하지 않는다. 접수 완료 보존·가능 여부 질문으로 변경하지 않기·요청 형식·자연스러움을 판단하며 Astra 문장과의 동일성을 요구하지 않는다."
     },
     {
       "id": "D04",

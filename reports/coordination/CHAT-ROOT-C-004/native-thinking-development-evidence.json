@@ -1,0 +1,548 @@
+{
+  "status": "Completed native integration and bounded development iterations; production NOT approved",
+  "code": {
+    "branch": "chat-native-reasoning-005",
+    "commit": "8844708",
+    "parent": "78d4c3b",
+    "production_versions_changed": false
+  },
+  "tests": {
+    "focused_behavior_tests_passed": 7,
+    "new_reasoning_isolation_tests": 2,
+    "existing_regression_tests": 5,
+    "full_suite_not_run": true
+  },
+  "reference": {
+    "path": "reports/coordination/ASTRA-REFERENCE-001/development-cases.json",
+    "teacher_provenance": "Requested and returned codex/gpt-6-astra, HTTP200, checked against stored teacher responses in prior C004 review",
+    "accepted_ids": [
+      "D01",
+      "D02",
+      "D03",
+      "D04",
+      "D06",
+      "D07",
+      "D08",
+      "D09",
+      "D10",
+      "D11",
+      "D12",
+      "D13",
+      "D15",
+      "D16",
+      "D17",
+      "D18",
+      "D19",
+      "D20"
+    ],
+    "style_hold": [
+      "D05",
+      "D14"
+    ],
+    "reference_conditioned_on_invariants": true,
+    "not_independent_benchmark": true,
+    "training_approved": false
+  },
+  "frozen_combined_candidate": {
+    "profile": "native-integrated-profile.json",
+    "new_generations_for_18": 16,
+    "reused_generations": 2,
+    "all_three_axes_pass": 10,
+    "semantic_pass_after_C_adjudication": 13,
+    "material_issues_not_official_severe_gate_count": 3,
+    "adjudication_correction": "D03 explicitly supplies the negative clarification after 'the following facts'. Including it is not by itself unsupported content. Semantic partial becomes pass; naturalness remains partial. This is an evidence-only grading correction, not a new generation or model-quality improvement; all-three-axes pass stays 10.",
+    "case_grades": [
+      {
+        "id": "D01",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D02",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D03",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "partial",
+        "severity": "minor"
+      },
+      {
+        "id": "D04",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D06",
+        "semantic": "partial",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "material"
+      },
+      {
+        "id": "D07",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D08",
+        "semantic": "partial",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "minor"
+      },
+      {
+        "id": "D09",
+        "semantic": "partial",
+        "format": "partial",
+        "naturalness": "pass",
+        "severity": "minor"
+      },
+      {
+        "id": "D10",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D11",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "partial",
+        "severity": "minor"
+      },
+      {
+        "id": "D12",
+        "semantic": "partial",
+        "format": "fail",
+        "naturalness": "partial",
+        "severity": "material"
+      },
+      {
+        "id": "D13",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D15",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D16",
+        "semantic": "pass",
+        "format": "partial",
+        "naturalness": "pass",
+        "severity": "minor",
+        "adjudication": "Softened refusal is requested and still a refusal; no acceptance or performance promise. Excess preface/options remain format partial, not factual reversal."
+      },
+      {
+        "id": "D17",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D18",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D19",
+        "semantic": "pass",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "none"
+      },
+      {
+        "id": "D20",
+        "semantic": "partial",
+        "format": "pass",
+        "naturalness": "pass",
+        "severity": "material"
+      }
+    ],
+    "review_identity": "Separate masked completion(default), resolved model ID unavailable; C adjudication keeps polite refusal semantically valid",
+    "production_gate": "not evaluated or passed by these development samples"
+  },
+  "best_observed_generic_contract": {
+    "profile_file": "writing-contract-candidate.json",
+    "source": "rewrite-contract-profile.json",
+    "four_case_result": {
+      "D03": "pass",
+      "D06": "pass",
+      "D12": "pass",
+      "D20": "partial: unsupported future notice and responsibility-to-channel shift"
+    },
+    "remaining_fourteen_not_run": "Four-of-four prerequisite failed; no expansion or criterion relaxation",
+    "real_ui_turns": 2,
+    "scope_limit": "Fixed-seed subset and two random-seed UI turns; no general improvement statistic"
+  },
+  "rejected_mechanisms": {
+    "append_only_contract": "Actor reversal became omission in one case; target scope still omitted",
+    "greedy_original_contract": "Two selected examples still incomplete; conditional four controls not run",
+    "generic_editorial_pass": "Expanded D03 wording is not automatically a semantic regression because the negative clarification is in the supplied source. Unsupported D20 future notice remains; not adopted.",
+    "structured_self_review": "Unnecessary D06 revision and missed unsupported D20 future plan; D03 is source-interpretation-sensitive rather than decisive proof of unsupported content. Zero directed corrections, no service code added.",
+    "corrected_contract_greedy": {
+      "D03": "pass",
+      "D06": "partial: institution changed to company-style designation; actor/action retained",
+      "D12": "pass",
+      "D20": "partial: unsupported future announcement persists",
+      "adopt": false,
+      "why": "Deterministic decoding does not remove unsupported commitment; do not weaken acceptance or expand conditional fourteen-case run."
+    },
+    "explicit_unknown_state_clause": "D06 actor/action drift and D20 unsupported future notice persist; not adopted. D03 clarification inclusion alone is not a semantic regression.",
+    "structured_source_parser": {
+      "completed_parse_calls": 10,
+      "conditions": "Same five inputs, parser instructions and schema; saved nonthinking baseline reused. Native-thinking arm also increases total allowance for reasoning.",
+      "thinking_observed_in_all_five_new_calls": true,
+      "outcome": "Thinking restores D20 explicit unknown. D03 includes a negative clarification explicitly supplied in the source; its inclusion alone does not establish semantic failure. D06 bypasses source treatment. Arithmetic correctly bypasses source constraints.",
+      "initial_generation_calls": 0,
+      "service_integration": false,
+      "limit": "Internal classification alone does not prove final-answer regression. D03 source re-reading corrects the overstrong initial rejection rationale; the frozen plan still requires actual consumer-output verification. Unused fields on open-response paths alone are not consumer regression evidence."
+    },
+    "reasoning_budget_audit": {
+      "source": "/private/tmp/chat-root-c-005/rewrite-contract-results.json",
+      "D20_completion_tokens": 23,
+      "D20_reasoning_present": false,
+      "D20_stop": "stop",
+      "larger_budget_experiment_runs": 0,
+      "decision": "Do not attribute this failure to the 384-token reasoning cap or rerun it with a larger cap: the saved response did not consume that allowance."
+    }
+  },
+  "original_model_native_mode": {
+    "model_sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+    "cases": [
+      "D06",
+      "D20"
+    ],
+    "modes": [
+      false,
+      true
+    ],
+    "shared_conditions": [
+      "identical existing original Qwen3 Q8 weights",
+      "same native endpoint and renderer",
+      "same corrected generic system and source/history",
+      "same sampling/seed/total-token-budget/reasoning-cap",
+      "only enable_thinking changes within paired arms"
+    ],
+    "outcome": {
+      "no_thinking": {
+        "D06": "Not ready: preface and two draft sentences instead of requested one; indirect third-person request",
+        "D20": "Not ready: responsible department omitted"
+      },
+      "thinking": {
+        "D06": "Not ready: preface and unnatural indirect formulation; role/action phrase awkward",
+        "D20": "Not ready: responsible department rendered in English rather than requested Korean notice"
+      },
+      "causal_limit": "Matched two-case native comparison controls weights/system/history/sampling/seed/total budget/API; thinking switch alone did not yield accepted drafts here. Not proof of model-size, training-volume, weights-only, or runtime/quantization cause.",
+      "reasoning_text_persisted": false
+    }
+  },
+  "alternative_existing_model": {
+    "model": "Qwen2.5 7B Instruct",
+    "sha256": "2bada8a7450677000f678be90653b85d364de7db25eb5ea54136ada5f3933730",
+    "public_manifest": "https://registry.ollama.ai/v2/library/qwen2.5/manifests/7b",
+    "manifest_digest_matches_existing_file": true,
+    "embedded_license": "apache-2.0",
+    "initial_startup_attempts": 3,
+    "configurations": [
+      "4096/default batch with service imports",
+      "2048/batch128 with service imports",
+      "2048/batch128 stdlib native driver without torch/reader imports"
+    ],
+    "initial_inference_requests": 0,
+    "initial_outcome": "Each moved pressure from normal1 to warning2 before first request; each owned server stopped and port freed. No quality inference from those starts; guard not relaxed.",
+    "no_repack_followup": {
+      "context": 2048,
+      "batch": 128,
+      "driver": "stdlib only",
+      "flag": "--no-repack",
+      "greedy_model_rss_kib_after_load": 4821760,
+      "completed_answer_calls": 8,
+      "conditions": ["saved greedy profile, four public cases", "published sampling values translated to llama.cpp, same four cases"],
+      "published_configuration_source": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/raw/a09a35458c702b33eeacc393d103063234e8bc28/generation_config.json",
+      "published_sampling": "temperature .7, top_p .8, top_k 20, repeat penalty 1.05; full-context repetition window; penalties/temperature/top_k/top_p order",
+      "runtime_sampling_checked": true,
+      "setup_only_abort": "Exact JSON float equality rejected correctly configured float32 values before inference; retained separately, tolerance corrected. Zero model calls in the aborted setup.",
+      "pressure_before_and_after": 1,
+      "ports_free_after": true,
+      "quality": {
+        "D03": "Accepted in both configurations",
+        "D06": "Greedy has actor/direction and requested-format errors; published settings omit the supplementing actor and wrap the draft in meta commentary",
+        "D12": "Condition and one-sentence form preserved; awkward Korean connective remains",
+        "D20": "Both formulations make the already-known responsible department appear undecided together with the deadline"
+      },
+      "remaining_fourteen_run": false,
+      "decision": "Memory-safe standalone execution achieved, quality prerequisite failed. No production adoption.",
+      "limits": "Host load is not controlled; no-repack is a demonstrated feasible configuration, not proof of the sole memory cause. Published values are not an original-HF runtime comparison. No model-size or quantization causal claim."
+    }
+  },
+  "original_precision_comparison": {
+    "original_hf_directory": "runs/open-weight-base/qwen3-1.7b-hf-rev70d244cc",
+    "matching_source_gguf_sha256": "f2ba848c65c2e135495656fc91774b82a10d1f9267671609fad54684c9db1c38",
+    "conversion_provenance_reused": "MODEL-REPAIR-002.md lines40-44; original/local-conversion tensor equivalence was not rerun",
+    "hf_runtime": "torch2.14.1, transformers5.21.0, CPU bfloat16, SDPA, four threads",
+    "hf_missing_unexpected_mismatched_or_error_keys": 0,
+    "systems": ["minimal Korean helper", "corrected service contract including its normal first-turn notice"],
+    "public_references": ["D06", "D20"],
+    "shared_generation_conditions": "nonthinking, greedy, no repetition/presence/frequency penalty, 384-token allowance, same HF-rendered token IDs within each pair",
+    "completed_generations": 8,
+    "matched_input_pairs": 4,
+    "byte_identical_final_pairs": 3,
+    "all_eos": true,
+    "quality": {
+      "minimal_D06": "Both omit the stated supplementing actor and use an indirect request; omission alone is not a contradictory actor assignment",
+      "minimal_D20": "Finance and undecided deadline appear, but responsible-department role is not clearly conveyed; partial preservation",
+      "service_D06": "Actors/actions retained but meta framing remains; Q8 also produces two draft sentences",
+      "service_D20": "Both omit responsible department while retaining undecided deadline"
+    },
+    "inference": "These observed omissions/format failures do not require GGUF or the service wrapper. One paired output differs, so this is not a claim that runtime/quantization never matter.",
+    "limits": "Two public references; nonthinking/greedy shared. Precision and runtime vary together. Not an attribution of the original operational mail failure or of model-size/training-volume limitations.",
+    "setup_only_failures": [
+      "device_map required optional accelerate: zero generation; used default CPU loader and asserted actual device without installation",
+      "set-valued loader diagnostics were not JSON serializable: zero generation; normalized diagnostic sets"
+    ],
+    "pressure_before_and_after": 1,
+    "ports_free_after": true
+  },
+  "original_precision_sampled_modes": {
+    "completed_hf_calls": 4,
+    "minimal_input_only": true,
+    "thinking_modes": [false, true],
+    "shared_sampling": "temperature .6, top_p .95, top_k20, min_p0, repeat1, fixed seed1729 per request",
+    "max_new_tokens_both_modes": 2048,
+    "all_eos": true,
+    "thinking_observed_in_both_enabled_calls": true,
+    "same_final_in_each_mode_pair": true,
+    "selected_mode": null,
+    "conditional_gguf_calls": 0,
+    "outcome": "Neither mode resolves the two references' actor/ready-to-send-body and responsible-department clarity issues. Conditional native validation was not run.",
+    "limits": "One seed and two development references. Shared sampling follows thinking guidance, not a claim of nonthinking-optimal settings. Does not establish an intrinsic model-size or training-volume cause.",
+    "reasoning_text_persisted": false,
+    "pressure_before_and_after": 1
+  },
+  "actual_ui": [
+    {
+      "artifact_directory": "/private/tmp/chat-root-c-005/http-ui",
+      "native_answer_calls_observed": 2,
+      "completed_server_generation_tasks": 4,
+      "additional_routing_tasks": 2,
+      "http_statuses": [
+        200,
+        200
+      ],
+      "reasoning_leaked": false,
+      "reasoning_in_server_log": false,
+      "ports_free_after": true,
+      "model_exit_codes": [
+        0
+      ],
+      "pressure_before": 1,
+      "pressure_after": 1,
+      "tls_key_removed": true,
+      "seed_policy": "Unmodified random seeds; recorded in temporary evidence",
+      "scope": "Actual document-mode general chat; shared corpus not loaded",
+      "quality": "partial roles/format"
+    },
+    {
+      "artifact_directory": "/private/tmp/chat-root-c-005/http-ui-corrected",
+      "native_answer_calls_observed": 2,
+      "completed_server_generation_tasks": 4,
+      "additional_routing_tasks": 2,
+      "http_statuses": [
+        200,
+        200
+      ],
+      "reasoning_leaked": false,
+      "reasoning_in_server_log": false,
+      "ports_free_after": true,
+      "model_exit_codes": [
+        0
+      ],
+      "pressure_before": 1,
+      "pressure_after": 1,
+      "tls_key_removed": true,
+      "seed_policy": "Unmodified random seeds; recorded in temporary evidence",
+      "scope": "Actual document-mode general chat; shared corpus not loaded",
+      "quality": "Both observed UI turns preserve requested actor/action and one-to-two-sentence format; known D20 blocker not waived"
+    }
+  ],
+  "source_plan_consumer_probe": {
+    "kind": "Actual consumer execution after correcting D03 source interpretation, not an internal-schema-only judgment",
+    "saved_parser_output_reused": true,
+    "manual_contract_edits": 0,
+    "new_generation_calls": 4,
+    "unchanged_D06_bypass_rerun": false,
+    "results": {
+      "D03": "Partial: includes supported negative clarification, but weakens it to an interpretation and answers about the request rather than a clean notice. Inclusion itself is not the error.",
+      "D12": "Pass: online rule, outage-only email exception and one-sentence format retained",
+      "D20": "Partial: unsupported future announcement removed, but responsibility is replaced by a new inquiry-channel instruction",
+      "existing-arithmetic-control": "Pass: 8 plus 2 becomes 10만원 with source constraints bypassed"
+    },
+    "accepted": false,
+    "service_integration": false,
+    "all_finish_reason_stop": true,
+    "pressure_before_and_after": 1,
+    "port_freed": true,
+    "temporary_evidence": "/private/tmp/chat-root-c-005/task-consumer-probe-generate-results.json"
+  },
+  "source_checker_thinking": {
+    "completed_checks": 4,
+    "reasoning_present_in_all_four": true,
+    "D20": "False negative: passes a draft containing an unsupported future announcement",
+    "D03": "Revision request depends on source interpretation; not used as decisive unsupported-content evidence",
+    "automatic_corrections": 0,
+    "accepted": false,
+    "no_repack": true,
+    "batch_size": 128,
+    "pressure_after": 1,
+    "port_freed": true,
+    "temporary_evidence": "/private/tmp/chat-root-c-005/source-review-thinking-lowmem-parse-results.json"
+  },
+  "concise_contract_existing_models": {
+    "system_reused_without_case_specific_rules": true,
+    "original_model_calls": 4,
+    "gemma_calls": 4,
+    "original_model_blocker": "D20 omits the known responsible department",
+    "gemma_blocker": "Offers multiple alternatives/explanation instead of requested final form; unsupported future handling remains",
+    "accepted": false,
+    "temporary_evidence": [
+      "/private/tmp/chat-root-c-005/lean-positive-results.json",
+      "/private/tmp/chat-root-c-005/lean-gemma-results.json"
+    ]
+  },
+  "existing_korean_candidate_protocol": {
+    "model_file": "runs/open-weight-lora-kanana-01/open-weight-lora-kanana-01.q8_0.gguf",
+    "model_sha256": "82779b84ea7eab86579c13e8a3c7ec962b69fac8be014d9fa7eca2ea7adbf31e",
+    "base_model": "kakaocorp/kanana-1.5-2.1b-instruct-2505",
+    "base_revision": "7df4bc35ccd610e451809d7106e1c3cf82bfd44c",
+    "lineage": "Already-existing 250-step LoRA grounded-QA artifact, not an untouched base; no new training",
+    "initial_native_calls": 4,
+    "initial_control_marker_leak": "All four native final answers include <|eot_id|>",
+    "semantic_blocker_independent_of_marker": "D06 keeps the internal supplementing actor but directs item guidance toward the vendor rather than requesting it from the vendor",
+    "metadata": {
+      "architecture": "llama",
+      "tokenizer_pre": "llama-bpe",
+      "bos_token_id": 128000,
+      "eos_token_id": 128009,
+      "eos_token_type": "CONTROL",
+      "template_sha256": "42745fb34df3e367eb6ba9e11e18475bef40f4f51270484a5cab7a42db6e6ebc"
+    },
+    "provenance_correction": "Initial temporary plan retained unused Qwen family/metadata/manifest and memory-comparison prose from its parent plan. Those fields are invalid for this model and are not provenance evidence. Actual model path, SHA, server log, GGUF header and Korean-base training metadata identify this artifact. The runner did not consume the stale family/manifest fields.",
+    "forced_eos_probe": {
+      "generated_token_ids": [128009],
+      "native_final": "<|eot_id|>",
+      "finish_reason": "stop",
+      "stop_type": "eos",
+      "chat_format": "peg-native",
+      "eos_in_preserved_tokens": true
+    },
+    "actual_service_probe": {
+      "function": "chat_reply(thinking=False)",
+      "endpoint": "/completion",
+      "case": "D03",
+      "input_tokens": 649,
+      "generated_tokens": 11,
+      "last_generated_token": 128009,
+      "stop_type": "eos",
+      "raw_and_displayed_final_have_no_control_marker": true,
+      "posthoc_control_string_removal": false
+    },
+    "conclusion": "Leak isolated to the tested native response boundary, not an incorrect EOS ID or ordinary-token spelling of the marker. The existing actual nonthinking service path handles the boundary correctly. Exact internal PEG branch is not claimed as traced.",
+    "weights_or_metadata_modified": false,
+    "production_changes": false,
+    "pressure_after": 1,
+    "port_freed": true,
+    "temporary_evidence": "/private/tmp/chat-root-c-005/kanana-boundary-results.json"
+  },
+  "concise_contract_existing_korean_candidate": {
+    "calls": 4,
+    "actual_service": "chat_reply(thinking=False)",
+    "blockers": {
+      "D03": "Two sentences and an unsupported no-need-to-reconfirm instruction",
+      "D06": "Omits the supplementing actor",
+      "D12": "Changes the online application rule into review",
+      "D20": "Labels instead of the requested completed sentence"
+    },
+    "accepted": false,
+    "pressure_after": 1,
+    "port_freed": true,
+    "temporary_evidence": "/private/tmp/chat-root-c-005/kanana-concise-results.json"
+  },
+  "disjoint_actual_teacher_examples": {
+    "teacher": "codex/gpt-6-astra",
+    "teacher_source": "reports/coordination/ASTRA-REFERENCE-001/teacher-responses.json",
+    "example_ids": ["D01", "D08", "D10", "D17"],
+    "screen_ids": ["D03", "D06", "D12", "D20"],
+    "examples_excluded_from_scoring": true,
+    "target_references_or_invariants_supplied": false,
+    "training": false,
+    "shared_system": "Existing corrected writing contract plus four actual teacher demonstrations explicitly separated from current history and facts",
+    "calls_per_existing_model": 4,
+    "existing_korean_candidate": "Rejected: added no-need instruction, changes supplementing responsibility into a request to confirm the actor, labels rather than sentence",
+    "original_qwen": "Rejected: D06 changes action/direction and narrates rather than drafting a recipient-ready request; D20 adds a checking instruction and obscures responsibility",
+    "gemma": "Rejected: D03 adds a no-need instruction; D20 still invents a future announcement",
+    "remaining_ten_transfer_cases_run": 0,
+    "eighteen_case_or_independent_score_claimed": false,
+    "all_pressure_after": 1,
+    "all_ports_freed": true,
+    "accepted": false,
+    "temporary_evidence": [
+      "/private/tmp/chat-root-c-005/kanana-teacher-examples-results.json",
+      "/private/tmp/chat-root-c-005/qwen-teacher-examples-results.json",
+      "/private/tmp/chat-root-c-005/gemma-teacher-examples-results.json"
+    ]
+  },
+  "official_korean_base_acquisition": {
+    "source": "kakaocorp/kanana-1.5-2.1b-instruct-2505",
+    "revision": "7df4bc35ccd610e451809d7106e1c3cf82bfd44c",
+    "license": "Apache-2.0",
+    "weight_sha256": "9a9d12e01656388e49114191ab235b8bec3b2214264341732798c698f0dd039f",
+    "official_weight_and_tokenizer_hashes_verified": true,
+    "downloaded_bytes": 4650978030,
+    "training": false,
+    "production_use": false,
+    "quality_status": "Acquisition only; no quality conclusion yet"
+  },
+  "limits": {
+    "private_questions_gold_mappings_accessed": false,
+    "old_institution_scope_termination_suite_rerun": false,
+    "known_short_F4_rerun": false,
+    "old_public20_tuning": false,
+    "new_model_downloads": 1,
+    "training_runs": 0,
+    "new_paid_instances": 0,
+    "operating_mini_access": 0,
+    "production_deployment": false,
+    "permanent_service_logs_added": false,
+    "model_reasoning_text_persisted": false,
+    "raw_target_finals": "Temporary evaluation artifacts only",
+    "no_weights_size_or_training_volume_cause_claim": true
+  },
+  "execution_notes": [
+    "Initial paired run interrupted after saved first baseline; completed saved outputs reused, arms resumed on fresh servers. Interrupted attempt not treated as model-quality evidence.",
+    "Early native collector withheld one completed final because reasoning_content was absent; treated as unobserved, not a model failure, and not rerun for logging. Collector corrected for later distinct cases.",
+    "UI wrapper observes native calls only; imported routing helper bypasses it. Four total completed server tasks per two-turn UI run were reconciled from existing logs, with no rerun.",
+    "Read-only reviewer subagent unavailable: provider429. No claim that it reviewed code."
+  ]
+}
