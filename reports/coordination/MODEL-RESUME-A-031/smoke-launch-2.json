@@ -1,0 +1,16 @@
+{
+ "run_id": "aws-eval-006-smoke-20261102T050819Z",
+ "mode": "smoke",
+ "max_minutes": 60,
+ "instance_type": "g6.2xlarge",
+ "ami": "ami-032ead1ff8d54d3f5",
+ "code_key": "eval/aws-eval-006/code/aws-eval-006-smoke-20261102T050819Z/code.tar.gz",
+ "code_sha256": "704008a5c24fcb3f3bf821bff14240b0a58c1be1c4c82e3b10793460220fd47b",
+ "llama_commit": "8ca4060b7e30e76baaa5670ee1ec1b760b7f8552",
+ "dry_run": false,
+ "instance_id": "i-008eccd96cec002ff",
+ "subnet": "subnet-025ee7d30ecf0228c",
+ "launched_utc": "2026-11-02T05:08:23Z",
+ "hard_stop_utc": "2026-11-02T06:18:23Z",
+ "gpu_minutes_reserved_total": 89
+}

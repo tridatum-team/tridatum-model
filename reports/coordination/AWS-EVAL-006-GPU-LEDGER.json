@@ -15,6 +15,18 @@
    "failed_phase_utc": "2026-11-02T05:01:21Z",
    "terminated_observed_utc": "2026-11-02T05:08:04Z",
    "settlement": "launch 04:49:01Z to terminated observed 05:08:04Z, rounded up (billing ends at shutting-down ~05:01:30Z; this over-counts on purpose)"
+  },
+  {
+   "attempt": "aws-eval-006-smoke-20261102T050819Z@subnet-025ee7d30ecf0228c",
+   "run_id": "aws-eval-006-smoke-20261102T050819Z",
+   "mode": "smoke",
+   "max_minutes": 60,
+   "reserved_minutes": 70,
+   "reserved_utc": "2026-11-02T05:08:21Z",
+   "state": "launched; hard stop scheduled",
+   "instance_id": "i-008eccd96cec002ff",
+   "launched_utc": "2026-11-02T05:08:23Z",
+   "hard_stop_utc": "2026-11-02T06:18:23Z"
   }
  ]
 }
