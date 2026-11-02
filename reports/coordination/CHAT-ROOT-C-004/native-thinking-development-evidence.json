@@ -761,11 +761,80 @@
       "first_three_screens_all_eos_and_rendered_suffix_match": true,
       "existing_four_example_contract": "Four disjoint diagnostic calls; D03 still violates the one-sentence request",
       "demonstrations_excluded": ["D01", "D08", "D10", "D17"],
-      "remaining_transfer_cases_not_run": true,
+      "nonpassing_screens_promoted": false,
+      "corrected_contract_later_expanded_for_diagnosis_only": true,
       "all_observed_pressure_after": 1,
       "all_ports_freed": true,
       "accepted": false
     }
+  },
+  "one_pass_structured_final_diagnostics": {
+    "shape": "One generated object containing an untrusted given_content summary and answer; only answer enters the actual chat_reply guards",
+    "permanent_chat_completion_code_changed": false,
+    "boundary_scope": "Temporary prototype completion boundary only; not integrated into the permanent service",
+    "qwen35_9b": {
+      "calls": 5,
+      "endpoint": "/v1/chat/completions",
+      "thinking": false,
+      "blockers": "D06 still omits the supplementation role; D20 turns the notice into an awkward application condition",
+      "temporary_evidence": "/private/tmp/chat-root-c-005/qwen35-9b-structured-final-results.json"
+    },
+    "kanana8": {
+      "calls": 5,
+      "endpoint": "/completion with pinned documented json_schema support",
+      "thinking": false,
+      "blocker": "D03 still violates the one-sentence request",
+      "temporary_evidence": "/private/tmp/chat-root-c-005/kanana8-structured-final-results.json"
+    },
+    "all_observed_pressure_after": 1,
+    "all_ports_freed": true,
+    "hidden_reasoning_persisted": false,
+    "accepted": false,
+    "prototype_code_removed": true
+  },
+  "full_reference_diagnostic_expansion": {
+    "purpose": "Measure complete quality patterns instead of repeatedly tuning four cases. Explicit diagnostic expansion despite known failed gates; no release promotion or criterion waiver.",
+    "per_candidate": "Reuse original four saved outputs and generate only the other14 usable actual-Astra-reference cases with the identical profile; no examples and no target-reference injection",
+    "denominator": 18,
+    "held_reference_ids": ["D05", "D14"],
+    "kanana8_corrected": {
+      "semantic_pass": 14,
+      "naturalness_pass": 15,
+      "usable_form_pass": 7,
+      "all_three_pass": 7,
+      "material_failures": "Added checking/delegation in D06; recipient ambiguity in D08; consent prohibition weakened to consultation in D11; email exception narrowed in D12",
+      "temporary_review": "/private/tmp/chat-root-c-005/kanana8-full-reference-secondary-review.json"
+    },
+    "qwen35_9b_corrected": {
+      "semantic_pass": 15,
+      "naturalness_pass": 17,
+      "usable_form_pass": 16,
+      "all_three_pass": 13,
+      "residual_ids": ["D04", "D06", "D08", "D10", "D15"],
+      "parent_adjudications": "D02 receipt-only request need not repeat the negative intent clarification; D13 harmless date spacing is not a material form failure. Secondary judgments preserved, no output rewritten.",
+      "temporary_review": "/private/tmp/chat-root-c-005/qwen35-9b-full-reference-parent-review.json"
+    },
+    "secondary_review_provenance": "Stateless default alias, actual reviewer identity unverified; comparison uses the existing actual Astra references, not newly claimed Astra calls or an independent release evaluation",
+    "all_observed_pressure_after": 1,
+    "all_ports_freed": true,
+    "release_approved": false
+  },
+  "per_version_memory_settings": {
+    "code_branch": "chat-native-reasoning-005",
+    "code_commit": "2478b0d",
+    "fields": ["no_repack", "batch_size", "ubatch_size"],
+    "behavior": "Only supplied launch flags are added; backend sharing includes these settings; existing deployment versions untouched",
+    "verification": "Three real State scenarios, one changed field each; identical configurations share, differing configurations start separate owned backends",
+    "model_for_resource_smoke": "Already verified official Kanana2.1B Q8, not a quality candidate promotion",
+    "live_generation": "Each scenario processed622 prompt tokens and correctly answered5 minus2 as3",
+    "pressure_before_loaded_after": 1,
+    "all_owned_children_reaped": true,
+    "all_ports_freed": true,
+    "production_memory_proof": false,
+    "new_permanent_tests": 0,
+    "temporary_evidence": "/private/tmp/chat-root-c-005/memory-startup/evidence.json",
+    "throwaway_smoke_script_removed": true,
+    "scout_review_unavailable": "Provider429; no claim of delegated review"
   },
   "limits": {
     "memory_scope": "Development workstation physical memory34359738368 bytes observed. Existing docs/SHARING.md describes a16GB production Mini with other services. Local normal-pressure measurements are not production memory proof.",
