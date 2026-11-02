@@ -281,5 +281,104 @@ class ReextractTests(unittest.TestCase):
             self.assertEqual([r['doc_id'] for r in rows], ['institutions:alio-rule:7:file:5:member:1'])
 
 
+class FakeS3:
+    """put_object with If-None-Match and ChecksumSHA256, head_object with the stored checksum, get_object, listing."""
+
+    class ClientError(Exception):
+        def __init__(self, code):
+            super().__init__(code)
+            self.response = {'Error': {'Code': code}}
+
+    def __init__(self):
+        self.objects, self.calls = {}, []
+        self.exceptions = mock.Mock(ClientError=FakeS3.ClientError, NoSuchKey=KeyError)
+
+    def put_object(self, Bucket, Key, Body, ChecksumSHA256=None, IfNoneMatch=None):
+        self.calls.append(('put', Key))
+        if IfNoneMatch == '*' and Key in self.objects:
+            raise FakeS3.ClientError('PreconditionFailed')
+        self.objects[Key] = (bytes(Body), ChecksumSHA256)
+
+    def head_object(self, Bucket, Key, ChecksumMode=None):
+        self.calls.append(('head', Key))
+        if Key not in self.objects:
+            raise FakeS3.ClientError('404')
+        body, checksum = self.objects[Key]
+        return {'ContentLength': len(body), 'ChecksumSHA256': checksum, 'ServerSideEncryption': 'AES256'}
+
+    def get_object(self, Bucket, Key):
+        import io
+        self.calls.append(('get', Key))
+        return {'Body': io.BytesIO(self.objects[Key][0])}
+
+
+class S3MigrationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / 'local'
+        (self.root / 'corpus/r/raw/1').mkdir(parents=True)
+        (self.root / 'corpus/r/raw/1/a.hwp').write_bytes(b'raw-bytes')
+        (self.root / 'budget.json').write_bytes(b'{}')
+        self.extra = Path(self.tmp.name) / 'signatures.jsonl'
+        self.extra.write_bytes(b'{"family_id": "x"}\n')
+
+    def test_upload_never_replaces_and_every_object_is_verified(self):
+        plan = ci.migration_plan(self.root, 'dest', [self.extra], 'sig')
+        self.assertEqual(sorted(k for _, k, _, _ in plan), ['dest/budget.json', 'dest/corpus/r/raw/1/a.hwp',
+                                                            'sig/signatures.jsonl'])
+        s3 = FakeS3()
+        records, summary = ci.migrate(s3, plan, 10 ** 6, roundtrip=['dest/corpus/r/raw/1/a.hwp'])
+        self.assertEqual((summary['objects'], summary['verified']), (3, 3))
+        self.assertEqual(summary['roundtrip'], [{'key': 'dest/corpus/r/raw/1/a.hwp', 'sha256_match': True}])
+        again, _ = ci.migrate(s3, plan, 10 ** 6)  # resumable: identical bytes already there count as done
+        self.assertEqual(len(again), 3)
+        (self.root / 'corpus/r/raw/1/a.hwp').write_bytes(b'changed')
+        with self.assertRaises(SystemExit):  # different bytes under an existing key: stop, keep the stored object
+            ci.migrate(s3, ci.migration_plan(self.root, 'dest'), 10 ** 6)
+        self.assertEqual(s3.objects['dest/corpus/r/raw/1/a.hwp'][0], b'raw-bytes')
+
+    def test_plan_over_the_cap_is_refused_before_any_request(self):
+        s3 = FakeS3()
+        with self.assertRaises(SystemExit):
+            ci.migrate(s3, ci.migration_plan(self.root, 'dest'), 5)
+        self.assertEqual(s3.calls, [])
+
+    def test_s3_store_write_budget_stops_before_writing(self):
+        s3 = FakeS3()
+        store = ci.S3Store(s3, max_disk_bytes=10)
+        store.raw('k/a.bin', b'12345')
+        with self.assertRaises(ci.Stop):
+            store.raw('k/b.bin', b'123456')
+        self.assertNotIn('k/b.bin', s3.objects)
+
+    def test_environment_credentials_and_missing_profile_are_refused_before_the_sdk_loads(self):
+        with mock.patch.dict('os.environ', {'AWS_ACCESS_KEY_ID': 'x'}), self.assertRaises(SystemExit):
+            ci.s3_session_client('some-profile')
+        with self.assertRaises(SystemExit):
+            ci.s3_session_client(None)
+
+    def test_root_identity_is_refused(self):
+        import types
+        session = mock.Mock()
+        session.client.return_value.get_caller_identity.return_value = {'Arn': 'arn:aws:iam::1:root'}
+        fake_boto3 = types.SimpleNamespace(Session=mock.Mock(return_value=session))
+        with mock.patch.dict('sys.modules', {'boto3': fake_boto3}), mock.patch.dict('os.environ', {}, clear=True), \
+                self.assertRaises(SystemExit):
+            ci.s3_session_client('kms2026')
+
+    def test_rules_batch_excludes_every_reserved_family(self):
+        import gzip
+        inv = Path(self.tmp.name) / 'inv.jsonl.gz'
+        rows = [{'doc_family_id': f'institutions:alio-rule:{s}', 'business_group': 'g'} for s in (1, 2, 3)]
+        rows.append({'doc_family_id': 'korea-kr-briefing:9'})
+        inv.write_bytes(gzip.compress(''.join(json.dumps(r) + '\n' for r in rows).encode()))
+        res = Path(self.tmp.name) / 'res.jsonl'
+        res.write_text(json.dumps({'doc_family_id': 'institutions:alio-rule:2'}) + '\n')
+        families, n = ci.rules_batch_families(inv, res)
+        self.assertEqual(([f['doc_family_id'] for f in families], n),
+                         (['institutions:alio-rule:1', 'institutions:alio-rule:3'], 1))
+
+
 if __name__ == '__main__':
     unittest.main()

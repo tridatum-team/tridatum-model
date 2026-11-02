@@ -1,0 +1,48 @@
+{
+ "plan_file": "/tmp/trid-corpus/b028/migration-plan-dryrun.jsonl (not kept)",
+ "plan_sha256": "6949e5f49589d320735da99fe7bf3e7776b7addb4974a917d96274c666c1ac85",
+ "objects": 10714,
+ "bytes": 2247488519,
+ "by_part": {
+  "budget.json": {
+   "objects": 1,
+   "bytes": 48
+  },
+  "acquisition.jsonl": {
+   "objects": 1,
+   "bytes": 7256542
+  },
+  "raw": {
+   "objects": 4825,
+   "bytes": 1366009154
+  },
+  "state": {
+   "objects": 852,
+   "bytes": 7255690
+  },
+  "summary.json": {
+   "objects": 1,
+   "bytes": 1557
+  },
+  "text": {
+   "objects": 5028,
+   "bytes": 218592393
+  },
+  "signatures": {
+   "objects": 6,
+   "bytes": 648373135
+  }
+ },
+ "dest_prefixes": [
+  "corpus/reserved/benchmark-reserve-001/local-b026/",
+  "corpus/reserved/benchmark-reserve-001/signatures/"
+ ],
+ "extras": [
+  "corpus/reserved/benchmark-reserve-001/signatures/sign-input-local-852-b026.jsonl.gz",
+  "corpus/reserved/benchmark-reserve-001/signatures/signatures-candidate-local-852-b026.jsonl",
+  "corpus/reserved/benchmark-reserve-001/signatures/sign-input-local-reextract-b027.jsonl.gz",
+  "corpus/reserved/benchmark-reserve-001/signatures/signatures-candidate-local-reextract-b027.jsonl",
+  "corpus/reserved/benchmark-reserve-001/signatures/sign-input-partial-148.jsonl",
+  "corpus/reserved/benchmark-reserve-001/signatures/signatures-partial-148.jsonl"
+ ]
+}

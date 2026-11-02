@@ -65,6 +65,12 @@ gzip JSONL, 한 줄에 한 문서, UTF-8, NFC.
 - B는 예약 계열의 원문을 `corpus/reserved/<reservation>/`에만 쓴다. 구성은 `raw/<seq>/`(원본 바이트), `text/<seq>/`(추출 텍스트), `state/<seq>.json`(계열별 상태), `acquisition.jsonl`, `summary.json`, `sign-input.jsonl.gz`이다. 예약 계열은 `corpus/clean/**` 학습 후보 행으로 내보내지 않는다. 일반 수집에서 만나면 `flags: ["quarantine:benchmark_reserved"]`로 격리한다.
 - 로컬 전용 확보(MODEL-RESUME-B-026)는 같은 구성을 `data/<reservation>/local/corpus/reserved/<reservation>/` 아래에 쓴다(`collect_institutions.py reserved --local …`). 여기서는 S3를 쓰지 않는다. `data/`는 git에서 제외되며 학습 경로가 아니다. 응답 바이트와 디스크 사용량에 상한이 있다(기본 각 2 GiB, `budget.json`에 누적). 차단·제한 응답을 받거나 연속 네트워크 실패가 나면 체크포인트를 남기고 멈춘다. 서명 입력은 `reserved-sign-input --local … --sign-out <새 파일>`로 만든다. 봉인된 서명 manifest(`signatures-partial-148.jsonl`)는 덮어쓰지 않고, 새 후보 manifest를 따로 만든다.
 - 로컬 원문 재추출(MODEL-RESUME-B-027, `reserved-reextract --local`)은 네트워크 없이 보존된 원본 바이트만 다시 읽는다(sha256 대조). 내용 기준 형식 판정(DRM 래퍼, `.hwpx` 이름의 HWP, xlsx), 중첩 ZIP(3단계까지), 텍스트층 없는 PDF의 OCR(`kordoc --ocr`, 로컬 캐시 모델, `ocr: true` 표시)을 쓴다. 암호·배포용·DRM 보호가 걸린 HWP와 DRM 파일은 보호를 풀지 않고 `unextractable`과 사유로 남긴다. `ok`였던 기록은 바꾸지 않는다. 바뀐 기록에는 `reextract`(이전 형식·상태·오류)를 남긴다. 새 텍스트만 모은 서명 입력(`reserved-sign-input --only-reextracted`)으로 별도 후보 manifest를 만든다.
+- S3 전환(MODEL-RESUME-B-028). 로컬 2 GiB는 실험 상한이었고, 이후 원문은 같은 버킷의 `corpus/` 아래에 둔다.
+  - 예약 로컬 원문·서명 사본은 예약 전용 prefix에만 올린다. 경로는 `corpus/reserved/benchmark-reserve-001/local-b026/`(로컬 저장소 구조 그대로)와 `…/signatures/`(서명 입력·후보 manifest)다. 사용하는 명령은 `collect_institutions.py reserved-migrate`다.
+  - 업로드는 `put_new`(If-None-Match)로 하여 기존 객체를 바꾸지 않는다. 모든 객체의 저장 SHA-256과 길이를 확인하고, 대표 객체는 GET으로 되읽어 대조한다. 로컬 원본은 지우지 않는다.
+  - 예약이 아닌 다음 학습 후보 배치(`rules-batch`)는 `corpus/raw/institutions/alio-rule-b028/`에 둔다. 예약 1,000계열은 제외한다. ALIO 사용권이 미확인이므로 모든 상태에 `training_hold: [licence_unconfirmed]`를 붙인다. `corpus/clean/**`으로는 내보내지 않는다.
+  - 상한은 S3 전체 10 GiB(이번 이전 + 신규), 첫 배치 응답 1 GiB, 신규 작업 로컬 임시 캐시 512 MiB다.
+  - AWS 접근은 corpus 권한이 있는 이름 있는 비루트 프로필(`--profile`)로만 한다. 루트 식별자와 환경변수 자격증명은 코드가 거부한다. 필요 권한은 `reports/coordination/MODEL-RESUME-B-028/required-iam-policy.json`에 있다.
 - 다른 출처(웹 등)에 같은 텍스트가 들어 있을 수 있다. 이 경우는 A가 tokens 단계에서 `scripts/check_reserved_overlap.py`(ID·URL·exact·MinHash·8-gram 포함률)로 제외한다. 입력은 B가 만드는 `sign-input.jsonl.gz`(`{family_id, text, doc_id, source_url, group}`)다.
 - 상태값 `licence_status: unconfirmed`, 추출 실패, 다운로드 실패는 그대로 기록한다. 시험 적합으로 올리는 판단은 총괄이 한다.
 

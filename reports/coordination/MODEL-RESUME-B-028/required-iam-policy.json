@@ -1,0 +1,65 @@
+{
+ "Version": "2012-10-17",
+ "Statement": [
+  {
+   "Sid": "BucketSettingsReadOnly",
+   "Effect": "Allow",
+   "Action": [
+    "s3:GetBucketLocation",
+    "s3:GetEncryptionConfiguration",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:GetBucketOwnershipControls",
+    "s3:GetBucketVersioning",
+    "s3:GetBucketLogging",
+    "s3:GetBucketPolicyStatus"
+   ],
+   "Resource": "arn:aws:s3:::trid-training-148761639313"
+  },
+  {
+   "Sid": "ListOnlyTheseCorpusPrefixes",
+   "Effect": "Allow",
+   "Action": "s3:ListBucket",
+   "Resource": "arn:aws:s3:::trid-training-148761639313",
+   "Condition": {
+    "StringLike": {
+     "s3:prefix": [
+      "corpus/reserved/benchmark-reserve-001/local-b026/*",
+      "corpus/reserved/benchmark-reserve-001/signatures/*",
+      "corpus/raw/institutions/alio-rule-b028/*"
+     ]
+    }
+   }
+  },
+  {
+   "Sid": "ReadWriteNoDeleteOnTheseCorpusPrefixes",
+   "Effect": "Allow",
+   "Action": [
+    "s3:PutObject",
+    "s3:GetObject"
+   ],
+   "Resource": [
+    "arn:aws:s3:::trid-training-148761639313/corpus/reserved/benchmark-reserve-001/local-b026/*",
+    "arn:aws:s3:::trid-training-148761639313/corpus/reserved/benchmark-reserve-001/signatures/*",
+    "arn:aws:s3:::trid-training-148761639313/corpus/raw/institutions/alio-rule-b028/*"
+   ],
+   "Condition": {
+    "Bool": {
+     "aws:SecureTransport": "true"
+    }
+   }
+  },
+  {
+   "Sid": "ObservabilityReadOnlyOptional",
+   "Effect": "Allow",
+   "Action": [
+    "s3:GetAccountPublicAccessBlock",
+    "cloudtrail:DescribeTrails",
+    "cloudtrail:GetTrailStatus",
+    "cloudtrail:GetEventSelectors",
+    "cloudwatch:ListMetrics",
+    "cloudwatch:GetMetricData"
+   ],
+   "Resource": "*"
+  }
+ ]
+}
