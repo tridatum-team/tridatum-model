@@ -1,0 +1,24 @@
+{
+ "manifest_sha256": "584da06221775866ba49f8608151140a3589fc28f404cc053026aa74d12b78bf",
+ "reserved_families": 852,
+ "corpus": [
+  {
+   "path": "data/work-case-candidates-v2/overlap-input.jsonl",
+   "sha256": "c1089c6b1e9a09ec5f3db650a7eb89d81c49c50fdac6684ec7e25065c6600d29"
+  }
+ ],
+ "corpus_rows_scanned": 33,
+ "matched_corpus_rows": 0,
+ "families_with_matches": 0,
+ "match_types": {},
+ "thresholds": {
+  "minhash_estimate": 0.5,
+  "ngram8_containment": 0.5,
+  "partial_review_min_shared_ngram8": 50
+ },
+ "per_family_matched_rows": {},
+ "matches": [],
+ "partial_review_rows": 0,
+ "partial_review_note": "rows sharing >= partial_min reserved word 8-grams below the containment threshold; evidence for manual review, not counted as matches or excluded automatically",
+ "partial_review": []
+}

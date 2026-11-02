@@ -1,0 +1,135 @@
+{
+ "worktree": "/Users/eomgyuhyeon/사업/trid-model-024",
+ "sha": "ff59b936f43c38b1b63eb3abcc3366c7efb52a40",
+ "pressure_before": "1",
+ "X": [
+  {
+   "tag": "X1 qualifier + held rule with positive exact scope (central)",
+   "q": "국가공무원 보수 규정에서 호봉 획정은 어떻게 하나요?",
+   "http": 200,
+   "sec": 4.7,
+   "status": "clarify",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원보수규정 [별표 0015] 공무원의 초임호봉표(제8조 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원보수업무 등 처리지침 - 지방공무원보수업무 등 처리지침(전문).pdf"
+    ],
+    [
+     "중소벤처기업부",
+     "공무직 근로자 등 인사관리 업무처리지침"
+    ],
+    [
+     "법제처(질의: 민원인)",
+     "민원인 - 구 「군무원인사법」에 따라 별정군무원에서 전문군무경력관으로 직종이 변경된 사람이 신규채용된 경우 "
+    ],
+    [
+     "법제처",
+     "교육과학기술부 - 「지방공무원 보수규정」 제17조에 따른 호봉의 정정사유(「지방공무원 보수규정」 제17조 관"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "warnings": [],
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원보수규정\n- 인사혁신처: 공무원보수규정 [별표 0015] 공무원의 초임호봉표(제8조 관련)\n- 행정안전부: 지방공무원보수업무 등 처리지침 - 지방공무원보수업무 등 처리지침(전문).pdf\n- 중소벤처기업부: 공무직 근로자 등 인사관리 업무처리지침\n- 법제처(질의: 민원인): 민원인 - 구 「군무원인사법」에 따라 별정군무원에서 전문군무경력관으로 직종이 변경된 사람이 신규채용된 경우 초임호봉의 획정 기준(「공무원보수규정」 별표 15 제1호의2나목 등)\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "X2 qualifier + held rule with unknown scope (must not assert)",
+   "q": "국가공무원 근속승진 운영규칙에서 근속승진 기간은?",
+   "http": 200,
+   "sec": 1.2,
+   "status": "not_found",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": "irrelevant",
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "warnings": [],
+   "answer": "검색 자료에서 이 질문에 답할 만큼 관련된 구간을 찾지 못했습니다(핵심어 '근속', '국가공무원'을 충분히 다루는 구간 없음). 관련 없는 문서로 대신 답하지 않습니다. 기관명이나 규정명을 넣거나 다른 표현으로 물어 주세요."
+  },
+  {
+   "tag": "X3 local held title; central rule must not intrude",
+   "q": "지방공무원 보수 규정에서 승급은 언제 하나요?",
+   "http": 200,
+   "sec": 13.8,
+   "status": "unverified",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "행정안전부",
+    "지방공무원 보수규정"
+   ],
+   "others": [
+    [
+     "행정안전부",
+     "지방공무원 보수규정 [별표 0009] 승진·전보 시 호봉 획정표(제10조제2항 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 보수규정 [별표 0001] 공무원의 초임호봉표(제8조와 관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 보수규정 [별표 0010] 1989년 12월 31일 이전 경력의 간주경력표"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 보수규정 [별표 0010] 봉급조정수당 지급구분 및 봉급 등 산입방식(제31조의2관련)"
+    ],
+    [
+     "행정안전부",
+     "지방공무원 보수규정 [별표 0003] 연구직공무원의 경력환산율표(별표 1 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "evidence": [],
+   "reason": null,
+   "rule_name": null,
+   "tables_set_aside": null,
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "warnings": [],
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  }
+ ],
+ "ports_free_after": true,
+ "pressure_after": "1"
+}
