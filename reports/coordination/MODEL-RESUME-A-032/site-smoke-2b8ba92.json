@@ -1,0 +1,107 @@
+{
+ "healthz": 200,
+ "version_ids": [
+  "trid-assistant-qwen3-1.7b",
+  "trid-v0.1-reader"
+ ],
+ "turns": [
+  {
+   "tag": "T1 institution",
+   "q": "한국부동산원 여비규정에서 숙박비는 어떻게 정해져 있나요?",
+   "http": 200,
+   "sec": 17.1,
+   "status": "quoted",
+   "reason": null,
+   "continued": false,
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+   ],
+   "conditions_carried": null,
+   "tables_set_aside": null,
+   "reviewed_rows_annex": [
+    "1"
+   ],
+   "error": null,
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자가 일치하는 문장 3건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "T2 explicit rule switch, 국내 stated",
+   "q": "공무원 여비 규정에서 국내 출장 식비는 얼마인가요?",
+   "http": 200,
+   "sec": 15.9,
+   "status": "unverified",
+   "reason": null,
+   "continued": false,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "conditions_carried": null,
+   "tables_set_aside": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "error": null,
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "T3 follow-up: 국내 carried",
+   "q": "그럼 숙박비는?",
+   "http": 200,
+   "sec": 14.5,
+   "status": "quoted",
+   "reason": null,
+   "continued": true,
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "conditions_carried": [
+    "국내"
+   ],
+   "tables_set_aside": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "error": null,
+   "answer": "「공무원 여비 규정」은 국가공무원에게 적용되는 규정입니다(제1조 목적). 질문한 대상(예: 공공기관 직원)에게 적용되는지는 확인되지 않았으므로, 아래 원문의 금액·기준을 그 기관의 지급액으로 보지 말고 기관 자체 규정을 확인하세요. 원문과 글자가 일치하는 문장 1건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "T4 after new chat: nothing carried",
+   "q": "그럼 숙박비는?",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "reason": null,
+   "continued": false,
+   "applied": [
+    null,
+    null
+   ],
+   "conditions_carried": null,
+   "tables_set_aside": null,
+   "reviewed_rows_annex": [],
+   "error": null,
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 대법원: 국외여비업무 처리지침\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "T5 removed version id",
+   "q": "그럼 숙박비는?",
+   "http": 422,
+   "sec": 0.0,
+   "status": null,
+   "reason": null,
+   "continued": null,
+   "applied": [
+    null,
+    null
+   ],
+   "conditions_carried": null,
+   "tables_set_aside": null,
+   "reviewed_rows_annex": [],
+   "error": "목록에 있는 모델 버전을 선택해 주세요.",
+   "answer": ""
+  }
+ ]
+}
