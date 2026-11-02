@@ -1,0 +1,4 @@
+그럼 국외는? | not_found irrelevant | continued None | carried None | conditions None | rows None | aside []
+그럼 국외 출장 숙박비는? | answer None | continued True | carried None | conditions ['국외'] | rows 4 | aside []
+국외 출장이면 숙박비는? | answer None | continued True | carried None | conditions ['국외'] | rows 4 | aside []
+그럼 숙박비는? | answer None | continued True | carried ['국내'] | conditions ['국내'] | rows 2 | aside []

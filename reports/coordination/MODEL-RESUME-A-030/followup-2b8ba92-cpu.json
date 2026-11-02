@@ -1,0 +1,311 @@
+{
+ "checkout": "/Users/eomgyuhyeon/사업/trid-model-030",
+ "sha": "2b8ba92d2359550deb5bc5f0d45599feca91bd78",
+ "device": "cpu",
+ "env": {
+  "LLAMA_ARG_DEVICE": "none",
+  "LLAMA_ARG_N_GPU_LAYERS": "0"
+ },
+ "pressure_before": "1",
+ "llama_device_lines": [],
+ "F": [
+  {
+   "tag": "F1 국내 stated",
+   "q": "공무원 여비 규정에서 국내 출장 식비는 얼마인가요?",
+   "http": 200,
+   "sec": 19.5,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0002] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 2의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(2건).",
+   "answer": "원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "F2 follow-up: 국내 carried",
+   "q": "그럼 숙박비는?",
+   "http": 200,
+   "sec": 14.5,
+   "status": "quoted",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": true,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": [
+    "국내"
+   ],
+   "applicability": {
+    "rule_scope": "central_government",
+    "question_names_civil_servants": false,
+    "status": "not_confirmed"
+   },
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "scope": "앞선 대화에서 쓴 문서(질문에 기관·문서명이 없어 이어서 찾음)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 2의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 앞 질문에서 말한 조건(국내)을 이 이어지는 질문에도 적용했습니다. 다른 경우면 질문에 그 조건을 적어 주세요.",
+   "answer": "「공무원 여비 규정」은 국가공무원에게 적용되는 규정입니다(제1조 목적). 질문한 대상(예: 공공기관 직원)에게 적용되는지는 확인되지 않았으므로, 아래 원문의 금액·기준을 그 기관의 지급액으로 보지 말고 기관 자체 규정을 확인하세요. 원문과 글자가 일치하는 문장 1건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "F3 follow-up of a follow-up: 국내 still carried",
+   "q": "그럼 일비는?",
+   "http": 200,
+   "sec": 19.8,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": true,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": [
+    "국내"
+   ],
+   "applicability": {
+    "rule_scope": "central_government",
+    "question_names_civil_servants": false,
+    "status": "not_confirmed"
+   },
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "2"
+   ],
+   "scope": "앞선 대화에서 쓴 문서(질문에 기관·문서명이 없어 이어서 찾음)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 2의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 same_source_hash)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다. 본문이 인용한 같은 규정의 별표 구간을 함께 넣었습니다(2건). 앞 질문에서 말한 조건(국내)을 이 이어지는 질문에도 적용했습니다. 다른 경우면 질문에 그 조건을 적어 주세요.",
+   "answer": "「공무원 여비 규정」은 국가공무원에게 적용되는 규정입니다(제1조 목적). 질문한 대상(예: 공공기관 직원)에게 적용되는지는 확인되지 않았으므로, 아래 원문의 금액·기준을 그 기관의 지급액으로 보지 말고 기관 자체 규정을 확인하세요. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "F4 current case wins: 국외, nothing carried",
+   "q": "그럼 국외는?",
+   "http": 200,
+   "sec": 1.7,
+   "status": "not_found",
+   "reason": "irrelevant",
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "not_found",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "검색 자료에서 이 질문에 답할 만큼 관련된 구간을 찾지 못했습니다(핵심어 '국외'을 충분히 다루는 구간 없음). 관련 없는 문서로 대신 답하지 않습니다. 기관명이나 규정명을 넣거나 다른 표현으로 물어 주세요."
+  },
+  {
+   "tag": "F5 explicit institution switch: released",
+   "q": "한국부동산원 여비규정에서 숙박비는 어떻게 정해져 있나요?",
+   "http": 200,
+   "sec": 17.7,
+   "status": "quoted",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": true,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+   ],
+   "others": [
+    [
+     "한국부동산원",
+     "한국부동산원_여비업무 처리지침 일부개정지침안(게시 2026.01.13)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "1"
+   ],
+   "scope": "질문에 적힌 기관(한국부동산원)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 이 자료의 적용 범위(B 기록): 한국부동산원 임직원. 다른 기관에 그대로 적용되지 않음. 출처 메모(B): 내규공개 게시판(bbsId 1244)에 제목 \"…개정…안\"으로 게시됨. 파일은 개정이 반영된 전문(개정 이력·부칙 포함)이나, 확정·시행 여부를 따로 알리는 공고는 확인하지 않음. 사전예고 게시판(1245)과는 별개 게시판 출처 메모(B): 첫 쪽 개정 이력은 2026.01.12까지이나 부칙<2026.6.11>(2026.7.1 시행)이 있음. 개정 이력 갱신 누락 여부 미확인 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 1의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 row_source_span)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다.",
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자가 일치하는 문장 3건을 아래에 표시합니다. 질문에 대한 답인지는 원문 맥락에서 확인하세요. 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "F6 follow-up of the institution turn",
+   "q": "그럼 일비는?",
+   "http": 200,
+   "sec": 17.0,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": true,
+   "pinned": false,
+   "continued": true,
+   "selection": "answer",
+   "applied": [
+    "한국부동산원",
+    "한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)"
+   ],
+   "others": [],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [
+    "1"
+   ],
+   "scope": "앞선 대화에서 쓴 문서(질문에 기관·문서명이 없어 이어서 찾음)으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다. 이 자료의 적용 범위(B 기록): 한국부동산원 임직원. 다른 기관에 그대로 적용되지 않음. 출처 메모(B): 내규공개 게시판(bbsId 1244)에 제목 \"…개정…안\"으로 게시됨. 파일은 개정이 반영된 전문(개정 이력·부칙 포함)이나, 확정·시행 여부를 따로 알리는 공고는 확인하지 않음. 사전예고 게시판(1245)과는 별개 게시판 출처 메모(B): 첫 쪽 개정 이력은 2026.01.12까지이나 부칙<2026.6.11>(2026.7.1 시행)이 있음. 개정 이력 갱신 누락 여부 미확인 원문 표 구간과 함께 B가 원본 렌더링과 대조한 별표 1의 표 행(단위·비고·시점 포함, 2행; 원문 위치 확인 방식 row_source_span)을 넣었습니다. 이 행은 원문 인용으로 표시하지 않으며, 승인된 값이나 법률 자문이 아닙니다.",
+   "answer": "한국부동산원 누리집 게시 자료(「한국부동산원_여비규정 일부개정규정안(게시 2026.07.15)」, 2026-07-01 · 2026-07-01 기준 게시본. 이후 개정 여부는 확인하지 않았고 현행이라고 표시하지 않음)에서 찾았습니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  },
+  {
+   "tag": "F7 new chat",
+   "clear_http": 200,
+   "result": {
+    "cleared": true
+   }
+  },
+  {
+   "tag": "F8 after new chat: nothing carried",
+   "q": "그럼 숙박비는?",
+   "http": 200,
+   "sec": 1.4,
+   "status": "clarify",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "clarify",
+   "applied": [
+    null,
+    null
+   ],
+   "others": [
+    [
+     "대법원",
+     "국외여비업무 처리지침"
+    ],
+    [
+     "대법원",
+     "증거조사 출장여비 등 산정 및 지급에 관한 업무처리지침(재일 2008-2)"
+    ],
+    [
+     "국제협력담당관",
+     "해양경찰청 공무국외출장 관리에 관한 규칙"
+    ],
+    [
+     "농림축산검역본부",
+     "농림축산검역본부 소속 상시출장공무원 여비지급 규정"
+    ],
+    [
+     "교육부",
+     "지방자치단체 교육비특별회계 세출예산 집행기준 - 지방자치단체 교육비특별회계 세출예산 집행기준 일부개정예규(전"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": null,
+   "conditions_carried": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "모델을 실행하지 않았습니다. 검색 자료와 질문의 기관·규정명, 근거 적합성을 확인한 결과입니다.",
+   "answer": "이 질문은 여러 기관의 규정에서 비슷하게 검색됩니다. 기관마다 기준이 다를 수 있어 임의로 한 곳을 고르지 않았습니다.\n- 인사혁신처: 공무원 여비 규정\n- 대법원: 국외여비업무 처리지침\n어느 기관(또는 어떤 규정) 기준인지 질문에 기관명이나 규정명을 넣어 다시 물어봐 주세요."
+  },
+  {
+   "tag": "F9 fresh, case unstated (A-025 P1 unchanged)",
+   "q": "공무원 여비 규정에서는 숙박비가 어떻게 되나요?",
+   "http": 200,
+   "sec": 10.8,
+   "status": "unverified",
+   "reason": null,
+   "intent": "search",
+   "separate_snapshot": false,
+   "pinned": false,
+   "continued": false,
+   "selection": "answer",
+   "applied": [
+    "인사혁신처",
+    "공무원 여비 규정"
+   ],
+   "others": [
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0003] 국외 항공운임 지급 기준표(제12조제2항 관련)"
+    ],
+    [
+     "인사혁신처",
+     "공무원 여비 규정 [별표 0001] 여비 지급 구분표(제3조 관련)"
+    ]
+   ],
+   "table_condition": null,
+   "tables_set_aside": [
+    {
+     "annex": "2",
+     "table": "국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)",
+     "unstated": [
+      "국내"
+     ]
+    },
+    {
+     "annex": "4",
+     "table": "국외 여비 지급표(제16조제1항 관련)",
+     "unstated": [
+      "국외"
+     ]
+    }
+   ],
+   "conditions_carried": null,
+   "applicability": null,
+   "population_scope": null,
+   "reviewed_rows_annex": [],
+   "scope": "질문에 적힌 문서명으로 고른 문서 1건의 구간만 모델에 넣었습니다. 다른 기관·문서의 규정을 섞지 않습니다. 검색되지 않은 자료까지 정보가 없다고 보장하지 않습니다.",
+   "answer": "「공무원 여비 규정」은 경우에 따라 다른 표를 씁니다: 별표 2(국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)), 별표 4(국외 여비 지급표(제16조제1항 관련)). 질문에 어느 경우인지(국내, 국외 등)가 없어 이 표들의 값은 근거에 넣지 않았습니다. 해당하는 경우를 넣어 다시 물어보면 그 표로 답합니다. 원문과 글자 그대로 일치하는 인용이 없어 검증된 답이 없습니다. 아래 모델 해설은 검증되지 않았습니다."
+  }
+ ],
+ "rss_kb": [
+  "1752720 /Users/eomgyuhyeon/사업/trid/.venv/bin/python scripts/shared_demo.py --secret-file /tmp/a030-realpath/secret --port 51990 --versions /tmp/a030-realpath/ve",
+  "4756512 /Users/eomgyuhyeon/사업/trid-model-030/runs/tools/llama.cpp-8ca4060-metal/llama-server -m /Users/eomgyuhyeon/사업/trid-model-030/runs/open-weight-base"
+ ],
+ "ports_free_after": true,
+ "pressure_after": "1"
+}
