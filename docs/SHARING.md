@@ -50,6 +50,7 @@
     - `chat_sampling`은 기존 설정에 일부 키를 합치는 방식이 아니라 해당 객체를 전달한다. temperature/top_p/top_k/min_p/penalty 등 검증한 값을 명시해야 한다.
     - 첫 턴 안내, history 범위, 숫자 주장 후처리는 그대로다. 일반 설명의 `EXPLAIN_SYSTEM`과 검색·분류 프롬프트도 바꾸지 않는다.
     - 선택 설정 `chat_thinking: true`는 `/v1/chat/completions`와 `enable_thinking`을 사용한다. 파싱된 최종 `message.content`만 사용자에게 전달하고 history에 넣으며, `reasoning_content`는 사용하지 않는다. 최종 답이 없으면 내부 추론으로 대신하지 않고 오류로 처리한다. 생각 모드가 켜져 있어도 모델이 매번 내부 추론을 생성하는 것은 아니다.
+    - 일반 대화는 실행 도구를 제공하지 않으므로 두 생성 경로와 템플릿 검사 모두 `chat_template_kwargs.tools: null`을 명시한다. 빈 도구 목록과 `None`을 구분하는 native 템플릿이 존재하지 않는 IPython 실행 환경을 표시하지 않도록 한다. Midm의 실제 비사고 37건에서 원본 전체 입력 토큰과 completion 벡터를 대조했고, Qwen의 실제 native 생성 1건에서 원본 입력 일치·최종 답만 반환·내부 추론 비노출을 확인했다. 이는 입력 계약 수정이며 모델의 가짜 작업 완료 주장까지 해결했다는 뜻은 아니다.
     - `chat_max_tokens`는 일반 대화의 출력 토큰 예산이며 미지정 시 기존 384다. native 모드에서는 내부 추론과 최종 답이 이 예산을 함께 사용한다. `finish_reason: length`는 기존 출력 잘림 안내로 연결한다.
     - `chat_reasoning_budget`를 지정하면 해당 llama-server에 `--reasoning-budget`를 전달한다. 같은 모델·context라도 이 예산이 다르면 서버를 공유하지 않으므로 다른 port를 지정해야 한다. 모델/template 및 고정 llama.cpp 버전의 지원 여부를 먼저 확인한다.
     - 프로세스 메모리 설정 `no_repack: true`, `batch_size`, `ubatch_size`, `cache_ram`을 지정하면 각각 `--no-repack`, `--batch-size`, `--ubatch-size`, `--cache-ram`을 전달한다. 생략한 플래그는 추가하지 않아 기존 실행 기본값을 유지한다. 이 설정은 일반 대화뿐 아니라 같은 서버의 검색·분류에도 적용된다.

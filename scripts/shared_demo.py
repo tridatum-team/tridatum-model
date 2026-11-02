@@ -442,7 +442,8 @@ def route(base, family, context, history, question, continues=None):
 def chat_complete(base, messages, family, max_tokens, context, sampling=None, thinking=False):
     """Conversation completion; native chat parsing keeps optional reasoning out of the returned final answer.
     {'generated', 'truncated_output'}; {'skipped_context': True} when the prompt leaves no room for `max_tokens`."""
-    template_kwargs = {'enable_thinking': thinking}
+    # No function tools are exposed here; native templates may distinguish None from an empty tool list.
+    template_kwargs = {'enable_thinking': thinking, 'tools': None}
     prompt = llama_request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': template_kwargs})['prompt']
     if family == 'qwen3' and not thinking and not prompt.endswith(QWEN3_NO_THINK):
         raise ValueError('Native Qwen3 no-thinking prefix was not rendered')
