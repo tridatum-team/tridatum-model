@@ -1,0 +1,142 @@
+{
+  "scope": "Public generated-input experiment only; no production fix adopted; finals stay in temporary local artifacts.",
+  "mode": {
+    "contract_sha256": "b5d20e1906e3931b8d8c182e90b6ea0a0842547f6479be1d76ba696faf1db2e8",
+    "pressure_before": "1",
+    "cpu_only": true,
+    "build_info": "b1-8ca4060",
+    "context": 4096,
+    "ports_free_after": true,
+    "pressure_after": "1",
+    "records": [
+      {
+        "id": "new-repair-notice",
+        "thinking": false,
+        "final_available": true,
+        "stop": "eos",
+        "tokens_predicted": 28,
+        "prompt_tokens": 177,
+        "seconds": 1.1
+      },
+      {
+        "id": "new-repair-notice",
+        "thinking": true,
+        "final_available": true,
+        "stop": "eos",
+        "tokens_predicted": 298,
+        "prompt_tokens": 173,
+        "seconds": 7.64
+      },
+      {
+        "id": "new-review-followup",
+        "thinking": false,
+        "final_available": true,
+        "stop": "eos",
+        "tokens_predicted": 29,
+        "prompt_tokens": 196,
+        "seconds": 1.17
+      },
+      {
+        "id": "new-review-followup",
+        "thinking": true,
+        "final_available": true,
+        "stop": "eos",
+        "tokens_predicted": 273,
+        "prompt_tokens": 192,
+        "seconds": 7.76
+      }
+    ]
+  },
+  "contract": {
+    "contract_sha256": "f4f466349dcf5cb0b233dea905183af7146cb7f1d825f75eb181818fa2d42b42",
+    "pressure_before": "1",
+    "build_info": "b1-8ca4060",
+    "ports_free_after": true,
+    "pressure_after": "1",
+    "records": [
+      {
+        "id": "new-sharing-review-request",
+        "arm": "baseline",
+        "stop": "eos",
+        "tokens_predicted": 34,
+        "prompt_tokens": 172,
+        "seconds": 1.22
+      },
+      {
+        "id": "new-sharing-review-request",
+        "arm": "candidate",
+        "stop": "eos",
+        "tokens_predicted": 34,
+        "prompt_tokens": 251,
+        "seconds": 1.68
+      },
+      {
+        "id": "new-sharing-approved-statement",
+        "arm": "baseline",
+        "stop": "eos",
+        "tokens_predicted": 32,
+        "prompt_tokens": 171,
+        "seconds": 1.37
+      },
+      {
+        "id": "new-sharing-approved-statement",
+        "arm": "candidate",
+        "stop": "eos",
+        "tokens_predicted": 26,
+        "prompt_tokens": 250,
+        "seconds": 1.4
+      }
+    ]
+  },
+  "judgments": {
+    "mode": [
+      {
+        "id": "new-repair-notice",
+        "thinking": false,
+        "judgment": "pass"
+      },
+      {
+        "id": "new-repair-notice",
+        "thinking": true,
+        "judgment": "fail",
+        "reason": "부품 입고 조건이 받아주시면으로 바뀌어 원문의 조건을 보존하지 못함"
+      },
+      {
+        "id": "new-review-followup",
+        "thinking": false,
+        "judgment": "pass"
+      },
+      {
+        "id": "new-review-followup",
+        "thinking": true,
+        "judgment": "pass"
+      }
+    ],
+    "contract": [
+      {
+        "id": "new-sharing-review-request",
+        "arm": "baseline",
+        "judgment": "pass"
+      },
+      {
+        "id": "new-sharing-review-request",
+        "arm": "candidate",
+        "judgment": "pass"
+      },
+      {
+        "id": "new-sharing-approved-statement",
+        "arm": "baseline",
+        "judgment": "partial",
+        "reason": "승인은 남지만 검토 완료 사실 누락, 원문에 없는 확인 요청 추가"
+      },
+      {
+        "id": "new-sharing-approved-statement",
+        "arm": "candidate",
+        "judgment": "partial",
+        "reason": "추가 확인 요청은 사라짐. 검토 완료 사실은 여전히 누락"
+      }
+    ],
+    "decision": "Neither thinking switch nor semantic-contract candidate accepted for production. One fixed seed and four new public inputs, no population-quality claim.",
+    "judge": "C direct semantic review; arm labels were visible, not a blind judgment."
+  }
+}
