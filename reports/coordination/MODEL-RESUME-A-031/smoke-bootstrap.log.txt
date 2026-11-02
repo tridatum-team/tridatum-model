@@ -1,0 +1,18 @@
+Shutdown scheduled for Mon 2026-11-02 05:50:14 UTC, use 'shutdown -c' to cancel.
+PHASE start NVIDIA L4, 23034 MiB, 595.112.07
+PHASE build llama.cpp 8ca4060b7e30e76baaa5670ee1ec1b760b7f8552 CUDA arch 89
+PHASE setup python tokenizer env and pinned assets
+The virtual environment was not created successfully because ensurepip is not
+available.  On Debian/Ubuntu systems, you need to install the python3-venv
+package using the following command.
+
+    apt install python3.10-venv
+
+You may need to use sudo with that command.  After installing the python3-venv
+package, recreate your virtual environment.
+
+Failing command: /opt/venv/bin/python3
+
+tail: cannot open '/tmp/pip.log' for reading: No such file or directory
+FAIL: pip
+PHASE failed exit 1

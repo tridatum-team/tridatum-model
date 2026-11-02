@@ -6,12 +6,15 @@
    "run_id": "aws-eval-006-smoke-20261102T044859Z",
    "mode": "smoke",
    "max_minutes": 60,
-   "reserved_minutes": 70,
+   "reserved_minutes": 19,
    "reserved_utc": "2026-11-02T04:49:00Z",
-   "state": "launched; hard stop scheduled",
+   "state": "failed in setup (python3-venv missing); self-terminated (Client.InstanceInitiatedShutdown); settled",
    "instance_id": "i-0a924d4ca69ca3f5d",
    "launched_utc": "2026-11-02T04:49:01Z",
-   "hard_stop_utc": "2026-11-02T05:59:01Z"
+   "hard_stop_utc": "2026-11-02T05:59:01Z",
+   "failed_phase_utc": "2026-11-02T05:01:21Z",
+   "terminated_observed_utc": "2026-11-02T05:08:04Z",
+   "settlement": "launch 04:49:01Z to terminated observed 05:08:04Z, rounded up (billing ends at shutting-down ~05:01:30Z; this over-counts on purpose)"
   }
  ]
 }

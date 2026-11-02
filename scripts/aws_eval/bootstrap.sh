@@ -75,6 +75,10 @@ SERVER=/opt/llama.cpp/build/bin/llama-server
 { nvcc --version; nvidia-smi; } > "$WORK/out/cuda.txt" 2>&1 || true
 
 phase setup "python tokenizer env and pinned assets"
+# The pinned DLAMI's python3 has no ensurepip (python3-venv not installed): smoke aws-eval-006-smoke-20261102T044859Z
+# failed here after a good build (MODEL-RESUME-A-031). Install it from the Ubuntu archive, time-bounded.
+python3 -c 'import ensurepip' 2>/dev/null || { timeout 300 apt-get -o DPkg::Lock::Timeout=240 -y -q update >/dev/null && \
+  timeout 300 apt-get -o DPkg::Lock::Timeout=240 -y -q install python3-venv >/dev/null; } || fail "python3-venv install"
 python3 -m venv /opt/venv && /opt/venv/bin/pip -q install transformers==5.21.0 tokenizers==0.23.3 jinja2==3.1.6 \
   > /tmp/pip.log 2>&1 || { tail -30 /tmp/pip.log; fail "pip"; }
 while IFS=$'\t' read -r url path sha; do
