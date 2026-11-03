@@ -1277,6 +1277,71 @@
     "training": false,
     "temporary_parent_review": "/private/tmp/chat-root-c-005/qwen35-9b-precision-parent-review.json"
   },
+  "lora_history_contract_008": {
+    "implementation_owner": "existing A session",
+    "integration_verifier": "coordinator",
+    "source_sha256": "39c5d0cb26f6af421a1bd1ad70a26cf6f6c897eb58d862feea0218a8e16146c1",
+    "canonical_history_schema": "ordered list of objects with exactly user and assistant nonempty strings",
+    "before": {
+      "source_commit": "43f6082",
+      "source_sha256": "1fd983f60e0580ad2a9389a7139ee51de679ee1d7a4fe55c5f644fe75d3389e1",
+      "canonical_validator_passed": true,
+      "input_history_pairs": 1,
+      "loaded_history_pairs": 0,
+      "initial_noncanonical_fixture_superseded": true
+    },
+    "focused_regression_tests": {"run": 7, "failures": 0, "errors": 0},
+    "native_tokenizer_smoke": {
+      "status": "pass",
+      "synthetic_rows_encoded": 3,
+      "history_pairs": 2,
+      "masked_prefix_tokens": 97,
+      "current_answer_and_eos_tokens": 3,
+      "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "template_sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+      "checks": ["native role/content order", "past assistant loss masking", "current answer and EOS supervision", "whole-row context rejection", "history-free prompt/case compatibility", "case citation and budget", "invalid history file/line/id"]
+    },
+    "shared_audit_renderer_updated": true,
+    "model_weights_loaded": false,
+    "training_runs": 0,
+    "data_approved": false,
+    "deployed_model_quality_claim": false,
+    "scratch_before": "/private/tmp/chat-root-c-005/model-history-before-valid-008.json",
+    "scratch_after": "/private/tmp/chat-root-c-005/model-history-after-008.json"
+  },
+  "training_candidate_sample_review_008": {
+    "reviewer": "existing B session, direct assistant review; not human adjudication",
+    "population_rows": 1369,
+    "frozen_sample_rows": 100,
+    "seed": 1729,
+    "stratum": "existing source_task with Hamilton proportional allocation",
+    "sample_frozen_before_target_review": true,
+    "sample_sha256": "fb73a1030f747541b41be2f9ea3337ade6c6479a840191482b036f4c027baa21",
+    "source_sha256": "5d7c6ea3907c60b465d006ae7685574292d19bca1915c6636cee65928fddb5f6",
+    "provenance_sha256": "2f06f5a2b8e0936bd9e1dec672181ba10fec01d4dffa4615580d8a8467abda9f",
+    "verdicts": {"accept_for_further_review": 64, "needs_correction": 29, "hold": 7},
+    "coordinator_checks": {
+      "unique_samples_and_source_lines": 100,
+      "individual_verdict_counts_recomputed": true,
+      "actual_prompt_history_target_boundary_rows_read": 13,
+      "all_correction_recommendations_treated_as_hard_factual_errors": false
+    },
+    "coverage": {
+      "task_categories_total": 140,
+      "task_categories_sampled": 56,
+      "task_categories_unreviewed": 84,
+      "dialogue_v5_rows": 97,
+      "base_dialogue_v1_rows": 3,
+      "rag_conversation_rows": 0,
+      "rows_with_history": 83
+    },
+    "limits": ["sample counts only, not population quality rates", "style and instruction-scope judgments remain distinct from hard contradictions", "teacher and prompt-source reuse evidence incomplete in inspected metadata", "no proof active models trained on these rows", "no private evaluation comparison"],
+    "source_files_unchanged": true,
+    "new_targets": 0,
+    "training_approved_rows": 0,
+    "eligibility_changes": 0,
+    "scratch_review": "/private/tmp/chat-root-c-005/resume008-B-result.json"
+  },
   "limits": {
     "memory_scope": "Development workstation physical memory34359738368 bytes observed. Existing docs/SHARING.md describes a16GB production Mini with other services. Local normal-pressure measurements are not production memory proof.",
     "private_questions_gold_mappings_accessed": false,

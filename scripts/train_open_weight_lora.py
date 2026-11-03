@@ -9,8 +9,9 @@ Isolated environment (the project venv pins transformers 5.x and has no peft):
 Manifest (JSON): {"id": str, "train": [file...], "valid": [file...]} with file = {"path", "sha256", "adapter",
 "epochs" (default 1), "split" (optional: use only rows whose `split` equals it)}. Every file hash is verified before training; the manifest decides eligibility, this script
 never filters for quality. Adapters:
-  - `prompt_answer`: rows {"prompt", "answer", "task"?, "id"?} (trid curricula). RAG prompts (trid.prompts.rag_prompt
-    format) get the evaluation's grammar_instructed system prompt; other rows get none.
+  - `prompt_answer`: rows {"prompt", "answer", "history"?: [{"user": str, "assistant": str}], "task"?, "id"?}
+    (trid curricula). RAG prompts (trid.prompts.rag_prompt format) get the evaluation's grammar_instructed system
+    prompt; other rows get none. History is ordered prior dialogue, not additional supervised targets.
   - `case`: rows {"id", "question", "context": [str], "target", "task_type"} (C cases). The user turn is
     rag_prompt over the context passages as D1..Dn with CASE_SYSTEM (cases answer with conclusion, basis,
     conditions and exceptions; the value-only SYSTEM would contradict those targets); the answer is `target`.
@@ -18,9 +19,12 @@ never filters for quality. Adapters:
     numbers and '확인 불가', so every case target must carry a [Dn] citation of an existing passage or start with
     '확인 불가: ', and fit --max-answer-tokens (the serving answer budget). A violating file stops training with the
     offending ids instead of being trained (pilot-sft-001 trained 57 targets without any [Dn], 36 over 256 tokens).
+    Nonempty case history is unsupported and rejected. History must be a list of user/assistant pairs with nonempty
+    string content (trid.text.validate_history); invalid history reports the file, line and row id before weights load.
 Each sample is the native chat template with the generation prompt (Qwen3: the no-thinking prefix must render)
-followed by the answer and the tokenizer's EOS (end of turn); loss covers only those answer tokens. Rows longer than
---max-tokens are dropped and counted. No upsampling beyond the per-file epochs; the per-file share of trained answer
+followed by the answer and the tokenizer's EOS (end of turn); loss covers only those answer tokens. The system,
+all prior user/assistant turns, current user and batch padding stay masked. Rows longer than
+--max-tokens are dropped whole and counted (history is never truncated). No upsampling beyond the per-file epochs; the per-file share of trained answer
 tokens is recorded. Validation loss per task is recorded at fixed steps only; nothing is selected on evaluation sets.
 Writes the LoRA adapter, optionally the merged model (--merge) for GGUF conversion, and training.json.
 """
@@ -35,12 +39,12 @@ import time
 from pathlib import Path
 
 import torch
-from peft import LoraConfig, get_peft_model
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from trid.prompts import RAG_PREFIX, rag_prompt  # noqa: E402
+from trid.text import validate_history  # noqa: E402
 
 SYSTEM = ('주어진 근거만 사용하세요. 답은 값 [Dn] 형식으로 쓰고, 여러 값은 쉼표로 구분하세요. '
           '근거가 없으면 확인 불가, 근거가 충돌하면 근거 충돌만 출력하세요. 설명은 덧붙이지 마세요.')
@@ -60,16 +64,23 @@ def load_rows(entry, base):
     if sha256(path) != entry['sha256']:
         raise ValueError(f'{path}: sha256 does not match the manifest')
     rows = []
-    for line in path.read_text().splitlines():
+    for line_number, line in enumerate(path.read_text().splitlines(), 1):
         if not line.strip():
             continue
         row = json.loads(line)
         if entry.get('split') and row.get('split') != entry['split']:
             continue  # one pinned file may hold several splits; only the named one is used
+        history = row.get('history', [])
+        try:
+            validate_history(history)
+            if entry['adapter'] == 'case' and history:
+                raise ValueError('case adapter does not support history')
+        except ValueError as exc:
+            raise ValueError(f"{path}:{line_number}: row {row.get('id')!r}: {exc}") from exc
         if entry['adapter'] == 'prompt_answer':
             system = SYSTEM if row['prompt'].startswith(RAG_PREFIX) else None
             rows.append(dict(id=row.get('id'), task=row.get('task', 'unknown'), system=system,
-                             user=row['prompt'], answer=row['answer'], file=str(path)))
+                             user=row['prompt'], history=history, answer=row['answer'], file=str(path)))
         elif entry['adapter'] == 'case':
             passages = [(f'D{i}', text) for i, text in enumerate(row['context'], 1)]
             rows.append(dict(id=row['id'], task=row.get('task_type', 'unknown'), system=CASE_SYSTEM,
@@ -93,10 +104,16 @@ def case_contract_violation(row, answer_tokens, max_answer_tokens):
     return None
 
 
+def messages_of(row):
+    """Native-template input; prior assistant turns are context, never current targets."""
+    messages = [{'role': 'system', 'content': row['system']}] if row['system'] else []
+    for turn in row.get('history', []):
+        messages += [{'role': 'user', 'content': turn['user']}, {'role': 'assistant', 'content': turn['assistant']}]
+    return messages + [{'role': 'user', 'content': row['user']}]
+
+
 def encode(tok, row, family, max_tokens):
-    messages = ([{'role': 'system', 'content': row['system']}] if row['system'] else []) + \
-               [{'role': 'user', 'content': row['user']}]
-    prompt = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    prompt = tok.apply_chat_template(messages_of(row), tokenize=False, add_generation_prompt=True, enable_thinking=False)
     if family == 'qwen3' and not prompt.endswith(QWEN3_NO_THINK):
         raise ValueError('Native Qwen3 no-thinking prefix was not rendered')
     prompt_ids = tok(prompt, add_special_tokens=False)['input_ids']
@@ -196,6 +213,9 @@ def main():
     steps = a.steps or math.ceil(len(train) / a.batch_size)
     accumulation = a.batch_size // a.micro_batch_size
     dtype = torch.float32 if a.device == 'cpu' else torch.bfloat16
+    from peft import LoraConfig, get_peft_model
+    from transformers import AutoModelForCausalLM
+
     model = AutoModelForCausalLM.from_pretrained(a.model, torch_dtype=dtype).to(a.device)
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()

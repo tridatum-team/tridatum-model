@@ -124,8 +124,7 @@ def main():
             x = trainer.encode(tok, row, run['family'], run['max_tokens'])
             raw = next(json.loads(l) for l in (manifest_path.parent / entry['path']).read_text().splitlines()
                        if l.strip() and json.loads(l)['id'] == row['id'])
-            prompt = tok.apply_chat_template(([{'role': 'system', 'content': row['system']}] if row['system'] else [])
-                                             + [{'role': 'user', 'content': row['user']}], tokenize=False,
+            prompt = tok.apply_chat_template(trainer.messages_of(row), tokenize=False,
                                              add_generation_prompt=True, enable_thinking=False)
             joint = tok(prompt + row['answer'] + tok.eos_token, add_special_tokens=False)['input_ids']
             sents = [s.strip() for s in SENT.findall(re.sub(r'\[D\d+\]', '', row['answer'])) if len(s.strip()) > 8]
