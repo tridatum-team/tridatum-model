@@ -290,6 +290,51 @@ class ChatBackendTests(unittest.TestCase):
         self.assertIn('2일 남으셨어요', r['answer'])
         self.assertNotIn('21일', r['answer'])
 
+    def test_chat_numbered_lists_preserve_supplied_amounts(self):
+        from scripts.shared_demo import chat_reply
+        reply = '1. 예산 9만원 이하입니다.\n2) 9만원은 예산 조건을 충족합니다.'
+        with patch('scripts.shared_demo.chat_complete', return_value={'generated': reply}):
+            result = chat_reply('http://127.0.0.1:1', 'qwen3', 4096, [], '예산은 9만원입니다.')
+        self.assertEqual(result['answer'], reply)
+        self.assertEqual(result['commentary_notes'], [])
+
+    def test_chat_list_markers_are_not_amounts_or_arithmetic_operands(self):
+        from scripts.shared_demo import chat_reply
+        history = [{'role': 'user', 'content': '1. 예산은 9만원입니다.'}]
+        reply = '예산 한도는 1원입니다.\n예산 한도는 90,002원입니다.'
+        with patch('scripts.shared_demo.chat_complete', return_value={'generated': reply}):
+            result = chat_reply('http://127.0.0.1:1', 'qwen3', 4096, history, '2) 예산을 정리해줘.')
+        self.assertNotIn('1원', result['answer'])
+        self.assertNotIn('90,002원', result['answer'])
+
+    def test_chat_list_handling_preserves_decimal_and_date_facts(self):
+        from scripts.shared_demo import chat_reply
+        cases = [
+            ('예산은 5만원입니다.', '1.5만원이 예산 한도입니다.', '1.5만원'),
+            ('예산은 9만원이고 날짜는 10월 15일입니다.', '2026. 10. 15. 예산은 9만원입니다.', '2026'),
+        ]
+        for question, reply, unsupported in cases:
+            with self.subTest(reply=reply), patch('scripts.shared_demo.chat_complete', return_value={'generated': reply}):
+                result = chat_reply('http://127.0.0.1:1', 'qwen3', 4096, [], question)
+            self.assertNotIn(unsupported, result['answer'])
+
+    def test_chat_indented_parenthesized_lists_do_not_supply_invented_amounts(self):
+        from scripts.shared_demo import chat_reply
+        history = [{'role': 'user', 'content': '  (1) 예산은 9만원입니다.\n\t2) 식비는 8만원입니다.'}]
+        kept = '정리:\n  (4) 예산은 9만원입니다.\n\t5) 식비는 8만원입니다.'
+        reply = kept + '\n예산 한도는 1원입니다.\n예산 한도는 90,003원입니다.'
+        with patch('scripts.shared_demo.chat_complete', return_value={'generated': reply}):
+            result = chat_reply('http://127.0.0.1:1', 'qwen3', 4096, history, '(3) 앞선 예산과 식비를 정리해줘.')
+        self.assertEqual(result['answer'], kept)
+        self.assertTrue(any('숨겼습니다' in note for note in result['commentary_notes']))
+
+    def test_chat_keeps_ambiguous_spaced_decimal_prefix_in_fact_check(self):
+        from scripts.shared_demo import chat_reply
+        with patch('scripts.shared_demo.chat_complete', return_value={'generated': '1. \t 5만원이 예산 한도입니다.'}):
+            result = chat_reply('http://127.0.0.1:1', 'qwen3', 4096, [], '예산은 5만원입니다.')
+        self.assertNotIn('5만원', result['answer'])
+        self.assertTrue(any('숨겼습니다' in note for note in result['commentary_notes']))
+
     def test_chat_keeps_arithmetic_of_visitor_figures_but_not_other_numbers(self):
         from scripts.shared_demo import chat_reply
         history = [{'role': 'user', 'content': '숙박비 8만원, 식비 2만원이에요.'}, {'role': 'assistant', 'content': '네.'}]

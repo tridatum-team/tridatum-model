@@ -474,6 +474,16 @@ def conversation_turns(history, recall):
     return history if recall else [h for h in history if h.get('kind') != 'search']
 
 
+# General-chat checking only: list labels are neither facts nor arithmetic operands. A dot followed by another
+# number (even across spaces/tabs) may be a decimal or dotted date, so leave that ambiguous prefix intact.
+CHAT_LIST_PREFIX = re.compile(r'^[ \t]*(?:[0-9]+\.(?![ \t]*\d)|[0-9]+\)|\([0-9]+\))[ \t]+', re.MULTILINE)
+
+
+def _chat_numeric_text(text):
+    """Ignore unambiguous line-leading list labels for checks, never for model input or displayed output."""
+    return CHAT_LIST_PREFIX.sub('', text)
+
+
 def chat_reply(base, family, context, history, question, max_tokens=384, explain=False, first_turn=None,
                system_prompt=None, sampling=None, thinking=False):
     """General conversation (or, with `explain`, a general explanation citing no institution) with the model's native
@@ -493,7 +503,9 @@ def chat_reply(base, family, context, history, question, max_tokens=384, explain
             break
         turns = turns[2:]
     output = (r.get('generated') or '').strip()
-    given_text = ' '.join([question] + [h['content'] for h in history if h['role'] == 'user'])
+    # Normalize each message before joining so its first list label is still at a line boundary.
+    given_text = ' '.join(_chat_numeric_text(text) for text in
+                          [question] + [h['content'] for h in history if h['role'] == 'user'])
     given, given_values = _numbers(given_text), _values(given_text)
     derived = _derived(given_values) - given_values
     # Sentences end at . ! ? not preceded by a digit (list numbers like "1." stay attached) or at line breaks; the
@@ -501,8 +513,9 @@ def chat_reply(base, family, context, history, question, max_tokens=384, explain
     pieces = re.split(r'((?<=[^\d][.!?])[ \t]+|\n)', output)
     kept, withheld, computed = [], 0, 0
     for i in range(0, len(pieces), 2):
-        values = _values(pieces[i])
-        own = _numbers(pieces[i]) <= given or values <= given_values
+        checked = _chat_numeric_text(pieces[i])
+        values = _values(checked)
+        own = _numbers(checked) <= given or values <= given_values
         calculated = not own and values and values <= given_values | derived
         claim = UNSOURCED_FACT.search(pieces[i]) and RULE_CLAIM.search(pieces[i])
         if claim and not own and not calculated:
