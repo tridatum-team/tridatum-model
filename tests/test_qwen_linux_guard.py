@@ -703,6 +703,172 @@ class LifecycleTests(unittest.TestCase):
         self.spawn.assert_not_called()
         self.release.assert_not_called()
 
+    def test_pressure_stop_captures_late_cgroup_pressure_after_reap(self):
+        write_pressure_fixture(self.diagnostic_root, full=0)
+        self.host.side_effect = [metrics(full=48200), metrics(full=48200), metrics(full=49218)]
+        self.group_rows = deque([[member()]])
+        actual_read = guard.diagnostic_read
+
+        def reap_then_update(timeout):
+            code = self.reap(timeout)
+            write_pressure_fixture(self.diagnostic_root, full=1018)
+            return code
+
+        def observe_read(*args, **kwargs):
+            if self.supervisor.record['first_stop_reason'] is not None:
+                self.assertTrue(self.supervisor.record['reaped'])
+                self.assertIsNone(self.supervisor.pgid)
+                self.assertEqual(self.events[-1][0], 'reap')
+                saved = json.loads(self.supervisor.receipt.read_text())
+                self.assertEqual(saved['cleanup_state'], 'completed')
+                self.assertEqual(saved['first_stop_reason'], 'memory_psi_full_increased')
+            return actual_read(*args, **kwargs)
+
+        self.child.wait.side_effect = reap_then_update
+        with patch.object(guard, 'diagnostic_read', side_effect=observe_read):
+            result = self.run_guard()
+        post = result['post_cleanup_pressure_diagnostics']
+        self.assertEqual(post['observation']['own_cgroup']['memory.pressure']['value']['full']['total'],
+                         1018)
+        self.assertTrue(all(entry['observation']['own_cgroup']
+                            ['memory.pressure']['value']['full']['total'] == 0
+                            for entry in result['pressure_diagnostics']))
+        self.assertGreaterEqual(post['started_monotonic'], self.events[-1][1])
+        self.assertLessEqual(post['finished_monotonic'],
+                             result['started_monotonic'] + result['elapsed_seconds'])
+        self.assertEqual(result['first_stop_reason'], 'memory_psi_full_increased')
+        self.assertEqual(result['guard_exit_code'], 1)
+        self.assertFalse(guard.clean_exit(result))
+
+    def test_pressure_stop_skips_post_cleanup_io_after_original_deadline(self):
+        self.host.side_effect = [metrics(), metrics(), metrics(full=101)]
+        self.group_rows = deque([[member()]])
+
+        def reap_at_deadline(timeout):
+            code = self.reap(timeout)
+            self.clock.now = self.supervisor.deadline
+            return code
+
+        self.child.wait.side_effect = reap_at_deadline
+        result = self.run_guard()
+        post = result['post_cleanup_pressure_diagnostics']
+        self.assertEqual(post['unavailable']['reason'], 'collection_deadline')
+        self.assertNotIn('observation', post)
+        self.assertEqual(result['guard_exit_code'], 1)
+        self.assertTrue(result['reaped'])
+
+    def test_pressure_stop_requires_proven_reap_before_post_cleanup_io(self):
+        self.host.side_effect = [metrics(), metrics(), metrics(full=101)]
+        self.group_rows = deque([[member()]])
+        self.child.wait.side_effect = subprocess.TimeoutExpired('child', guard.GRACE_SECONDS)
+        result = self.run_guard()
+        post = result['post_cleanup_pressure_diagnostics']
+        self.assertEqual(post['unavailable']['reason'], 'cleanup_not_proven')
+        self.assertNotIn('observation', post)
+        self.assertFalse(result['reaped'])
+        self.assertEqual(result['cleanup_state'], 'failed_or_unproven')
+        self.assertEqual(result['first_stop_reason'], 'memory_psi_full_increased')
+        self.assertEqual(result['guard_exit_code'], 1)
+
+    def test_post_cleanup_collection_error_cannot_mask_pressure_failure(self):
+        self.host.side_effect = [metrics(), metrics(), metrics(full=101)]
+        self.group_rows = deque([[member()]])
+        collect = guard.pressure_diagnostics.side_effect
+
+        def collect_or_fail(*args, **kwargs):
+            if self.supervisor.record['reaped']:
+                self.clock.now += 0.125
+                raise OSError(5, 'SECRET post-cleanup path')
+            return collect(*args, **kwargs)
+
+        guard.pressure_diagnostics.side_effect = collect_or_fail
+        result = self.run_guard()
+        post = result['post_cleanup_pressure_diagnostics']
+        self.assertEqual(post['unavailable']['reason'], 'collection_error')
+        self.assertEqual(post['unavailable']['type'], 'OSError')
+        self.assertNotIn('SECRET', json.dumps(post))
+        self.assertEqual(result['cleanup_state'], 'completed')
+        self.assertEqual(result['first_stop_reason'], 'memory_psi_full_increased')
+        self.assertEqual(result['guard_exit_code'], 1)
+        self.assertEqual(result['started_monotonic'] + result['elapsed_seconds'],
+                         post['finished_monotonic'])
+        self.assertEqual(post['finished_monotonic'] - post['started_monotonic'], 0.125)
+
+    def test_post_cleanup_budget_cancels_remaining_reads_without_new_sample(self):
+        write_pressure_fixture(self.diagnostic_root)
+        self.host.side_effect = [metrics(), metrics(), metrics(full=101)]
+        self.group_rows = deque([[member()]])
+        actual_read = guard.diagnostic_read
+
+        def read_then_spend_budget(*args, **kwargs):
+            value = actual_read(*args, **kwargs)
+            if self.supervisor.record['reaped']:
+                self.clock.now += guard.SAMPLE_SECONDS
+            return value
+
+        with patch.object(guard, 'diagnostic_read', side_effect=read_then_spend_budget):
+            result = self.run_guard()
+        post = result['post_cleanup_pressure_diagnostics']
+        observation = post['observation']
+        self.assertEqual(observation['own_cgroup']['memory.current']['value'], 123)
+        self.assertNotIn('memory.peak', observation['own_cgroup'])
+        self.assertEqual(observation['unavailable']['reason'], 'collection_cancelled')
+        self.assertEqual(observation['ancestors'], [])
+        self.assertEqual(post['host_memory_psi']['unavailable']['reason'], 'collection_cancelled')
+        self.assertEqual(result['samples'][-1]['host']['memory_psi']['full']['total'], 101)
+        self.assertEqual(result['samples'][-1]['rss_bytes'], guard.GIB)
+        self.assertEqual(result['first_stop_reason'], 'memory_psi_full_increased')
+        self.assertEqual(result['guard_exit_code'], 1)
+
+    def test_post_cleanup_host_error_preserves_completed_cgroup_observation(self):
+        write_pressure_fixture(self.diagnostic_root, full=1018)
+        self.host.side_effect = [metrics(), metrics(), metrics(full=101)]
+        self.group_rows = deque([[member()]])
+        actual_read = guard.diagnostic_read
+
+        def fail_host_read(path, *args, **kwargs):
+            if self.supervisor.record['reaped'] and Path(path) == Path('/proc/pressure/memory'):
+                self.clock.now += 0.125
+                raise RuntimeError('SECRET host-read error')
+            return actual_read(path, *args, **kwargs)
+
+        with patch.object(guard, 'diagnostic_read', side_effect=fail_host_read):
+            result = self.run_guard()
+        post = result['post_cleanup_pressure_diagnostics']
+        self.assertEqual(post['observation']['own_cgroup']['memory.pressure']['value']['full']['total'],
+                         1018)
+        self.assertEqual(post['host_memory_psi']['unavailable']['type'], 'RuntimeError')
+        self.assertNotIn('SECRET', json.dumps(post))
+        self.assertLessEqual(post['observation']['finished_monotonic'],
+                             post['host_memory_psi']['started_monotonic'])
+        self.assertEqual(post['host_memory_psi']['finished_monotonic'], post['finished_monotonic'])
+        self.assertEqual(result['started_monotonic'] + result['elapsed_seconds'],
+                         post['finished_monotonic'])
+        self.assertEqual(result['guard_exit_code'], 1)
+
+    def test_post_cleanup_rejects_absent_or_invalid_cleanup_proof(self):
+        for field, value in (
+                ('live_members_before_reap', None), ('live_members_before_reap', [member()]),
+                ('reaped', 1), ('cleanup_errors', [{'stage': 'leader_reap'}]),
+                ('pgid', 123), ('group_signals_enabled', True)):
+            with self.subTest(field=field, value=value):
+                supervisor = guard.Guard(['job'], self.root / 'unused.json', 30)
+                supervisor.record.update(first_stop_reason='memory_psi_full_increased',
+                                         cleanup_state='completed', reaped=True, cleanup_errors=[],
+                                         live_members_before_reap=[], elapsed_seconds=0)
+                supervisor.pgid = None
+                supervisor.group_signals_enabled = False
+                if field in ('pgid', 'group_signals_enabled'):
+                    setattr(supervisor, field, value)
+                elif value is None:
+                    del supervisor.record[field]
+                else:
+                    supervisor.record[field] = value
+                supervisor.capture_post_cleanup_pressure()
+                post = supervisor.record['post_cleanup_pressure_diagnostics']
+                self.assertEqual(post['unavailable']['reason'], 'cleanup_not_proven')
+                self.assertNotIn('observation', post)
+
     def test_diagnostic_history_keeps_admission_and_latest_two_only(self):
         for index in range(7):
             write_pressure_fixture(self.diagnostic_root, full=index, current=123 + index)

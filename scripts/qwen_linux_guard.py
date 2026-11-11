@@ -730,6 +730,56 @@ class Guard:
         self.record['cleanup_state'] = 'failed_or_unproven' if self.record['cleanup_errors'] else 'completed'
         self.record['elapsed_seconds'] = time.monotonic() - self.started
 
+    def capture_post_cleanup_pressure(self):
+        """Best-effort evidence after a PSI rejection, never a health sample.
+
+        Cleanup and its saved receipt must precede this call. The workload lock
+        is already released, so later pressure is not attributable to the child.
+        At most 48 bounded file reads share one cooperative budget; it cannot
+        interrupt an in-flight syscall. The external lifetime limit is unchanged.
+        """
+        if self.record['first_stop_reason'] != 'memory_psi_full_increased':
+            return
+        started = time.monotonic()
+        deadline = min(self.deadline, started + SAMPLE_SECONDS)
+        post = {'started_monotonic': started, 'deadline_monotonic': deadline,
+                'cleanup_finished_monotonic': self.started + self.record['elapsed_seconds'],
+                'after_sample_index': len(self.record['samples']) - 1 if self.record['samples'] else None}
+        self.record['post_cleanup_pressure_diagnostics'] = post
+
+        def cancelled():
+            return time.monotonic() >= deadline
+
+        try:
+            if not (self.record['cleanup_state'] == 'completed'
+                    and self.record['reaped'] is True and self.pgid is None
+                    and self.group_signals_enabled is False
+                    and self.record.get('live_members_before_reap') == []
+                    and self.record['cleanup_errors'] == []):
+                post['unavailable'] = {'reason': 'cleanup_not_proven'}
+            elif cancelled():
+                post['unavailable'] = {'reason': 'collection_deadline'}
+            else:
+                post['observation'] = pressure_diagnostics(
+                    Path(self.record['cgroup_path']), cancel_requested=cancelled)
+                host = {'started_monotonic': time.monotonic()}
+                post['host_memory_psi'] = host
+                try:
+                    host.update(diagnostic_read(
+                        Path('/proc/pressure/memory'), parse_pressure, cancel_requested=cancelled))
+                except Exception as error:
+                    host['unavailable'] = {'reason': 'collection_error',
+                                           'type': type(error).__name__,
+                                           'errno': getattr(error, 'errno', None)}
+                finally:
+                    host['finished_monotonic'] = time.monotonic()
+        except Exception as error:
+            post['unavailable'] = {'reason': 'collection_error', 'type': type(error).__name__,
+                                   'errno': getattr(error, 'errno', None)}
+        finally:
+            post['finished_monotonic'] = time.monotonic()
+            self.record['elapsed_seconds'] = post['finished_monotonic'] - self.started
+
     def run(self):
         if sys.platform != 'linux':
             raise RuntimeError('Linux is required; no platform fallback')
@@ -834,6 +884,7 @@ class Guard:
             try:
                 self.cleanup()
                 self.save()
+                self.capture_post_cleanup_pressure()
             finally:
                 signal.setitimer(signal.ITIMER_REAL, 0)
                 # SIGCHLD is restored last, after cleanup disables all group
