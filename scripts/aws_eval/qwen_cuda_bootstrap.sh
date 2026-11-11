@@ -30,7 +30,7 @@ if [ "${1:-}" != worker ]; then
 import json, pathlib, subprocess, sys
 base = pathlib.Path(sys.argv[1])
 run = json.loads((base / 'config.json').read_text())['run_id']
-if run != 'qwen013-cuda-20261111015752':
+if run != 'qwen013-cuda-20261111030853':
     raise RuntimeError('Exact cleanup ownership required')
 names = ['guard-unittest', 'outside', 'inside', 'deadline', 'descendants', 'environment',
          'packed-compatibility', 'cuda-inspect', 'cuda-generated-smoke', 'cuda-cache-validation', 'model-smoke',
@@ -148,7 +148,7 @@ def sha(stream):
     return h.hexdigest()
 with (base / 'inputs.tar').open('rb') as stream: check(sha(stream) == c['bundle_sha256'], 'Archive SHA mismatch')
 check(not root.exists() and (base / 'inputs.tar').stat().st_size <= 2 * 1024**3, 'Fresh root/input cap required')
-run = 'qwen013-cuda-20261111015752'; prefix = 'runs/qwen-specialization-013/' + run
+run = 'qwen013-cuda-20261111030853'; prefix = 'runs/qwen-specialization-013/' + run
 check(c['run_id'] == run and all(c[k] == prefix + '/' + n + '.json' for k, n in
       (('plan','execution-plan'),('allowlist','input-allowlist'),('approval','approval'),('provenance','provenance'))), 'Metadata identity mismatch')
 required = {'scripts/aws_eval/qwen_cuda_smoke.py', 'scripts/aws_eval/qwen_cuda_bootstrap.sh',

@@ -118,7 +118,7 @@ class AdmissionTests(unittest.TestCase):
                 cuda.verify_approval(record, 'a' * 64)
 
     def test_consumed_gpu_approval_cannot_authorize_new_run(self):
-        self.assertEqual(cuda.RUN_ID, 'qwen013-cuda-20261111015752')
+        self.assertEqual(cuda.RUN_ID, 'qwen013-cuda-20261111030853')
         previous = approval()
         previous.update(run_id='qwen013-cuda-20261111002536', cumulative_cap_usd=22.0,
                         prior_conservative_bound_usd=18.544022428889907)
