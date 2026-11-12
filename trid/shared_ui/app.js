@@ -5,6 +5,7 @@ const token = document.querySelector('meta[name="trid-token"]').content;
 const defaultModel = document.querySelector('meta[name="trid-default-model"]')?.content || '';
 const MAX_QUESTION = 2000;
 let documentId = null, pages = [], documentName = '', busy = false, lastApplied = null;
+const graphSelected = () => el('version').selectedOptions[0]?.dataset.kind === 'graph';
 
 function node(tag, cls, text) {
   const n = document.createElement(tag);
@@ -41,6 +42,7 @@ function setBusy(value) {
   busy = value;
   for (const id of ['send', 'attach', 'attach-pdf', 'attach-paste', 'attach-sample', 'new-chat', 'save-text', 'cancel-text',
                     'version', 'back-workspace']) el(id).disabled = value;
+  updateScope();
   el('command').setAttribute('aria-busy', String(value));
   el('pending').textContent = value ? '답변을 만드는 중' : '';
   if (!value && el('paste-panel').hidden) el('command').focus();
@@ -68,16 +70,30 @@ function describe(d) {
   return [d.institution, d.title, d.kind, d.date ? `${d.date_type || '기준일'} ${d.date}` : null,
           d.effective_date ? `시행 ${d.effective_date}` : null].filter(Boolean).join(' · ');
 }
+const GRAPH_SCOPE = '행정안전부 수집 자료의 메타데이터·원문 근거 그래프입니다. 참조 기관 자료는 별도 출처로 구분하며, 수집 시점 자료가 현행 법령이나 개인별 적용을 보증하지 않습니다.';
+function updateScope() {
+  const graph = graphSelected();
+  el('doc-chip').hidden = !documentId && !graph;
+  el('doc-name').parentElement.firstChild.textContent = graph
+    ? (documentId ? '첨부 범위 유지 · 문서 질문은 Qwen3 원본 선택 · ' : '행안부 근거 그래프 · 수집 자료 기준')
+    : '내 문서에서만 찾는 중 · ';
+  el('doc-name').textContent = documentId ? `${documentName} (${pages.length}쪽)` : '';
+  el('doc-source').hidden = !documentId;
+  el('back-workspace').hidden = !documentId;
+  el('back-workspace').disabled = busy || !documentId;
+  if (el('graph-examples')) el('graph-examples').hidden = !graph || !!documentId;
+}
 function setDocument(data) {
   documentId = data ? data.document_id : null;
   pages = data ? data.pages : [];
   documentName = data ? data.name : '';
-  el('doc-chip').hidden = !documentId;
-  el('doc-name').textContent = documentId ? `${documentName} (${pages.length}쪽)` : '';
+  updateScope();
 }
 function loaded(data) {
   setDocument(data);
-  const m = system(`${documentName}을(를) 읽었습니다. 이제 이 문서에서만 찾습니다.`);
+  const m = system(graphSelected()
+    ? `${documentName}을(를) 첨부했습니다. 공개 그래프로 대신 답하지 않습니다. 문서 질문은 Qwen3 원본을 선택해 주세요.`
+    : `${documentName}을(를) 읽었습니다. 이제 이 문서에서만 찾습니다.`);
   for (const warning of data.warnings || []) note(m, warning.replace('추출 문서 보기에서 확인해 주세요.', '‘문서 보기’로 원문을 확인해 주세요.'), 'warn');
 }
 function highlighted(text, span) {
@@ -110,12 +126,68 @@ function contextLimitLine(result) {
   return result.context_notes?.length ? '일부 근거만 반영 (문맥 한도로 일부 제외)' : null;
 }
 
+function renderGraph(parent, result) {
+  const graph = result.graph;
+  if (!graph) return;
+  if (result.scope) note(parent, result.scope);
+  for (const warning of result.warnings || []) note(parent, warning, 'warn');
+  const details = node('details', 'more');
+  details.append(node('summary', '', `그래프 출처 ${graph.sources?.length || 0}건 · 관계 ${graph.paths?.length || 0}개`));
+  const advanced = node('details', 'more');
+  advanced.append(node('summary', '', '고급 · 그래프 데이터와 근거 위치(JSON)'));
+  if (graph.release) advanced.append(block('그래프 릴리스', typeof graph.release === 'string' ? graph.release : JSON.stringify(graph.release)));
+  if (graph.coverage) advanced.append(block('수집 자료 범위', typeof graph.coverage === 'string' ? graph.coverage : JSON.stringify(graph.coverage, null, 2)));
+  for (const source of graph.sources || []) {
+    const b = block(source.scope === 'reference' ? '사용한 참조 출처 · 행안부 소유 자료 아님' : '사용한 출처', describe(source));
+    if (source.url) b.append(document.createTextNode('\n원문 '), sourceLink(source.url));
+    const fields = ['doc_id', 'source_id', 'version', 'content_hash', 'retrieved_at', 'currency'];
+    b.append(document.createTextNode('\n' + fields.map(key => `${key}: ${source[key] ?? '미상'}`).join('\n')));
+    if (source.limitations?.length) b.append(document.createTextNode('\n자료 한계: ' + source.limitations.join(' · ')));
+    if (source.currency_notice) b.append(document.createTextNode('\n' + source.currency_notice));
+    const metadata = node('details', 'more');
+    metadata.append(node('summary', '', '출처 메타데이터 전체'), block('출처 메타데이터 · 본문 인용 아님', JSON.stringify(source, null, 2)));
+    b.append(metadata);
+    const pin = node('button', 'link', graph.pinned_doc === source.doc_id ? '고정 해제' : '이 출처로 범위 고정');
+    pin.type = 'button';
+    pin.dataset.docId = source.doc_id;
+    pin.addEventListener('click', () => void task(async () => {
+      const pinned = await jsonApi('/api/pin', {
+        version: result.version, doc_id: graph.pinned_doc === source.doc_id ? null : source.doc_id,
+      });
+      graph.pinned_doc = pinned.pinned?.doc_id || null;
+      for (const button of details.querySelectorAll('button[data-doc-id]')) {
+        button.textContent = graph.pinned_doc === button.dataset.docId ? '고정 해제' : '이 출처로 범위 고정';
+      }
+      system(pinned.pinned ? `그래프 출처 고정: ${describe(pinned.pinned)}` : '그래프 출처 고정을 해제했습니다.');
+    }));
+    b.append(document.createTextNode('\n'), pin);
+    details.append(b);
+  }
+  if (graph.pinned_doc && !(graph.sources || []).some(source => source.doc_id === graph.pinned_doc)) {
+    const clear = node('button', 'link', '그래프 출처 고정 해제');
+    clear.type = 'button';
+    clear.addEventListener('click', () => void task(async () => {
+      await jsonApi('/api/pin', {version: result.version, doc_id: null});
+      clear.disabled = true;
+      system('그래프 출처 고정을 해제했습니다.');
+    }));
+    details.append(clear);
+  }
+  for (const path of graph.paths || []) {
+    advanced.append(block(path.predicate === 'metadata' ? '메타데이터 근거 · 본문 인용 아님' : '사용한 그래프 관계와 원문 위치',
+                         JSON.stringify(path, null, 2)));
+  }
+  details.append(advanced);
+  parent.append(details);
+}
+
 function renderAnswer(result, started) {
   const m = message('bot', result.answer || '(빈 응답)');
   const limitLine = contextLimitLine(result);
   if (limitLine) note(m, limitLine, 'warn limit');
   const tags = node('div', 'tags');
-  if (result.intent === 'chat') tags.append(tag('일반 대화 · 문서 근거 없음 · 검증 대상 아님'));
+  if (result.answer_mode === 'graph') tags.append(tag(`근거 그래프 · ${STATUS[result.status] || result.status || '자료 안내'} · 모델 미사용`));
+  else if (result.intent === 'chat') tags.append(tag('일반 대화 · 문서 근거 없음 · 검증 대상 아님'));
   else tags.append(tag(STATUS[result.status] || result.status || '근거 검색', result.status === 'model_failure' ? 'bad' : ''));
   m.append(tags);
   for (const text of result.commentary_notes || []) if (text.includes('숨겼습니다')) note(m, text, 'warn');
@@ -124,18 +196,25 @@ function renderAnswer(result, started) {
   if (result.source_limits?.length) limits.push(result.source_limits.some(t => t.includes('그림')) ? '원본 그림 제외 추출본' : '원본 추출 한계 있음');
   if (result.table_warning) limits.push('표 행·열 대응 미검증');
   if (limits.length) note(m, `자료 한계: ${limits.join(' · ')} — 자세한 내용은 아래 출처에서 확인하세요`, 'warn');
-  // A verified quote is the answer itself: show the exact span; its surrounding text stays in the fold.
+  // Graph facts remain primary; full exact quotes are available on demand. Other modes keep inline quotes.
+  const quotes = result.answer_mode === 'graph' ? node('details', 'more') : m;
+  if (quotes !== m && result.candidates?.length) {
+    quotes.append(node('summary', '', `원문 근거 ${result.candidates.length}개`));
+    m.append(quotes);
+  }
   for (const c of result.candidates || []) {
     const [a, z] = c.prediction?.source_character_span || [0, 0];
     if (z <= a) continue;
     const where = c.source_label || (c.page ? `${c.page}쪽` : '');
     const quote = block(`원문 인용${where ? ' · ' + where : ''}`, '');
     quote.append(node('mark', '', Array.from(c.text).slice(a, z).join('')));
-    m.append(quote);
+    quotes.append(quote);
   }
+  renderGraph(m, result);
 
   const ws = result.workspace;
-  if (result.intent !== 'chat' && ws) lastApplied = ws.applied || null;
+  if (result.answer_mode === 'graph') lastApplied = null;
+  else if (result.intent !== 'chat' && ws) lastApplied = ws.applied || null;
   const details = node('details', 'more');
   const parts = [];
   if (ws?.applied) parts.push(ws.applied.institution || '적용 문서');
@@ -171,6 +250,7 @@ function renderAnswer(result, started) {
   details.append(node('div', 'note', info.join('\n')));
   details.lastChild.style.whiteSpace = 'pre-wrap';
   m.append(details);
+  if (result.answer_mode === 'graph') requestAnimationFrame(() => m.scrollIntoView({block: 'start', behavior: 'smooth'}));
 }
 
 async function ask(question) {
@@ -251,6 +331,10 @@ function updateFlag() {
   const label = el('version').selectedOptions[0]?.textContent || '';
   el('model-flag').hidden = !/회귀/.test(label);
   for (const card of document.querySelectorAll('.version-card')) card.hidden = card.dataset.version !== el('version').value;
+  const help = document.querySelector('.info-body p');
+  if (help && !help.dataset.original) help.dataset.original = help.textContent;
+  if (help) help.textContent = graphSelected() ? GRAPH_SCOPE : help.dataset.original;
+  updateScope();
 }
 
 let composing = false;
@@ -278,7 +362,8 @@ el('close-info').addEventListener('click', () => el('info').close());
 el('info').addEventListener('click', event => { if (event.target === el('info')) el('info').close(); });
 el('version').addEventListener('change', () => {
   updateFlag();
-  if (!document.body.classList.contains('empty')) system(`모델: ${el('version').selectedOptions[0].textContent}`);
+  if (!document.body.classList.contains('empty')) system(`모델: ${el('version').selectedOptions[0].textContent}`
+    + (graphSelected() ? ' · 수집 자료의 근거 그래프 · 모델 미사용' : ''));
   el('command').focus();
 });
 el('version-form').addEventListener('submit', event => event.preventDefault());
@@ -308,6 +393,34 @@ const select = el('version');
 if (!select.querySelector('option[selected]') && defaultModel) {
   const match = Array.from(select.options).find(o => o.textContent === defaultModel);
   if (match) select.value = match.value;
+}
+const examples = node('details', 'more');
+examples.id = 'graph-examples';
+examples.setAttribute('aria-label', '행안부 근거 그래프 예시 질문');
+examples.append(node('summary', '', '행안부 근거 그래프 · 예시 질문'));
+examples.append(node('p', 'note', GRAPH_SCOPE));
+for (const question of [
+  '행정안전부 자료에는 어떤 문서가 있어?',
+  '행정안전부 공무국외출장규정의 발령일과 시행일은?',
+  '행정안전부 공무국외출장규정은 누구에게 적용되고 누가 제외돼?',
+  '행정안전부 공무국외출장 계획서 제출과 사전협의 기한은?',
+  '행정안전부 공무국외출장 귀국 보고 기한은?',
+]) {
+  const button = node('button', '', question);
+  button.type = 'button';
+  button.addEventListener('click', () => {
+    if (busy) return;
+    el('command').value = question;
+    resize();
+    el('command').focus();
+  });
+  examples.append(button);
+}
+el('command-form').before(examples);
+for (const paragraph of document.querySelectorAll('.info-body p')) {
+  if (paragraph.textContent.includes('한 답변에는 문서 1건만 씁니다.')) {
+    paragraph.textContent = 'Qwen 문서 검색은 기관·규정 범위를 확인해 주된 문서를 선택합니다. 행안부 근거 그래프는 답변에 실제 사용한 여러 출처와 관계를 표시합니다. 다른 기관의 참조 자료는 행안부 소유 자료나 자동 적용 근거로 취급하지 않습니다.';
+  }
 }
 updateFlag();
 resize();

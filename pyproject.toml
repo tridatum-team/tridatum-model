@@ -7,6 +7,7 @@ dependencies = ["torch==2.14.1", "tokenizers==0.23.3", "safetensors==0.8.0", "nu
 
 [project.optional-dependencies]
 corpus = ["pyarrow==26.0.0"]
+graph = ["pyoxigraph==0.5.13"]
 pdf = ["pypdf==6.21.2"]
 # scripts/export_gguf.py: gguf (MIT, llama.cpp gguf-py) writes/reads GGUF without a llama.cpp checkout.
 gguf = ["gguf==0.19.0"]

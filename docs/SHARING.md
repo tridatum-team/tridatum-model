@@ -4,7 +4,12 @@
 
 이 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됩니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
 
-**현재 상태 (2026-11-02)**
+**현재 상태 (2026-11-12)**
+- 기본 선택지는 **TRID 행안부 · 근거 그래프 v0.2** (`trid-mois-graph-v0.2`, 모델 미사용)이며, **Qwen3-1.7B 원본**은 일반 대화·기존 검색·첨부 질문용으로 유지합니다. 이전 `trid-v0.1-reader`는 공개 목록에서 제거했습니다.
+- 기존 맥미니 운영본에 그래프 모듈·온톨로지·검토 사실·불변 RDF 저장소, 서버 연결·버전 설정·UI 변경만 **선택 적용**했습니다. 전체 main이나 기관별 기능 등 다른 미커밋 작업의 동기화가 아닙니다. Qwen 원본 가중치·문맥4,096·출력최대512토큰과 학습 실패 판정은 유지합니다.
+- 실제 release는 `mois-000966417b72488e5182`, 경로는 `runs/mois-graph/v1`입니다. 정상 재시작과 공개 Chrome 답변·인용·출처 표시를 확인했습니다. 새 GPU/클라우드 실행·Docker 중지는 하지 않았고, 유보한512토큰 원본/adapter 진단은 재개하지 않았습니다.
+
+**이전 배포 기준선 (2026-11-02 기록, 아래 변경 전)**
 - 운영 코드는 브랜치 `model-resume-030-followup`의 커밋 `2b8ba92`이다(2026-11-02 05:37 UTC 반영, MODEL-RESUME-A-032).
   - 구성: `6a5eb37`(색인 적재 메모리 절감) + ROOT-009 + MODEL-RESUME-A-024–027·030의 검색·라우팅 수정. C-028(`ff59b93`)과 C-031(`2b8ba92`) 독립 확인을 거쳤다.
   - 모델, 가중치, 정밀도(float32 색인), prompt, 버전 목록(원본 Qwen3-1.7B + reader)은 그대로다. **일반 대화 품질은 바뀌지 않는다.**
@@ -12,19 +17,21 @@
 - 이전 운영 `6a5eb37`과 그 이전 `9256df4`는 맥미니 `rollback-6a5eb37/`, `rollback-9256df4/`에 보존했다.
 - 색인: 공유 색인 `runs/workspace-index/v5`, 한국부동산원 별도 색인 `runs/workspace-index/inst-reb-002`, B 검토 메타데이터 search-corpus-v4. C-027 고정 평가 색인 `v3`는 바꾸지 않았다.
 
-**검증 한계**
+**기존 운영 검증 한계 (Qwen 경로; 그래프 검증은 아래 별도)**
 - 맥미니 재부팅 뒤 자동 복구는 시험하지 않았다. 자동 로그인 설정만 확인했다.
 - 디스플레이가 꺼진 상태에서 켜지며 배경화면 동영상이 재생되는 순간의 메모리 여유는 새 코드로 재현하지 못했다.
 - 같은 대화에서 다른 기관 규정으로 바꿔 물으면 이전 기관 규정이 이어지던 결함은 `2b8ba92`에서 고쳤다(명시 전환, 진짜 후속 유지, 새 대화 초기화).
 - 일반 대화(검색 아님)는 원본 1.7B의 능력 한계가 그대로다. 예: 메일 다듬기 요청의 뜻을 바꾼다(C-030, 2026-11-02 사용자 관측).
-- CPU 실행이라 기관 질문 답은 약 17–21초 걸린다.
+- CPU Qwen 기관 질문의 당시 실측은 약17–21초입니다. 그래프 처리 시간이나 현재 성능 보장으로 읽지 않습니다.
 
 ## 제공 버전 (`deploy/macmini-site/versions.json`)
 
 | 버전 | 기반 모델 | 라이선스 | 상태 |
 |---|---|---|---|
-| `trid-assistant-qwen3-1.7b` (**기본**) | Qwen/Qwen3-1.7B-GGUF Q8_0 원본(업무 특화 학습 없음), sha `061b54da…`, llama.cpp 8ca4060 CPU 전용(GPU offload 0) | Apache-2.0 | 대화 + 근거 검색. 특화 모델 아님 |
-| `trid-v0.1-reader` | 자체 91M 추출 독해기 `runs/reader-factorial-01-cpt-v1-v2-v4` (sha `90ccb60f…`) | 자체 | 실험판, 품질 기준 미달 |
+| `trid-mois-graph-v0.2` (**기본**) | **TRID 행안부 · 근거 그래프 v0.2**, 모델 미사용·RDF/SPARQL | 출처별 원자료 이용조건 | 수집 자료 기준의 근거 조회·검토 절차 사실. 현행성·개별 적용 미보증 |
+| `trid-assistant-qwen3-1.7b` | Qwen/Qwen3-1.7B-GGUF Q8_0 원본(업무 특화 학습 없음), sha `061b54da…`, llama.cpp 8ca4060 CPU 전용(GPU offload 0) | Apache-2.0 | 대화 + 기존 근거 검색 + 첨부 질문. 품질 기준 미달 상태 유지 |
+
+`trid-v0.1-reader`(자체91M 추출 독해기, sha `90ccb60f…`, 품질 기준 미달)는 **2026-11-12부터 공개 제공하지 않습니다.** 업로드 분할용 tokenizer만 같은 바이트·해시로 유지하며 reader 가중치를 로드하지 않습니다.
 
 **제공하지 않는 버전 (2026-11-01부터)**
 - `baseline-qwen3-1.7b`: 비교 기준선.
@@ -35,7 +42,53 @@
 
 - 각 버전의 기반 모델, 라이선스, 실측, 한계는 화면의 모델 정보(접힘)에 표시한다.
 
-## 일반 대화와 근거 검색 (TRID-CONVERSATION-001, 기본 버전)
+## 행안부 근거 그래프 설치와 불변 릴리스
+
+### 입력과 설치
+
+그래프는 선택 extra `graph`의 **`pyoxigraph==0.5.13`**을 사용합니다. 모델 학습·임베딩 재생성 없이 기존 공개 색인에서 빌드합니다. 다음 명령은 저장소 루트에서 실행하는 설치·빌드 안내이며, 기존 release를 덮어쓰지 않습니다.
+
+```sh
+python -m pip install -e '.[graph]'
+python scripts/build_mois_graph.py \
+  --index runs/workspace-index/v5 \
+  --facts data/mois-ontology-v1/facts.jsonl \
+  --output runs/mois-graph/v1 \
+  --expected-mois-documents 143
+```
+
+- **전제 자료:** 기존 v5의 `meta.json`, `manifest.json`, `documents.json`, `tables.json`, `graph.json` 및 manifest가 결박한 원천 snapshot이 필요합니다. 실제 빌드는 `runs/api-snapshots/api-drf-admrul-travel-003/`와 `runs/api-snapshots/api-drf-law-civil-service-002/`의 manifest·`normalized/records-00000.jsonl`, `data/search-corpus-v4/documents.jsonl`·`passages.jsonl` 검토 자료를 사용했습니다. 검토 입력은 색인 내부 `review.jsonl`이 있으면 그것을 사용합니다. Git에서 제외한 색인·원천 파일은 clone만으로 확보되지 않습니다.
+- **불변 게시:** 기존 output이 있으면 실패합니다. 입력·검토·근거 검증 뒤 DB 파일 SHA와 입력 해시, `schema_version=1`, `ontology_version=mois-procedure-1`을 manifest에 기록하고 마지막에 게시합니다. 운영 DB를 제자리 재빌드하지 말고 새로운 output에서 새 release를 만든 뒤 명시적으로 설정을 바꿉니다.
+- **읽기 전용 실행:** `GraphStore.open`은 스키마·DB 파일 해시를 확인하고 `Store.read_only`로 엽니다. 배포 설정은 `kind=graph`, `answer_mode=graph`, `graph_path=runs/mois-graph/v1`, `default=true`입니다. 서버 시작 명령과 launchd는 아래 기존 운영 경로를 사용합니다. 그래프 답변 자체는 Qwen을 호출하지 않지만 공개 versions에는 Qwen도 있으므로 **전체 서비스는 graph-only 프로세스가 아닙니다.**
+- **독립 업로드 tokenizer:** `upload_tokenizer=runs/reader-factorial-01-cpt-v1-v2-v4/tokenizer.json`, `upload_tokenizer_sha256=73551e65acfa80834c235602900f31dc353ce230bfb69939ffdf44ca26ebc58d`를 고정합니다. 경로 이름은 과거 reader 디렉터리지만 분할에 필요한 것은 이 tokenizer 파일뿐입니다. 기존과 동일한 분할 계약을 유지하며 reader 가중치는 필요하지 않습니다. 첨부 답변은 Qwen 모드에서만 지원하고 그래프 fallback은 없습니다.
+
+### 스키마·출처와 범위
+
+`trid/service/mois_ontology.ttl`은 기관(`Agency`), 원천 문서와 문서 버전(`SourceDocument`, `DocumentVersion`), 절차·적용·참조 규칙(`ProcedureRule`, `ApplicabilityRule`, `ReferenceRule`), 행위(`Action`), 조건·예외(`Qualifier`), 근거와 참조 대상을 연결합니다. 실제 RDF/SPARQL join으로 규칙→조건/예외→근거를 조회하며 미확보 참조는 `UnresolvedReference`로 보존합니다. 문단 인접 관계나 같은 숫자를 법적 관계로 승격하지 않습니다. **자동 법률 추론·새 모델 훈련·전 규정의 의미 검증이 아닙니다.**
+
+| 실제 release 범위 | 수량·의미 |
+|---|---|
+| 문서 inventory | 행안부143건 + 실제 다른 기관 참조3건 =146건. **완전한 규정143개라는 뜻이 아님** |
+| 원문 구간 | 11,269개 중9,455보류·1,814허용. 허용 발췌도 검토한 규칙과는 구분 |
+| 검토한 구조화 사실 | 34건, 참조 관계6건 포함 |
+| 상세 절차 사실의 현재 범위 | 「행정안전부 공무국외출장 운영지침」, 자료 기준2020-03-20·수집2026-10-28. **현행 법령 재검증 아님** |
+
+문서 메타데이터·inventory·허용 발췌 범위는 위 상세 절차 사실보다 넓습니다. 응답은 검토한 사실의 설명과 원문 그대로의 인용을 구분하고, 출처 URL·원 기관/문서 ID·문서 버전·본문 해시·passage와 문자 위치·기준일·수집일·추출/검토 한계를 제공합니다. 미상 날짜를 추정하거나 수집일을 시행일로 대신하지 않습니다. 수집 당시 현행 표시도 현재 유효성 보증이 아닙니다.
+
+금액·미검증 표·미확보 전결표는 답을 만들지 않습니다. 국내출장이나 다른 기관 규정으로 행안부 공무국외출장 절차를 확장하지 않으며, 다른 기관의 참조 문서는 원 발령기관을 유지합니다. **2026년 국가공무원 규정의 참조 연결만으로2020년 행안부 지침에 대한 적용·우선순위를 자동 판정하지 않습니다.** 허가요청·사전 협의의 서로 다른 기산점과 제외일, 결과보고·등록의 조건/예외는 근거에 묶어 표시합니다.
+
+### 실제 확인과 한계
+
+- 저장소 테스트15개와 후속 포함 답변 테스트15개, **총30개 고유 테스트 메서드**를 통과했습니다. `graph-final-tests.log`의 초기29개와 `graph-followup-tests.log`의15개는 중복 실행을 합산하지 않습니다.
+- 실제 그래프의15질문은 지원 답10개와 범위·미수록·미상·표 경계5개를 확인했습니다. **일반 정확도 벤치마크나 행안부 전체 규정 검증이 아닙니다.** 현재 소스/실제 운영 기반 HTTP 스모크는 각각15질문, 인증·CSRF·입력2,000/2,001자·pin·history·upload 경계를 통과했습니다.
+- 서버 preflight15질문을 통과했고 peak RSS는 **44,220,416bytes**였습니다. 이는 **그래프 전용 사전 확인 프로세스**이며 Qwen을 포함한 전체 공개 서비스 메모리가 아닙니다.
+- 공개 Chrome에서 사전 협의/허가요청 두 기한과 문서 고정 후 결과보고 질문을 실제 전송해 모두 HTTP200, 서버 처리45ms·22ms(초기 cold111ms)를 관측했습니다. 접힌 근거·출처 표시도 확인했으며 전체 브라우저 지연이나 지속 부하 성능을 보증하지 않습니다. UI asset 경로 보정은 별도 영수증에 남겼습니다.
+- Qwen 원본의 실제 첨부 요청은 HTTP200이었지만 **검증 안 됨·확인된 인용 없음**으로 반환됐습니다. 업로드 연결 유지와 답변 품질 합격은 다릅니다. 일반 대화·첨부 QA 품질을 해결했다는 주장이 아닙니다.
+
+Git 독자용 [공개 검증 요약](../reports/mois-graph-v0.2-verification.json)과 별도로, 원본 근거는 로컬 `runs/mois-graph-upgrade-20261112/{build-actual-graph.log,graph-store-unittest.log,graph-final-tests.log,graph-followup-tests.log,actual-answers-fixed.json,http-smoke-head.json,http-smoke-deployed.json,deployment-result.json,ui-asset-correction.json,live-two-deadlines-fixed-ui.json,live-source-pin-followup.json,live-retained-qwen-upload.json,typed-graph-proof.json}`에 보존합니다. 원본 실행 증거·실제 입력·DB는 Git clone에 포함되지 않습니다.
+최종 공개 화면의 로컬 증거는 `runs/mois-graph-upgrade-20261112/site-graph-answer.png`이며 Git에 포함되지 않습니다. 답변 시작이 보이도록 인용·출처·고급 JSON을 기본 접힘으로 표시합니다. 실제 고정 문서 후속 질문 “그럼 결과보고서는 언제까지 내야 해?”에서30일·다음 날 기산·연결된 등록 예외를 함께 표시한 결과를 위 후속 영수증에 보존했습니다.
+
+## 일반 대화와 근거 검색 (TRID-CONVERSATION-001, 유지한 Qwen 원본 버전)
 
 - **경로 선택:** 서비스 모델 자신이 2단어 문법(`검색` | `대화`)으로 처리 경로를 고른다. 키워드 규칙이나 고정 응답은 없다(GENERAL-CHAT-001).
   - 2-word grammar는 입력 하나만 분류한다. 직전 턴이 일반 대화였으면 직전 사용자 입력을 함께 적어 준다. 그래야 "그 중에 하나만 골라줘", "두 문장으로 줄여줘"가 검색으로 가지 않는다.
@@ -115,11 +168,11 @@
 
 ## 사용
 
-- 기관·규정명을 넣어 물으면 업무 질문은 공유 검색 색인에서 근거를 찾습니다. 다른 후보 문서는 `/doc 번호`로 고정할 수 있습니다(고급 기능).
-- `/pdf`, `/paste`로 넣은 문서가 있으면 그 문서에서만 찾습니다. 텍스트 PDF는 2MB·20페이지·5만 자, 붙여넣기는 5,000자까지입니다.
-- 질문은 웹/API 공통으로 Unicode 코드 포인트 2,000개까지 입력할 수 있습니다. 기본 Qwen의 일반 대화·문서 해설은 `deploy/macmini-site/versions.json`의 `max_tokens: 512`를 사용합니다.
-- 전체 문맥4,096토큰은 질문·이전 대화·지시·근거·출력 예약분을 합친 한도입니다. 오래된 대화를 제외해도 현재 질문이 넘치면 질문을 자르지 않고422로 안내합니다. 글자 수가 한도 안이라고 항상 토큰 한도도 충족하는 것은 아닙니다.
-- 추출 독해기는 자체 tokenizer 기준 질문96토큰 제한이 별도로 남아 있습니다. 출력512토큰은 기본 Qwen에 적용하는 최대치이며, 실제 잘림 안내는 답변의 `자세히`에서 확인할 수 있습니다.
+- 기본 **TRID 행안부 · 근거 그래프 v0.2**에서 “행안부 공무국외출장 사전 협의와 허가요청 기한은?”을 질문하고 접힌 근거·출처를 열어 원문과 시점을 확인하세요. `/doc 번호`로 문서를 고정한 후 “그럼 결과보고서 제출 기한은?”처럼 후속 질문할 수 있습니다. 고정도 다른 기관·미수록 규정으로 범위를 넓히지 않습니다.
+- 일반 대화·기존 공유 검색·첨부 질문은 **Qwen3-1.7B 원본으로 전환**합니다. Qwen에서 `/pdf`, `/paste`로 넣은 문서가 있으면 그 문서에서만 찾습니다. 그래프 모드에서는 첨부 질문을 대신 처리하지 않습니다. 텍스트 PDF는2MB·20페이지·5만 자, 붙여넣기는5,000자까지입니다.
+- 질문은 웹/API 공통으로 Unicode 코드 포인트2,000개까지입니다. Qwen 일반 대화·문서 해설의 `max_tokens: 512`와 전체 문맥4,096토큰은 유지합니다.
+- Qwen 전체 문맥은 질문·이전 대화·지시·근거·출력 예약분을 합친 한도입니다. 오래된 대화를 제외해도 현재 질문이 넘치면 자르지 않고422로 안내합니다. 글자 수가 한도 안이라고 토큰 한도도 충족하는 것은 아닙니다.
+- 제거한 추출 독해기의96토큰 질문 제한은 현재 공개 그래프 경로의 제한이 아닙니다. 출력512토큰은 Qwen 생성의 최대치이며 실제 잘림 안내는 답변의 `자세히`에서 확인할 수 있습니다.
 - 모델 파일은 방문자에게 내려주지 않습니다. GGUF와 llama.cpp 실행 파일은 `runs/`에 있으며 기동할 때 sha256을 검사합니다.
 
 PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
@@ -128,19 +181,20 @@ PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전
 
 **현재 원점: 맥미니 (2026-11-01 22:08 KST부터, SITE-MEMORY-023).** 맥북 원점(SITE-RECOVERY-010)은 정지·비활성화했다.
 
-- **코드:** 브랜치 `model-resume-030-followup` 커밋 `2b8ba92`(2026-11-02 반영). 직전 운영은 `site-memory-022` `6a5eb37` = 배포판 `9256df4` + 색인 적재 메모리 절감(022/023).
-  - 문서 값, 모델, 정밀도, 프롬프트, 컨텍스트 4096은 그대로다. 검색·라우팅은 바뀌었다(위 현재 상태).
-  - main에는 아직 병합하지 않았다.
+- **코드 기준선:** 브랜치 `model-resume-030-followup` 커밋 `2b8ba92`(2026-11-02 반영)에 아래 선택 패치를 적용한 운영본입니다. 직전 과거 운영은 `site-memory-022` `6a5eb37` = 배포판 `9256df4` + 색인 적재 메모리 절감(022/023).
+  - Qwen 원본 가중치·정밀도·문맥4,096은 그대로입니다. 출력512는 아래 한도 패치에서 적용됐고 그래프 배포 때 다시 바꾸지 않았습니다.
+  - 전체 main 동기화나 다른 기관별 미커밋 기능의 배포가 아닙니다.
   - 맥미니 `~/Services/trid-site/repo`(`DEPLOYED_FROM_COMMIT`)에 있다.
   - 2026-11-12에는 위 기존 배포본에 질문2,000자·기본 Qwen 출력512토큰·질문 문맥 초과 오류 처리 변경만 추가 적용했습니다. 전체main이나 다른 미커밋 작업을 동기화한 것이 아니며 모델·전체 문맥·색인은 유지했습니다. 적용 전후 소스와 정상 재시작·브라우저 검증은 [별도 실행 기록](../runs/qwen-specialization-013/diagnostic-answers-512-20261112T012044Z/result.json)에 보존합니다.
-  - 되돌리기: `rollback-6a5eb37/scripts/`의 두 파일을 `repo/scripts/`로 복사하고, `ADDED-BY-2b8ba92.txt`에 적힌 3개 파일을 제거한다. 그다음 `DEPLOYED_FROM_COMMIT`을 복원하고 `launchctl kickstart -k gui/$(id -u)/co.tridatum.trid.site`를 실행한다.
+  - 이어서2026-11-12에 위 그래프 release·서버 연결·버전/UI만 선택 반영했습니다. `deployment-result.json`의 최초 기존/새 파일 SHA와 재시작 영수증, `ui-asset-correction.json`의 추가 UI 보정, `optional-import-deployment.json`의 최종 선택 의존성 import 호환성 반영을 함께 보존하며, 최종 파일 해시는 [공개 검증 요약](../reports/mois-graph-v0.2-verification.json)을 따릅니다. 과거 `DEPLOYED_FROM_COMMIT`만으로 현재 파일 전체를 재현할 수 없습니다.
+  - **과거2b8ba92 롤백 기록:** `rollback-6a5eb37/scripts/`의 두 파일 복사와 `ADDED-BY-2b8ba92.txt`의3개 파일 제거는 당시 변경에만 해당합니다. 현재 그래프 배포를 이 절차만으로 되돌리지 말고 해당 배포 전 파일·versions·UI와 영수증을 기준으로 함께 복원해야 합니다. 불변 그래프 DB를 덮어쓰거나 과거 모델 파일을 삭제하지 않습니다.
   - 색인 파생 파일(`dense.f32.npy`, `documents.jsonl`과 기록)은 `python -m trid.service.derived runs/workspace-index/v5 runs/workspace-index/inst-reb-002`로 만든다.
 - **버전 2개만 제공** (`deploy/macmini-site/versions.json`)
-  - 기본 Qwen3-1.7B 원본, v0.1 추출 독해기.
+  - 기본 TRID 행안부 · 근거 그래프 v0.2, Qwen3-1.7B 원본. v0.1 추출 독해기는 제거했습니다.
   - 회귀한 실험판 2개(pilot-sft-001, model-repair-002)는 제공하지 않는다. 모델 파일은 맥북에 보존했다.
   - 목록에 없는 버전 요청은 422로 거절한다.
 - **CPU 실행:** llama.cpp `8ca4060`을 `LLAMA_ARG_DEVICE=none`, `LLAMA_ARG_N_GPU_LAYERS=0`(launchd 환경)으로 돌린다. GPU offload 0(실측).
-  - 기관 업무 질문은 약 17–21초, 대화 약 2초, 첨부 문서 질문 약 6초(맥미니 실측). 맥북 Metal 때(9–13초)보다 느리다. 성능 보장은 없다.
+  - Qwen의 과거 맥미니 실측은 기관 업무 질문 약17–21초, 대화 약2초, 첨부 약6초였습니다(맥북 Metal 당시9–13초). 현재 그래프 처리 시간은 위 별도 증거로 구분하며 성능 보장은 없습니다.
 - **고정 원점:** Worker `ORIGIN_URL=https://trid-test-origin.eommydocs.com`(named tunnel `trid-test-origin`, `4562e85a-…`). 커넥터는 맥미니 한 곳에서만 돈다. 비밀키 없이 요청하면 원점은 403을 준다.
 - **맥미니 launchd** (`deploy/macmini-site/`, 맥미니 `~/Library/LaunchAgents/`에 복사)
   - `co.tridatum.trid.site`: `supervise --hours 168`, KeepAlive, `TRID_DEMO_TUNNEL=0`.
@@ -149,7 +203,7 @@ PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전
 - **맥북 TRID 작업:** `co.tridatum.trid.site`와 `.tunnel`을 `launchctl disable`했다. plist는 `.shared-demo/launchagents-archive-20261101/`로 옮겨 재로그인 때 다시 뜨지 않는다.
 - **알려진 제약** (`reports/coordination/SITE-MEMORY-023.md`)
   - 맥미니 물리 16GB에 다른 서비스가 함께 돈다. 디스플레이가 꺼진 상태에서 켜지면서 배경화면 동영상이 재생되는 순간(022에서 압력 2가 30초 지속된 사례)은 023 코드로는 직접 재현하지 못했다.
-  - 맥미니 정리 상태(bohun-test 정지, Docker VM 정지)가 전제다. 재로그인하면 bohun-test가 다시 뜬다.
+  - 당시023의 맥미니 정리 상태는 bohun-test·Docker VM 정지였고 재로그인하면 bohun-test가 다시 뜨는 것으로 기록했습니다. 이는 과거 조건이며 이번 그래프 배포에서 Docker나 다른 사용자 서비스를 정지했다는 뜻이 아닙니다.
 
 ```sh
 # 맥미니에서

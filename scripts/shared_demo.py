@@ -21,6 +21,7 @@ from urllib.parse import urlsplit, unquote
 
 import numpy as np
 import torch
+from tokenizers import Tokenizer
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate_external_chat import (GRAMMAR, MAX_TOKENS, QWEN3_NO_THINK, SYSTEM, complete, digest, evidence_grammar,
                                     request as llama_request)
@@ -302,6 +303,9 @@ class Session:
     calls: list = field(default_factory=list)
     pinned_doc: str | None = None
     offered_docs: list = field(default_factory=list)
+    graph_pinned_doc: str | None = None
+    graph_version: str | None = None
+    graph_offered_docs: list = field(default_factory=list)
     history: list = field(default_factory=list)  # [{'role', 'content', 'kind'}] of this browser session only
 
 
@@ -1706,16 +1710,28 @@ PUBLIC_FIELDS = ('id', 'label', 'kind', 'base_model', 'license', 'version', 'sta
 
 
 class State:
-    """Serves the versions listed in a versions file. The first `extractive` entry supplies the chunking tokenizer for
-    uploaded documents; `llama` entries talk to a loopback llama.cpp server whose model file hash must match the
-    file (versions on the same model file share one server). The entry marked `"default": true` (else the first) is
-    preselected on the page."""
+    """Serves declared graph, llama and optional extractive releases. Upload chunking uses an explicitly pinned
+    standalone tokenizer when configured, otherwise the first extractive version's tokenizer.
+    The entry marked `"default": true` (else the first) is preselected on the page."""
     def __init__(self, versions):
         self.versions, self.children, servers = {}, [], {}
-        if not any(v['kind'] == 'extractive' for v in versions):
-            raise ValueError('추출 독해기 버전이 하나는 있어야 합니다(업로드 문서 구간 분할 토크나이저).')
+        tokenizer = next((v for v in versions if v.get('upload_tokenizer')), None)
+        if tokenizer:
+            path = ROOT / tokenizer['upload_tokenizer']
+            if digest(path) != tokenizer['upload_tokenizer_sha256']:
+                raise ValueError('업로드 구간 분할 토크나이저 해시가 일치하지 않습니다.')
+            self.tok = Tokenizer.from_file(str(path))
+        elif not any(v['kind'] == 'extractive' for v in versions):
+            raise ValueError('업로드 문서 구간 분할 토크나이저를 설정해 주세요.')
         try:
             for meta in versions:
+                if meta['kind'] == 'graph':
+                    if not hasattr(self, 'graph_reply'):
+                        from trid.service.mois_graph import GraphStore
+                        from trid.service.mois_graph_answers import graph_reply
+                        self.graph_reply = graph_reply
+                    self.versions[meta['id']] = dict(meta, store=GraphStore.open(ROOT / meta['graph_path']))
+                    continue
                 if meta['kind'] == 'extractive':
                     metadata = json.loads((ROOT / meta['run'] / 'training.json').read_text())
                     if metadata.get('status') != 'complete':
@@ -1732,7 +1748,8 @@ class State:
         except BaseException:
             self.close()
             raise
-        self.tok = next(v['tok'] for v in self.versions.values() if v['kind'] == 'extractive')
+        if tokenizer is None:
+            self.tok = next(v['tok'] for v in self.versions.values() if v['kind'] == 'extractive')
         self.default = next((v['id'] for v in versions if v.get('default')), versions[0]['id'])
         self.run = self.versions[self.default]['label']
         self.sessions = {}
@@ -1863,8 +1880,13 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
     origin = 'https://' + hostname
     workspace = getattr(state, 'workspace', None)
     workspace_scope = html.escape(workspace.scope()) if workspace else '공유 검색 자료가 없습니다. 문서를 직접 넣어 주세요.'
+    if state.versions[state.default]['kind'] == 'graph':
+        workspace_scope = html.escape(
+            '행정안전부 수집 자료의 메타데이터·원문 근거 그래프입니다. 명시적 참조 문서는 실제 발행기관과 구분해 '
+            '표시합니다. 수집 시점 자료이며 현행성·개인별 적용을 보증하지 않습니다. 첨부 문서 질문은 Qwen3 원본을 선택해 주세요.')
     version_options = ''.join(
-        f'<option value="{html.escape(v["id"], quote=True)}"{" selected" if v["id"] == state.default else ""}>'
+        f'<option value="{html.escape(v["id"], quote=True)}" data-kind="{html.escape(v["kind"], quote=True)}"'
+        f'{" selected" if v["id"] == state.default else ""}>'
         f'{html.escape(v["label"])}</option>'
         for v in state.public_versions()
     )
@@ -1991,8 +2013,25 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                         with state.lock:
                             session.document = doc
                             session.document_id = secrets.token_urlsafe(24)
+                            for turn in session.history:
+                                if turn.get('kind') == 'graph':
+                                    turn['applied_id'] = None
                         result = {'document_id': session.document_id, 'name': doc.name, 'pages': doc.pages, 'warnings': doc.warnings}
                     elif path == '/api/pin':
+                        request = json.loads(body)
+                        graph_version = request.get('version') if isinstance(request, dict) else None
+                        if isinstance(graph_version, str) and state.versions.get(graph_version, {}).get('kind') == 'graph':
+                            doc_id = request.get('doc_id')
+                            if doc_id is not None and (not isinstance(doc_id, str)
+                                                      or session.graph_version != graph_version
+                                                      or doc_id not in session.graph_offered_docs):
+                                raise DocumentError('직전 그래프 답변에 사용된 출처를 선택해 주세요.')
+                            with state.lock:
+                                session.graph_version = graph_version
+                                session.graph_pinned_doc = doc_id
+                            pinned = state.versions[graph_version]['store'].get_document(doc_id) if doc_id else None
+                            self.respond(200, {'pinned': pinned}, cookie=sid)
+                            return
                         if workspace is None:
                             raise DocumentError('공유 검색 자료가 준비되지 않았습니다.')
                         request = json.loads(body)
@@ -2009,16 +2048,15 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                         with state.lock:
                             session.document = session.document_id = None
                             session.history.clear()
+                            session.pinned_doc = session.graph_pinned_doc = session.graph_version = None
+                            session.offered_docs.clear()
+                            session.graph_offered_docs.clear()
                         result = {'cleared': True}
                     elif path == '/api/ask':
                         request = json.loads(body)
                         if not isinstance(request, dict):
                             raise DocumentError('질문 형식을 확인해 주세요.')
                         workspace_mode = request.get('scope') == 'workspace'
-                        if workspace_mode and workspace is None:
-                            raise DocumentError('공유 검색 자료가 준비되지 않았습니다. 문서를 직접 넣어 주세요.')
-                        if not workspace_mode and (session.document is None or request.get('document_id') != session.document_id):
-                            self.respond(409, {'error': '이 브라우저에서 문서를 먼저 넣어 주세요.'}); return
                         question = request.get('question')
                         if not isinstance(question, str) or len(question) > 2000:
                             raise DocumentError('질문은 2,000자 이하로 입력해 주세요.')
@@ -2027,7 +2065,52 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                             raise DocumentError('목록에 있는 모델 버전을 선택해 주세요.')
                         version = state.versions[version_id]
                         started = time.monotonic()
-                        history = list(session.history)
+                        if version['kind'] == 'graph':
+                            if not workspace_mode:
+                                if session.document is None or request.get('document_id') != session.document_id:
+                                    self.respond(409, {'error': '이 브라우저에서 문서를 먼저 넣어 주세요.'}); return
+                                result = {
+                                    'status': 'clarify', 'answer_mode': 'graph', 'candidates': [], 'warnings': [],
+                                    'answer': '첨부 문서 범위를 유지했습니다. 첨부 문서에 질문하려면 Qwen3 원본을 선택해 주세요. '
+                                              '행안부 공개 근거를 보려면 먼저 “공개 자료 검색으로”를 눌러 주세요.',
+                                    'scope': '첨부 문서를 행안부 공개 그래프로 대체하지 않았습니다. 그래프와 모델을 조회하지 않았습니다.',
+                                    'graph': {'sources': [], 'paths': [], 'answer_kind': 'attachment_scope',
+                                              'context_doc': None},
+                                }
+                            else:
+                                last = next((h for h in reversed(session.history) if h['role'] == 'assistant'), None)
+                                context_doc = (last.get('applied_id') if last and last.get('kind') == 'graph'
+                                               and last.get('version') == version_id else None)
+                                pinned_doc = (session.graph_pinned_doc if session.graph_version == version_id
+                                              else session.pinned_doc)
+                                result = state.graph_reply(version['store'], question, pinned_doc=pinned_doc,
+                                                           context_doc=context_doc)
+                                result['graph']['pinned_doc'] = pinned_doc
+                            result.update(model=version['label'], version=version_id,
+                                          elapsed_ms=round((time.monotonic() - started) * 1000))
+                            graph = result['graph']
+                            # Keep graph context and exact source quotes separate from model conversation memory.
+                            quotes = [
+                                f"[{c['doc_id']}] " + c['text'][slice(*c['prediction']['source_character_span'])]
+                                for c in result.get('candidates', [])
+                                if c.get('prediction', {}).get('source_character_span')]
+                            with state.lock:
+                                if workspace_mode:
+                                    session.graph_pinned_doc = pinned_doc
+                                session.graph_version = version_id
+                                session.graph_offered_docs = [s['doc_id'] for s in graph.get('sources', [])]
+                                session.history += [
+                                    {'role': 'user', 'content': question, 'kind': 'graph', 'version': version_id},
+                                    {'role': 'assistant', 'content': '[그래프 원문 인용] ' + ' '.join(quotes)[:1200],
+                                     'kind': 'graph', 'version': version_id, 'applied_id': graph.get('context_doc')}]
+                                del session.history[:-HISTORY_MESSAGES]
+                            self.respond(200, result, cookie=sid)
+                            return
+                        if workspace_mode and workspace is None:
+                            raise DocumentError('공유 검색 자료가 준비되지 않았습니다. 문서를 직접 넣어 주세요.')
+                        if not workspace_mode and (session.document is None or request.get('document_id') != session.document_id):
+                            self.respond(409, {'error': '이 브라우저에서 문서를 먼저 넣어 주세요.'}); return
+                        history = [h for h in session.history if h.get('kind') != 'graph']
                         intent, kind = 'search', None
                         last = next((h for h in reversed(history) if h['role'] == 'assistant'), None)
                         context_doc = last.get('applied_id') if last and last.get('kind') == 'search' else None
@@ -2294,7 +2377,7 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--versions', type=Path, default=ROOT / 'deploy/shared-demo/versions.json',
-                        help='JSON list of served versions; the first is the default and must be extractive')
+                        help='JSON list of served graph/llama/extractive versions; default:true selects the default')
     parser.add_argument('--secret-file', required=True)
     parser.add_argument('--port', type=int, default=51873)
     parser.add_argument('--workspace', type=Path, default=ROOT / 'runs/workspace-index/v5',
@@ -2313,15 +2396,17 @@ def main():
     state = None
     try:
         state = State(json.loads(args.versions.read_text()))
-        state.workspace = (Workspace(args.workspace, review=args.passage_review)
-                           if (args.workspace / 'manifest.json').exists() else None)
+        state.workspace = None
         state.institution_workspaces = {}
-        for path in args.institution_index or [p for p in [ROOT / 'runs/workspace-index/inst-reb-002'] if p.exists()]:
-            inst = Workspace(path, embedder=state.workspace.embedder)
-            ids = {m.get('issuer_id') for m in inst.meta.values()}
-            if len(ids) != 1 or not inst.manifest.get('separate'):
-                raise ValueError(f'{path}: an institution index must be a separate snapshot of exactly one institution')
-            state.institution_workspaces[ids.pop()] = inst
+        if any(v['kind'] != 'graph' for v in state.versions.values()):
+            state.workspace = (Workspace(args.workspace, review=args.passage_review)
+                               if (args.workspace / 'manifest.json').exists() else None)
+            for path in args.institution_index or [p for p in [ROOT / 'runs/workspace-index/inst-reb-002'] if p.exists()]:
+                inst = Workspace(path, embedder=state.workspace.embedder)
+                ids = {m.get('issuer_id') for m in inst.meta.values()}
+                if len(ids) != 1 or not inst.manifest.get('separate'):
+                    raise ValueError(f'{path}: an institution index must be a separate snapshot of exactly one institution')
+                state.institution_workspaces[ids.pop()] = inst
         server = make_server(state, Path(args.secret_file).read_text().strip(), args.port)
         stop = threading.Event()
         def prune():

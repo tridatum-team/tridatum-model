@@ -1,0 +1,70 @@
+@prefix m: <https://tridatum.co/ontology/mois/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+m: a owl:Ontology ; owl:versionInfo "mois-procedure-1" ;
+    rdfs:comment "Source-bound procedural assertions, not automatic legal applicability or current-law reasoning. Indexed adjacency is not a legal relation." .
+m:Agency a rdfs:Class .
+m:DocumentVersion a rdfs:Class .
+m:Passage a rdfs:Class .
+m:SourceDocument a rdfs:Class .
+m:Action a rdfs:Class ; rdfs:subClassOf m:Entity .
+m:Rule a rdfs:Class .
+m:ProcedureRule a rdfs:Class ; rdfs:subClassOf m:Rule .
+m:ApplicabilityRule a rdfs:Class ; rdfs:subClassOf m:Rule .
+m:ReferenceRule a rdfs:Class ; rdfs:subClassOf m:Rule .
+m:Entity a rdfs:Class .
+m:Subject a rdfs:Class ; rdfs:subClassOf m:Entity .
+m:RuleObject a rdfs:Class ; rdfs:subClassOf m:Entity .
+m:Topic a rdfs:Class .
+m:Qualifier a rdfs:Class .
+m:Evidence a rdfs:Class .
+m:ReferenceEndpoint a rdfs:Class .
+m:DocumentVersion rdfs:subClassOf m:ReferenceEndpoint .
+m:UnresolvedReference a rdfs:Class ; rdfs:subClassOf m:ReferenceEndpoint .
+
+m:issuedBy a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range m:Agency .
+m:hasPassage a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range m:Passage .
+m:versionOf a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range m:SourceDocument .
+m:version a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range xsd:string .
+m:sourceId a rdf:Property ; rdfs:domain m:SourceDocument ; rdfs:range xsd:string .
+m:action a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:Action .
+m:hasRule a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range m:Rule .
+m:qualifiesRule a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:Rule ;
+    rdfs:comment "An evidenced qualification to another rule in the same document; not a general exemption from all obligations." .
+m:subject a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:Subject .
+m:object a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:RuleObject .
+m:predicate a rdf:Property ; rdfs:domain m:Rule ; rdfs:range rdf:Property .
+m:topic a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:Topic .
+m:qualifier a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:Qualifier .
+m:key a rdf:Property ; rdfs:domain m:Qualifier ; rdfs:range xsd:string .
+m:value a rdf:Property ; rdfs:domain m:Qualifier ; rdfs:range rdfs:Literal .
+m:unknownValue a rdf:Property ; rdfs:domain m:Qualifier ; rdfs:range xsd:boolean .
+m:evidence a rdf:Property ; rdfs:domain m:Rule ; rdfs:range m:Evidence .
+m:passage a rdf:Property ; rdfs:domain m:Evidence ; rdfs:range m:Passage .
+m:quote a rdf:Property ; rdfs:domain m:Evidence ; rdfs:range xsd:string .
+m:referenceTarget a rdf:Property ; rdfs:domain m:ReferenceRule ; rdfs:range m:ReferenceEndpoint .
+m:resolved a rdf:Property ; rdfs:domain m:ReferenceRule ; rdfs:range xsd:boolean .
+m:docId a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range xsd:string .
+m:scope a rdf:Property ; rdfs:domain m:DocumentVersion ; rdfs:range xsd:string .
+m:text a rdf:Property ; rdfs:domain m:Passage ; rdfs:range xsd:string .
+m:valueHold a rdf:Property ; rdfs:domain m:Passage ; rdfs:range xsd:boolean .
+m:alias a rdf:Property ; rdfs:domain m:Agency ; rdfs:range xsd:string .
+m:label a rdf:Property ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+m:record a rdf:Property ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string ;
+    rdfs:comment "Lossless API projection; typed triples, not this literal alone, determine graph membership and evidence joins." .
+m:start a rdf:Property ; rdfs:domain rdfs:Resource ; rdfs:range xsd:integer .
+m:end a rdf:Property ; rdfs:domain rdfs:Resource ; rdfs:range xsd:integer .
+m:contentHash a rdf:Property ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+
+m:requires a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:deadline a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:appliesTo a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:excludes a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:prohibits a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:exception a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:authorizes a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:references a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .
+m:submittedTo a rdf:Property ; rdfs:domain m:Subject ; rdfs:range m:RuleObject .

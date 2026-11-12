@@ -1,0 +1,283 @@
+{
+  "schema_version": 1,
+  "verified_at_utc": "2026-11-12T04:16:47.704208+00:00",
+  "site": "https://test.tridatum.co",
+  "release": "mois-000966417b72488e5182",
+  "default_version": "trid-mois-graph-v0.2",
+  "implementation": {
+    "engine": "pyoxigraph",
+    "engine_version": "0.5.13",
+    "ontology_version": "mois-procedure-1",
+    "persisted_rdf_quads": 81907,
+    "query_language": "SPARQL",
+    "trained_model_upgrade": false,
+    "new_gpu_or_training_jobs": 0
+  },
+  "coverage": {
+    "admitted_passages": 1814,
+    "documents": 146,
+    "facts": 34,
+    "held_passages": 9455,
+    "missing_documents": 0,
+    "mois_documents": 143,
+    "passages": 11269,
+    "private_passages": 0,
+    "reference_documents": 3,
+    "references": 6
+  },
+  "source_hashes": {
+    "data/search-corpus-v4/documents.jsonl": "5e341294f022ff7eadab053874d79ed7f46df20003b677d0f83e70f1870afd78",
+    "documents.json": "dac70e6cbe36cc17c32c52cee4b940fc878021583aab3c41eedb90bb5827730d",
+    "facts.jsonl": "bb0152e8c3b571c87bb57f3ac347b4b029a0615618876a9fb596d6187f43809d",
+    "graph.json": "ce68472991ce3abf95daa2c0d80cd685f967ae31d7b7037d498bc9396854c707",
+    "manifest.json": "1c9540cab9a0a94f809e3d1de63bd7a9b6356d9d6f16857fb3e351d25cb9ba21",
+    "meta.json": "b14b4a639baedf313f44e024958c2c66c9062c6e6105f8d9bf44c55e47e83cbc",
+    "ontology": "99a68288db0ad7bcb98b4cc8c1b2dc2402d5a1db553d5efeaaa620fb51d518e6",
+    "passage_review": "fe6987c947ab3c87a928c1b2be9194d9068a5daa1b0421d8209d3a284469441f",
+    "runs/api-snapshots/api-drf-admrul-travel-003/manifest.json": "c40fb59273d7951154a2c8bb1717f872c1671a43c9f15e43c68a17fabe1dcb32",
+    "runs/api-snapshots/api-drf-admrul-travel-003/normalized/records-00000.jsonl": "eab88a514c8c7001380703574280be385a5e95fb89509eeab1fd881e1b96313a",
+    "runs/api-snapshots/api-drf-law-civil-service-002/manifest.json": "27c7c47962bdfdf2f368dd430390ddad4cfb4441779fa88da4783159c2888a7a",
+    "runs/api-snapshots/api-drf-law-civil-service-002/normalized/records-00000.jsonl": "fd745cd8db16631f6eba602e2db86836a2a99b9e1cf3f0e8a1836c390eb51910",
+    "tables.json": "153d854cd49b39096dd1f911846def51d3539da20fce93551b1dc5d9547198f8"
+  },
+  "reviewed_procedure_scope": {
+    "title": "행정안전부 공무국외출장 운영지침",
+    "doc_id": "law-go-kr:admrul:2100000187731",
+    "issued": "2020-03-20",
+    "effective": "2020-03-20",
+    "collected": "2026-10-28",
+    "current_legal_validity_verified": false,
+    "reviewed_facts": 34,
+    "note": "The broader inventory supports metadata and admitted source excerpts. Reviewed procedural answers are not comprehensive coverage of all MOIS work."
+  },
+  "verification": {
+    "unittest_command": "python -m unittest tests.test_mois_graph tests.test_mois_graph_answers -v",
+    "unique_behavior_tests_passed": 30,
+    "store_tests": 15,
+    "answer_tests": 15,
+    "optional_dependency_absent": {
+      "legacy_service_import": "passed after failing-before reproduction",
+      "default_test_discovery": "passed; two graph test modules skipped"
+    },
+    "exact_http_candidates": [
+      "clean HEAD source projection",
+      "existing deployed-source projection"
+    ],
+    "http_checks": [
+      "15 real-source questions",
+      "proxy authorization and CSRF",
+      "2000-codepoint question accepted; 2001 rejected",
+      "offered-source-only pinning",
+      "source-bound follow-up",
+      "other-agency isolation",
+      "sample tokenization without extractive-reader weights",
+      "attachment-scope isolation",
+      "clearing conversation resets source pin",
+      "no neural model child processes in graph-only HTTP checks"
+    ],
+    "rdf_checks": [
+      "persisted read-only store",
+      "typed property-path traversal from confidentiality exception to the qualified reporting rule"
+    ],
+    "actual_case_scope": "15 selected source-grounding and boundary cases; not a general accuracy benchmark or a frozen model evaluation"
+  },
+  "actual_cases": [
+    {
+      "id": "metadata",
+      "question": "행정안전부 공무국외출장 운영지침의 발령일과 시행일을 알려줘",
+      "expected": "원문 메타데이터에서 각각 2020-03-20. 현행 여부 재확인과 구별; 본문 인용으로 위장하지 않음.",
+      "status": "answer",
+      "answer": "「행정안전부 공무국외출장 운영지침」의 출처 메타데이터입니다(본문 인용 아님).\n시행일: 2020-03-20\n발령일자: 2020-03-20\n버전: 2100000187731\n수집된 문서 버전의 근거입니다. 수집일·시행일·현행 표시는 현재 법적 유효성을 보증하지 않습니다.",
+      "elapsed_ms_local": 5.898
+    },
+    {
+      "id": "overview",
+      "question": "행안부 공무국외출장은 어떤 절차로 진행해?",
+      "expected": "계획·사전협의·허가/필요시심사·귀국후보고의 출처가 있는 절차. 관련 조항과 범위를 제시; 찾았다는 말만 하지 않음.",
+      "status": "answer",
+      "answer": "수록된 규정의 주요 절차입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n이 규정의 적용범위 (제2조) — 검토된 근거 사실: 다른 법령 또는 행정안전부장관이 특별히 정한 경우를 제외하고, 행정안전부 소속 공무원이 공무의 수행이나 그 밖에 그 직무와 관련하여 국외에 출장하는 경우 및 그 밖의 사람이 행정안전부의 예산으로 공무의 수행을 위하여 국외에 출장하는 경우에 적용한다. [1]\n\n출장자의 출장계획서 등 제출 전 사전 협의 (제4조제3항) — 검토된 근거 사실: 출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다. [2]\n\n공무국외출장을 실시하려는 자의 출장계획서 등 허가요청 (제4조제1항) — 검토된 근거 사실: 공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다. [2]\n\n허가권자 및 공무국외출장 총괄 부서장 (제4조제2항) — 검토된 근거 사실: 허가권자는 제4조제1항의 허가요청에 대해 별표의 기준에 따라 검토하여 적정한 경우 허가한다. 다만 공무국외출장 총괄 부서장은 제출받은 공무국외출장이 제5조제1항 각 호의 어느 하나에 해당할 경우 허가권자의 허가 이전에 공무국외출장 심사위원회의 사전심사를 거쳐야 한다. [2]\n\n행정안전부장관 (제3조) — 검토된 근거 사실: 제2조에 따라 이 규정의 적용을 받는 공무원 등의 공무국외출장은 행정안전부장관이 허가한다. 장관은 출장자 또는 출장자 대표의 직급에 따라 허가권을 위임할 수 있으며, 이 경우 위임범위는 「행정안전부 위임전결규정」에 따른다. [3]\n\n공무국외출장자의 결과보고서 제출 및 등록 (제11조제1항) — 검토된 근거 사실: 공무국외출장자는 귀국 후 30일 이내(출장을 마친 날의 다음 날부터 기산)에 결과보고서를 별지 제5호서식에 따라 작성하여 해당 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 인사혁신처 국외출장연수정보시스템 및 홈페이지, 내부게시판 등에 등록하여야 한다. [4]\n\n결과보고서의 비공개 사유 미등록에 관한 서식 기재 (별지 제7호서식 보고서 제출·등록 건수의 주석) — 검토된 근거 사실: 별지 제7호서식은 국외출장연수정보시스템의 비공개 사유 미등록 건수를 별도로 구분한다. 그 사유로 국가기밀의 보호·보안유지 등을 위하여 필요한 경우에 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우를 기재한다. 이는 서식에 기록된 등록 관련 예외이며, 결과보고서 제출 자체를 면제하는 근거로 해석하지 않는다. 서식의 불완전한 조문 표기는 보정하지 않았고 현행 적용 여부는 재확인하지 않았다. [5]",
+      "elapsed_ms_local": 11.159
+    },
+    {
+      "id": "plan",
+      "question": "행안부 국외출장 계획서는 언제까지 누구에게 제출해야 해?",
+      "expected": "출장일20일전, 토요일·공휴일 제외, 공무국외출장 총괄 부서장. 제4조 정확한 근거.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n공무국외출장을 실시하려는 자의 출장계획서 등 허가요청 (제4조제1항) — 검토된 근거 사실: 공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다. [1]",
+      "elapsed_ms_local": 10.279
+    },
+    {
+      "id": "consult",
+      "question": "국외출장 계획서를 제출하기 전에 사전 협의는 언제 해야 해?",
+      "expected": "계획서 제출7일전, 토요일·공휴일 제외, 총괄부서장. 출장일 기준20일과 혼동하지 않음.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n출장자의 출장계획서 등 제출 전 사전 협의 (제4조제3항) — 검토된 근거 사실: 출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다. [1]",
+      "elapsed_ms_local": 9.97
+    },
+    {
+      "id": "two_deadlines",
+      "question": "행안부 국외출장 계획서 제출 기한과 사전협의 기한을 둘 다 알려줘",
+      "expected": "서로 다른 기준사건에 대한20일과7일을 조건과 함께 모두 제시.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n출장자의 출장계획서 등 제출 전 사전 협의 (제4조제3항) — 검토된 근거 사실: 출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다. [1]\n\n공무국외출장을 실시하려는 자의 출장계획서 등 허가요청 (제4조제1항) — 검토된 근거 사실: 공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다. [1]",
+      "elapsed_ms_local": 10.062
+    },
+    {
+      "id": "report",
+      "question": "행안부 국외출장을 다녀오면 결과보고서는 언제까지 내야 해?",
+      "expected": "귀국후30일이내, 출장마친날 다음날부터 기산. 부서장검토결재후 허가권자에게 제출하고 등록. 제11조 근거.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n공무국외출장자의 결과보고서 제출 및 등록 (제11조제1항) — 검토된 근거 사실: 공무국외출장자는 귀국 후 30일 이내(출장을 마친 날의 다음 날부터 기산)에 결과보고서를 별지 제5호서식에 따라 작성하여 해당 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 인사혁신처 국외출장연수정보시스템 및 홈페이지, 내부게시판 등에 등록하여야 한다. [1]\n\n결과보고서의 비공개 사유 미등록에 관한 서식 기재 (별지 제7호서식 보고서 제출·등록 건수의 주석) — 검토된 근거 사실: 별지 제7호서식은 국외출장연수정보시스템의 비공개 사유 미등록 건수를 별도로 구분한다. 그 사유로 국가기밀의 보호·보안유지 등을 위하여 필요한 경우에 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우를 기재한다. 이는 서식에 기록된 등록 관련 예외이며, 결과보고서 제출 자체를 면제하는 근거로 해석하지 않는다. 서식의 불완전한 조문 표기는 보정하지 않았고 현행 적용 여부는 재확인하지 않았다. [2]",
+      "elapsed_ms_local": 9.78
+    },
+    {
+      "id": "population",
+      "question": "행안부 직원이 아니어도 행안부 예산으로 가는 공무국외출장에 이 지침이 적용돼?",
+      "expected": "제2조2호: 다른사람도 행안부 예산으로 공무수행 국외출장이면 포함; 다른법령/장관특별규정 예외를 빠뜨리지 않음. 모든 사람 무조건 적용이라고 하지 않음.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n이 규정의 적용범위 (제2조) — 검토된 근거 사실: 다른 법령 또는 행정안전부장관이 특별히 정한 경우를 제외하고, 행정안전부 소속 공무원이 공무의 수행이나 그 밖에 그 직무와 관련하여 국외에 출장하는 경우 및 그 밖의 사람이 행정안전부의 예산으로 공무의 수행을 위하여 국외에 출장하는 경우에 적용한다. [1]",
+      "elapsed_ms_local": 9.88
+    },
+    {
+      "id": "exception",
+      "question": "행안부 국외출장 비용을 직무상 이해관계자가 부담해도 돼?",
+      "expected": "원칙금지와 필요성인정+심사위원회심사+장관허가 예외가 함께 제시. 무조건가능/무조건금지로 축약하지 않음.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n직무상 이해관계자가 경비를 부담하는 공무국외출장 (제8조제1항 및 제2항) — 검토된 근거 사실: 직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하는 공무국외출장은 할 수 없다. 다만 필요성이 인정된 경우로서 심사위원회의 심사를 거쳐 장관이 허가한 경우는 예외로 하며, 이 경우 이해관계자가 부담하는 경비는 「공무원 여비 규정」에서 정한 범위의 운임과 숙박비·식비 등을 초과할 수 없다. [1]",
+      "elapsed_ms_local": 10.087
+    },
+    {
+      "id": "mileage",
+      "question": "공무국외출장 항공마일리지를 개인적으로 써도 되나?",
+      "expected": "제9조1항 사적목적활용금지. 제9조3항14일입력은 부득이출국전입력이 어려운 경우의 예외임을 보존.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n공무국외출장에 의해 취득한 항공마일리지 (제9조) — 검토된 근거 사실: 공무국외출장에 의해 취득한 항공마일리지는 사적 목적으로 활용하여서는 아니 된다. 공무국외출장자는 출국 전 전자인사관리시스템(e-사람)으로 공무국외출장으로 발생한 누적항공마일리지를 확인하고 보너스항공권 구매 또는 좌석 등급 상향 등을 통한 활용에 적극 노력하며 변동 사항을 입력하여야 한다. 부득이하게 출국 전 입력이 어려울 경우에는 귀국 후 14일 이내에 전자인사관리시스템에 변동 사항을 입력하여야 한다. [1]",
+      "elapsed_ms_local": 9.753
+    },
+    {
+      "id": "annual",
+      "question": "행안부 다음 연도 공무국외출장 연간계획은 언제까지 제출해?",
+      "expected": "매년12월20일까지 총괄부서장, 제15조. 출장개별20일기한과 구별.",
+      "status": "answer",
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n다음 연도 공무국외출장을 계획하고 있는 자의 연간계획 제출 (제15조제1항) — 검토된 근거 사실: 다음 연도에 공무국외출장을 계획하고 있는 자는 연간 공무국외출장계획서를 별지 제6호서식에 따라 작성하여 매년 12월 20일까지 공무국외출장 총괄 부서장에게 제출하여야 한다. [1]",
+      "elapsed_ms_local": 9.705
+    },
+    {
+      "id": "delegation_missing",
+      "question": "행정안전부 위임전결규정에서 직급별 국외출장 허가권 위임범위를 알려줘",
+      "expected": "지침제3조가 해당규정을 참조한다는 사실과 참조원문미확보를 구별. 직급별 위임표를 생성하지 않음.",
+      "status": "not_found",
+      "answer": "참조 관계는 확인되지만 해당 참조 규정 본문은 이 그래프에 없습니다. 위임·전결권자나 세부 기준을 확정할 수 없습니다.\n\n허가권 위임범위 (제3조제2항) — 검토된 근거 사실: 행정안전부 위임전결규정 [1]",
+      "elapsed_ms_local": 9.565
+    },
+    {
+      "id": "domestic_boundary",
+      "question": "행안부 국내출장에도 이 국외출장 운영지침의 20일 기한을 적용해?",
+      "expected": "국외출장 적용범위만 확인됨; 국내출장 적용을 추론/보장하지 않음.",
+      "status": "clarify",
+      "answer": "「행정안전부 공무국외출장 운영지침」은 국외출장 문서입니다. 국내출장의 지급액·절차 근거로 대체할 수 없습니다.",
+      "elapsed_ms_local": 8.731
+    },
+    {
+      "id": "other_agency",
+      "question": "국가보훈부 공무국외출장 계획서는 언제까지 내야 해?",
+      "expected": "행안부자료로 국가보훈부 기한을 답하지 않고 기관범위 차이를 명시.",
+      "status": "clarify",
+      "answer": "국가보훈부의 규정으로 답할 근거 범위를 선택하지 않았습니다. 행정안전부 규정을 다른 기관에 적용하지 않습니다. 수록된 참조 문서는 정확한 문서명으로 지정해 주세요.",
+      "elapsed_ms_local": 2.262
+    },
+    {
+      "id": "amount_boundary",
+      "question": "행안부 국외출장 식비는 하루에 얼마야?",
+      "expected": "직급·국가·등급/표검증 없이 금액생성금지. 직접확인가능한 여비참조와 실제추가조건 또는 미확보근거를 설명.",
+      "status": "review",
+      "answer": "이 질문의 지급액·상한·계산 결과를 확정할 검증된 금액 근거가 없습니다. 직급·국가·등급 등 적용 조건과 검증된 표 없이 금액을 계산하지 않습니다.\n아래는 참조 관계에 관해 검토된 사실일 뿐 금액 또는 참조 판본의 적용을 확정한 근거는 아닙니다.\n\n제8조제1항 단서에 해당하는 이해관계자 부담 경비의 상한 근거 (제8조제2항) — 검토된 근거 사실: 공무원 여비 규정 [1]",
+      "elapsed_ms_local": 9.519
+    },
+    {
+      "id": "unknown",
+      "question": "행안부 화성 우주출장 식비 기준을 알려줘",
+      "expected": "확인된 자료에 없는 기준을 만들지 않음. 단어출장 겹침만으로 일반국외출장 규정을 적용하지 않음.",
+      "status": "not_found",
+      "answer": "질문의 대상·상황에 맞는 검증된 근거를 확인하지 못했습니다. '출장'이나 '비용' 같은 일부 단어가 같다는 이유로 다른 대상의 규정을 적용하지 않습니다.",
+      "elapsed_ms_local": 9.563
+    }
+  ],
+  "live_browser_checks": [
+    {
+      "scenario": "distinct plan/consultation deadlines",
+      "http_status": 200,
+      "status": "answer",
+      "version": "trid-mois-graph-v0.2",
+      "elapsed_ms_server": 45,
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n출장자의 출장계획서 등 제출 전 사전 협의 (제4조제3항) — 검토된 근거 사실: 출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다. [1]\n\n공무국외출장을 실시하려는 자의 출장계획서 등 허가요청 (제4조제1항) — 검토된 근거 사실: 공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다. [1]"
+    },
+    {
+      "scenario": "source-pinned return-report follow-up with confidentiality registration exception",
+      "http_status": 200,
+      "status": "answer",
+      "version": "trid-mois-graph-v0.2",
+      "elapsed_ms_server": 22,
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n공무국외출장자의 결과보고서 제출 및 등록 (제11조제1항) — 검토된 근거 사실: 공무국외출장자는 귀국 후 30일 이내(출장을 마친 날의 다음 날부터 기산)에 결과보고서를 별지 제5호서식에 따라 작성하여 해당 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 인사혁신처 국외출장연수정보시스템 및 홈페이지, 내부게시판 등에 등록하여야 한다. [1]\n\n결과보고서의 비공개 사유 미등록에 관한 서식 기재 (별지 제7호서식 보고서 제출·등록 건수의 주석) — 검토된 근거 사실: 별지 제7호서식은 국외출장연수정보시스템의 비공개 사유 미등록 건수를 별도로 구분한다. 그 사유로 국가기밀의 보호·보안유지 등을 위하여 필요한 경우에 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우를 기재한다. 이는 서식에 기록된 등록 관련 예외이며, 결과보고서 제출 자체를 면제하는 근거로 해석하지 않는다. 서식의 불완전한 조문 표기는 보정하지 않았고 현행 적용 여부는 재확인하지 않았다. [2]"
+    },
+    {
+      "scenario": "plan deadline after final compatibility cutover",
+      "http_status": 200,
+      "status": "answer",
+      "version": "trid-mois-graph-v0.2",
+      "elapsed_ms_server": 110,
+      "answer": "질문 관련 절차·조건입니다. 아래는 출처에 근거해 검토한 사실이며 원문 그대로의 인용이 아닙니다. 번호별 정확한 원문은 근거 구간에 표시했습니다. 개별 사안의 적용 판정은 아닙니다.\n\n공무국외출장을 실시하려는 자의 출장계획서 등 허가요청 (제4조제1항) — 검토된 근거 사실: 공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다. [1]"
+    }
+  ],
+  "live_ui": {
+    "graph_default_visible": true,
+    "public_extractive_reader_removed": true,
+    "quoted_evidence_and_provenance_collapsed": true,
+    "answer_visible_without_expanded_graph_json": true,
+    "final_screenshot_sha256": "62a03740a565d5738c8d04f8ecbaf5f9449c57ecd191f3263fd92ca7d1483ac8",
+    "application_javascript_exception_observed": false,
+    "browser_notice": "Two Cloudflare Insights beacon failures were observed; this is not a claim that every browser request succeeded."
+  },
+  "retained_qwen_limitation": {
+    "version": "trid-assistant-qwen3-1.7b",
+    "question": "이 문서에서 문의 담당 부서는 어디야?",
+    "input": "가상 문의 안내. 이 문서에서 문의 담당 부서는 노을지원실이다. 실제 기관 규정이 아닌 테스트용 문서이다.",
+    "http_status": 200,
+    "status": "unverified",
+    "elapsed_ms_server": 2730,
+    "unsupported_numbers": [
+      "1"
+    ],
+    "conclusion": "Upload transport and the CASE route worked, but no accepted exact quote was produced. Generic or attached-document Qwen answer quality was not fixed by this graph release."
+  },
+  "limits": [
+    "Rules and exceptions are bound to the cited collected version; current applicability is not asserted.",
+    "Other-agency references are not relabeled as MOIS rules and later revisions are not silently applied to the 2020 source.",
+    "No missing delegation matrix, unreviewed monetary entitlement, domestic-trip applicability, or invented travel context is inferred.",
+    "Frozen DEV/final evaluation and the deferred 512-token base-versus-adapter comparison were not run.",
+    "Small observed graph response times are not a throughput or capacity benchmark."
+  ],
+  "deployed_source_sha256": {
+    "scripts/shared_demo.py": "1fbd4ee9b8937f8b6f28331ed1f25c51679d9a8fa68a077847ea8203d11eee6d",
+    "trid/shared_ui/app.js": "881ba5fe4ec7bac2d6326492e12db8309372d18e2552290fe1263c29bc9753d9",
+    "deploy/macmini-site/versions.json": "48116ed3c1c8d11663f2a64c1c51156fb3fce15ba4a9697d77282b68a5868412",
+    "trid/service/mois_graph.py": "8a2dc6f1ada3d39b8490db06fbc8f000eaed25d0d16199548811b7293f5a2c8d",
+    "trid/service/mois_graph_answers.py": "ea0f91a6926f8f228fa3d40f259e82ab9d180826d13e20446353f54ec3d49b86",
+    "trid/service/mois_ontology.ttl": "99a68288db0ad7bcb98b4cc8c1b2dc2402d5a1db553d5efeaaa620fb51d518e6",
+    "scripts/build_mois_graph.py": "0cd5c1ce63ca2c4a05242439c4d9dec8f7e0d597558c1295aa2c86f1c5a28825",
+    "data/mois-ontology-v1/facts.jsonl": "bb0152e8c3b571c87bb57f3ac347b4b029a0615618876a9fb596d6187f43809d"
+  },
+  "deployment": {
+    "health_status": 200,
+    "public_versions": [
+      "trid-mois-graph-v0.2",
+      "trid-assistant-qwen3-1.7b"
+    ],
+    "old_process_group_cleared": true,
+    "pressure_before": 1,
+    "pressure_after": 1,
+    "remote_staging_removed": true
+  },
+  "local_evidence_directory": "runs/mois-graph-upgrade-20261112",
+  "local_evidence_note": "Ignored runtime artifacts and screenshots are retained locally, not GitHub-hosted links."
+}
