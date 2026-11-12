@@ -70,7 +70,7 @@ def instance(ident, state='running'):
 
 def gpu():
     return dict(uuid='GPU-11111111-2222-3333-4444-555555555555', minor=3,
-                name='NVIDIA L40S', total_mib=45776, driver='synthetic-driver')
+                name='NVIDIA L40S', total_mib=46000, driver='synthetic-driver')
 
 
 def prerequisite_expectations():
@@ -94,8 +94,9 @@ def actual_prerequisites(expected):
 
 def release_plan():
     ident = identity()
-    return dict(identity=ident, runtime=dict(gpu_name='NVIDIA L40S', gpu_total_mib=45776,
-        driver_version='synthetic-driver'), iam={'scheduler_role': {'arn': 'arn:aws:iam::148761639313:role/synthetic-scheduler'}})
+    return dict(identity=ident, runtime=dict(gpu_name='NVIDIA L40S', gpu_catalog_mib=45776,
+        gpu_nvml_min_mib=45776, gpu_nvml_max_mib=49152, driver_version='synthetic-driver'),
+        iam={'scheduler_role': {'arn': 'arn:aws:iam::148761639313:role/synthetic-scheduler'}})
 
 
 def release(plan):

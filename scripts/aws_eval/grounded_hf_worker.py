@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from grounded_hf_lifecycle import (LIMITS, MAX_EXPORT, Client, authenticate_archive,
     canonical, digest, exclusive_intent, object_sha, pins, read_bound, relative,
     remaining, require, save, timestamp, validate_data, validate_cost_admission, validate_bootstrap_admission,
-    verify_termination_ticket, verify_release, gpu_minor_from_xml)
+    verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml)
 
 
 class DownloadRedirects(urllib.request.HTTPRedirectHandler):
@@ -92,18 +92,24 @@ def identity_document(deadline):
         return json.loads(response.read(16384))
 
 
-def gpu_observation(deadline):
-    text = command(['nvidia-smi', '--query-gpu=uuid,name,memory.total,driver_version',
-                    '--format=csv,noheader,nounits'], deadline)
+def gpu_observation(deadline, *, with_usage=False):
+    fields = 'uuid,name,memory.total,driver_version' + (',memory.used' if with_usage else '')
+    text = command(['nvidia-smi', '--query-gpu=' + fields,
+                    '--format=csv,noheader,nounits'], deadline, timeout=5)
     rows = [r.strip().split(', ') for r in text.strip().splitlines()]
-    require(len(rows) == 1 and len(rows[0]) == 4, 'Exactly one NVIDIA GPU required')
-    uuid, name, mib, driver = rows[0]
-    xml = command(['nvidia-smi', '-q', '-x'], deadline)
+    require(len(rows) == 1 and len(rows[0]) == (5 if with_usage else 4), 'Exactly one NVIDIA GPU required')
+    uuid, name, mib, driver = rows[0][:4]
+    require(mib.isdigit(), 'Physical NVML memory total is unavailable')
+    xml = command(['nvidia-smi', '-q', '-x'], deadline, timeout=5)
     minor = gpu_minor_from_xml(xml, uuid)
     paths = [f'/dev/nvidia{minor}', '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-uvm-tools']
     require(all(not Path(p).is_symlink() and stat.S_ISCHR(Path(p).stat().st_mode) for p in paths),
             'Exact NVIDIA character devices unavailable')
-    return dict(uuid=uuid, minor=minor, name=name, total_mib=int(mib), driver=driver)
+    observed = dict(uuid=uuid, minor=minor, name=name, total_mib=int(mib), driver=driver)
+    if with_usage:
+        require(rows[0][4].isdigit(), 'Physical NVML memory usage is unavailable')
+        return observed, int(rows[0][4]) * 1024**2
+    return observed
 
 
 def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
@@ -185,6 +191,7 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units):
     require(old['LoadState'] == 'not-found', 'Stage unit already exists; no reuse')
     seconds = min(60 if phase == 'runtime' else plan['phase_seconds'][phase], int(remaining(deadline)) - 15)
     require(seconds > 0, 'Insufficient stop reserve')
+    verify_gpu_observation(gpu_observation(deadline), plan, gpu)
     # Record ownership before dispatch: a lost systemd-run response is ambiguous.
     exclusive_intent(Path(base) / (phase + '-dispatch.json'), dict(unit=unit, plan_sha256=digest(Path(base) / 'plan.json')))
     owned_units.append(unit)
@@ -198,13 +205,13 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units):
             require(state['MemoryMax'] == str(LIMITS['rss_bytes']) and state['MemorySwapMax'] == '0'
                     and state['DevicePolicy'] == 'closed' and state['User'] == str(uid)
                     and state['Group'] == str(gid), 'Effective native cgroup/user boundary differs')
-            used = command(['nvidia-smi', f'--id={gpu["uuid"]}', '--query-gpu=memory.used',
-                            '--format=csv,noheader,nounits'], deadline, timeout=5).strip()
-            require(used.isdigit() and int(used) * 1024**2 <= LIMITS['gpu_bytes'], 'External 42GiB GPU cap exceeded')
+            observed, used = gpu_observation(phase_deadline, with_usage=True)
+            verify_gpu_observation(observed, plan, gpu)
+            require(used <= LIMITS['gpu_bytes'], 'External 42GiB GPU cap exceeded')
             if state['ActiveState'] in ('inactive', 'failed') or state.get('SubState') == 'exited':
                 require(cgroup_empty(state) and state['Result'] == 'success' and state['ExecMainStatus'] == '0',
                         'Native stage failed: ' + phase + ': ' + str(state))
-                return dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'])
+                return dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
             time.sleep(0.5)
     finally:
         stop_unit(unit, run, min(deadline + 15, time.time() + 30))
@@ -431,8 +438,7 @@ def bootstrap(plan, plan_sha, base):
         budget = [plan['cost']['download_requests']]
         prerequisites = prepare_bootstrap_dependencies(plan, base, bootstrap_admission, acquisition_deadline, budget, units)
         gpu = gpu_observation(acquisition_deadline)
-        require(gpu['name'] == plan['runtime']['gpu_name'] and gpu['total_mib'] == plan['runtime']['gpu_total_mib']
-                and gpu['driver'] == plan['runtime']['driver_version'], 'Pinned physical runtime differs')
+        verify_gpu_observation(gpu, plan)
         ready = dict(run_id=ident['run_id'], plan_sha256=plan_sha, instance_id=identity['instanceId'],
                      gpu=gpu, prerequisites=prerequisites)
         require(len(canonical(ready)) <= 1024**2, 'Readiness receipt exceeds reserved envelope')
@@ -452,7 +458,8 @@ def bootstrap(plan, plan_sha, base):
                 time.sleep(5)
         require(release is not None, 'Independent verified termination release missing')
         work_deadline = verify_release(release, plan, plan_sha, identity['instanceId'], time.time())
-        require(release['gpu'] == gpu, 'Released exact UUID/minor differs')
+        verify_gpu_observation(gpu, plan, release['gpu'])
+        verify_gpu_observation(gpu_observation(work_deadline), plan, release['gpu'])
         deadline = release['deadline']
         client.deadline = deadline - 30
         command(['/sbin/shutdown', '-c'], deadline)
@@ -567,14 +574,18 @@ def native_runtime(plan, base):
             'Native process must be nonroot without cloud credentials')
     require(platform.machine() == 'x86_64' and platform.python_version() == plan['runtime']['python_version'],
             'Native Python/architecture differs')
+    release = json.loads((Path(base) / 'release.json').read_text())
+    require(os.environ['CUDA_VISIBLE_DEVICES'] == release['gpu']['uuid'], 'Exact GPU UUID allowlist differs')
+    observed = gpu_observation(min(release['deadline'] - 1800, time.time() + 15))
+    verify_gpu_observation(observed, plan, release['gpu'])
     import torch
     require(torch.__version__ == plan['runtime']['packages']['torch'] and torch.version.cuda == plan['runtime']['torch_cuda']
             and torch.cuda.is_available() and torch.cuda.device_count() == 1 and torch.cuda.is_bf16_supported(),
             'Actual pinned CUDA/BF16 runtime unavailable')
-    release = json.loads((Path(base) / 'release.json').read_text())
-    require(os.environ['CUDA_VISIBLE_DEVICES'] == release['gpu']['uuid'], 'Exact GPU UUID allowlist differs')
     gpu = torch.cuda.get_device_properties(0)
     require(gpu.total_memory >= LIMITS['gpu_bytes'] and gpu.name == plan['runtime']['gpu_name'], 'Native GPU shape differs')
+    # Torch's allocatable total is a different quantity from NVML's physical
+    # total. Use it only to express the unchanged absolute 40GiB allocator cap.
     torch.cuda.set_per_process_memory_fraction(LIMITS['allocator_bytes'] / gpu.total_memory, 0)
     torch.set_num_threads(6)
     torch.manual_seed(plan['recipe']['seed'])
@@ -737,6 +748,30 @@ def train_stage(plan, base, torch):
             'Final native training receipt differs from finite fresh-base contract')
 
 
+def decode_generation(tokenizer, output_token_ids, eos_token_id, max_new_tokens):
+    """Keep full protocol diagnostics; remove only a terminal configured stop from the response body."""
+    require(type(max_new_tokens) is int and max_new_tokens > 0
+            and isinstance(output_token_ids, list) and 0 < len(output_token_ids) <= max_new_tokens
+            and all(type(token) is int and token >= 0 for token in output_token_ids),
+            'Generated token sequence exceeds or violates the registered envelope')
+    if eos_token_id is None:
+        stops = ()
+    elif type(eos_token_id) is int:
+        stops = (eos_token_id,)
+    else:
+        require(isinstance(eos_token_id, list), 'Actual generation EOS configuration must be an integer, list, or null')
+        stops = eos_token_id
+    require(all(type(token) is int and token >= 0 for token in stops), 'Invalid actual generation EOS token ID')
+    terminal = output_token_ids[-1] if output_token_ids[-1] in stops else None
+    reason = 'eos' if terminal is not None else 'length'
+    require(reason == 'eos' or len(output_token_ids) == max_new_tokens, 'Unexplained generation termination')
+    raw = tokenizer.decode(output_token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)
+    response = (tokenizer.decode(output_token_ids[:-1], skip_special_tokens=False, clean_up_tokenization_spaces=False)
+                if terminal is not None else raw)
+    return dict(raw_output=raw, response_text=response, termination_reason=reason,
+                terminal_stop_token_id=terminal, generated_tokens=len(output_token_ids))
+
+
 def evaluation_stage(plan, base, torch, adapter):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     base = Path(base)
@@ -761,16 +796,12 @@ def evaluation_stage(plan, base, torch, adapter):
                     use_cache=True, pad_token_id=tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id,
                     return_dict_in_generate=True)
             ids = result.sequences[0, width:].tolist()
-            eos = model.generation_config.eos_token_id
-            eos = [eos] if isinstance(eos, int) else eos or [tok.eos_token_id]
-            reason = 'eos' if ids and ids[-1] in eos else 'length'
-            require(reason == 'eos' or len(ids) == plan['recipe']['answer_tokens'], 'Unexplained generation termination')
+            decoded = decode_generation(tok, ids, model.generation_config.eos_token_id, plan['recipe']['answer_tokens'])
             row = dict(id=case['id'], kind=case['kind'], family=case['family'], cluster_id=plan['evaluation']['cluster_id'],
                        prompt_sha256=object_sha(case['messages']),
                        rendered_prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
                        prompt_token_ids=inputs['input_ids'][0].tolist(), output_token_ids=ids,
-                       raw_output=tok.decode(ids, skip_special_tokens=False, clean_up_tokenization_spaces=False),
-                       termination_reason=reason, generated_tokens=len(ids), adapter=adapter)
+                       adapter=adapter, **decoded)
             stream.write(json.dumps(row, ensure_ascii=False) + '\n'); stream.flush(); os.fsync(stream.fileno())
 
 

@@ -167,6 +167,38 @@ def ebs_key_arn(plan):
     return arn
 
 
+def validate_gpu_memory_contract(runtime):
+    fields = ('gpu_catalog_mib', 'gpu_nvml_min_mib', 'gpu_nvml_max_mib')
+    require(all(type(runtime[field]) is int for field in fields)
+            and tuple(runtime[field] for field in fields) == (45776, 45776, 49152),
+            'Approved catalog memory and physical NVML interval differ')
+
+
+def verify_gpu_catalog(plan, observation):
+    validate_gpu_memory_contract(plan['runtime'])
+    devices = observation['Gpus']
+    require(devices == plan['gpu_type_observation'] and len(devices) == 1
+            and devices[0]['Count'] == 1 and devices[0]['Name'] == 'L40S'
+            and devices[0]['Manufacturer'] == 'NVIDIA'
+            and devices[0]['MemoryInfo']['SizeInMiB'] == plan['runtime']['gpu_catalog_mib']
+            and observation['TotalGpuMemoryInMiB'] == plan['runtime']['gpu_catalog_mib'],
+            'Exact EC2 GPU catalog observation changed')
+
+
+def verify_gpu_observation(observation, plan, expected=None):
+    runtime = plan['runtime']
+    validate_gpu_memory_contract(runtime)
+    require(set(observation) == {'uuid', 'minor', 'name', 'total_mib', 'driver'}
+            and observation['name'] == runtime['gpu_name'] and observation['driver'] == runtime['driver_version']
+            and type(observation['total_mib']) is int
+            and runtime['gpu_nvml_min_mib'] <= observation['total_mib'] <= runtime['gpu_nvml_max_mib']
+            and re.fullmatch(r'GPU-[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}', observation['uuid'])
+            and type(observation['minor']) is int and 0 <= observation['minor'] < 2**20,
+            'Physical NVML GPU identity/capacity is outside the approved contract')
+    if expected is not None:
+        require(observation == expected, 'Released NVML GPU observation changed')
+
+
 def validate_plan(plan, approval, plan_sha, *, now=None):
     require(plan['schema'] == 'trid-grounded-hf-v1', 'Unknown plan schema')
     ident = plan['identity']
@@ -219,8 +251,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                 'Model acquisition URL must bind immutable official revision')
     runtime = plan['runtime']
     require(runtime['python_version'] and runtime['packages'] and runtime['driver_version']
-            and runtime['torch_cuda'] and runtime['gpu_name'] == 'NVIDIA L40S'
-            and runtime['gpu_total_mib'] == 45776, 'Complete pinned runtime required')
+            and runtime['torch_cuda'] and runtime['gpu_name'] == 'NVIDIA L40S', 'Complete pinned runtime required')
+    validate_gpu_memory_contract(runtime)
     wheels = pins(runtime['wheels'], runtime['max_bytes'])
     require(all(n.endswith('.whl') and '/' not in n for n in wheels)
             and {'torch', 'transformers', 'tokenizers', 'peft', 'safetensors', 'accelerate', 'psutil'} <= set(runtime['packages']),
@@ -823,8 +855,8 @@ def live_preflight(plan, client):
     require(plan['ami']['root_volume_gib'] <= 120, 'AMI exceeds root volume')
     types = client('ec2', 'describe-instance-types', '--instance-types', plan['instance_type'])['InstanceTypes']
     require(len(types) == 1 and types[0]['VCpuInfo']['DefaultVCpus'] == 8
-            and types[0]['MemoryInfo']['SizeInMiB'] == 65536
-            and types[0]['GpuInfo']['Gpus'] == plan['gpu_type_observation'], 'Instance/GPU shape changed')
+            and types[0]['MemoryInfo']['SizeInMiB'] == 65536, 'Instance host shape changed')
+    verify_gpu_catalog(plan, types[0]['GpuInfo'])
     quota = client('service-quotas', 'get-service-quota', '--service-code', 'ec2',
                    '--quota-code', 'L-DB2E81BA')['Quota']['Value']
     all_instances = client('ec2', 'describe-instances', '--filters',
@@ -993,13 +1025,9 @@ def verify_release(release, plan, plan_sha, instance_id, now):
     require(release['run_id'] == plan['identity']['run_id'] and release['plan_sha256'] == plan_sha
             and release['instance_id'] == instance_id and release['schedule_verified'] is True
             and release['deadline'] == release['launch_time'] + 14400
-            and release['launch_time'] <= now < release['deadline'] - 1800
-            and release['gpu']['name'] == plan['runtime']['gpu_name']
-            and release['gpu']['total_mib'] == plan['runtime']['gpu_total_mib']
-            and release['gpu']['driver'] == plan['runtime']['driver_version']
-            and re.fullmatch(r'GPU-[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}', release['gpu']['uuid'])
-            and type(release['gpu']['minor']) is int and 0 <= release['gpu']['minor'] < 2**20,
+            and release['launch_time'] <= now < release['deadline'] - 1800,
             'Worker release barrier rejected')
+    verify_gpu_observation(release['gpu'], plan)
     verify_schedule(release['schedule'], schedule_spec(plan, instance_id, release['launch_time']))
     return release['deadline'] - 1800
 
@@ -1055,6 +1083,12 @@ def collect_export(client, plan, plan_sha, state, instance_id):
     native = completion['training_success'] is True and not completion['stop_errors']
     require(not native or [s['phase'] for s in completion['stages']]
             == ['capacity', 'baseline', 'train', 'adapter'], 'Incomplete native stage receipt')
+    if native:
+        bound = json.loads((state / 'release.json').read_text())
+        require(bound['run_id'] == identity['run_id'] and bound['instance_id'] == instance_id
+                and bound['plan_sha256'] == plan_sha, 'Persisted GPU release ownership differs')
+        for stage in [completion['runtime_unit'], *completion['stages']]:
+            verify_gpu_observation(stage['gpu'], plan, bound['gpu'])
     return dict(native_pipeline_success=native, semantic_acceptance='not_evaluated',
                 completion=completion, export_sha256=pin['sha256'])
 
