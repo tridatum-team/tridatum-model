@@ -139,6 +139,110 @@ class HistoryContractTests(unittest.TestCase):
                     self.assertEqual(trainer.case_contract_violation(dict(loaded, answer='은색입니다.'), 5, 1000),
                                      'no_citation')
 
+    def grounded_row(self):
+        return {
+            'id': 'grounded-example', 'task': 'grounded_explanation', 'split': 'train',
+            'messages': [
+                {'role': 'system', 'content': '  근거에 따라 JSON 문단으로 설명하세요.\n'},
+                {'role': 'user', 'content': '\n질문: 표식은?\n[D1] 표식은 은색이다.  '},
+            ],
+            'answer': '{"paragraphs":[{"text":"은색 표식이라는 최종 설명입니다.","citations":["D1"]}]}',
+        }
+
+    def test_grounded_messages_preserve_literal_prompt_and_supervise_only_answer_and_eos(self):
+        raw = self.grounded_row()
+        loaded, item = self.encode_row(raw, 'grounded_messages')
+        self.assertEqual(trainer.messages_of(loaded), raw['messages'])
+        expected = (
+            '<|im_start|>system\n  근거에 따라 JSON 문단으로 설명하세요.\n<|im_end|>\n'
+            '<|im_start|>user\n\n질문: 표식은?\n[D1] 표식은 은색이다.  <|im_end|>\n'
+            '<|im_start|>assistant\n<think>\n\n</think>\n\n'
+        )
+        self.assert_encoded(item, expected, raw['answer'])
+        prompt_ids = [token for token, label in zip(item['ids'], item['labels']) if label == -100]
+        prompt = self.tok.decode(prompt_ids)
+        self.assertEqual(prompt, expected)
+        self.assertNotIn(raw['answer'], prompt)
+        self.assertNotIn('최종 설명', prompt)
+
+    def test_grounded_messages_reject_malformed_roles_content_and_history(self):
+        raw = self.grounded_row()
+        system, user = raw['messages']
+        invalid = [
+            {'messages': None}, {'messages': {}}, {'messages': []},
+            {'messages': [system]}, {'messages': [user, system]},
+            {'messages': [system, dict(user, role='assistant')]},
+            {'messages': [system, user, {'role': 'assistant', 'content': raw['answer']}]},
+            {'messages': [system, user, system, user]},
+            {'messages': [system, 'not a message']},
+            {'messages': [system, {'role': 'user'}]},
+            {'messages': [system, dict(user, history=[])]},
+        ]
+        for history in ([], None, [{'user': '앞 질문', 'assistant': '앞 답변'}]):
+            invalid.append({'history': history})
+        for content in ('', ' \n\t', None, 7, [], {}):
+            invalid.append({'messages': [dict(system, content=content), user]})
+            invalid.append({'messages': [system, dict(user, content=content)]})
+            for field in ('id', 'task', 'split', 'answer'):
+                invalid.append({field: content})
+        malformed = [dict(raw, **fields) for fields in invalid]
+        malformed.extend({key: value for key, value in raw.items() if key != field}
+                         for field in ('id', 'task', 'split', 'messages', 'answer'))
+        for row in malformed:
+            with self.subTest(row=row):
+                entry = self.pinned([row], 'grounded_messages')
+                with self.assertRaises(ValueError) as caught:
+                    trainer.load_rows(entry, self.base)
+                self.assertIn(f'{self.base / entry["path"]}:2:', str(caught.exception))
+                self.assertIn(f"row {row.get('id')!r}", str(caught.exception))
+
+    def test_grounded_budgets_include_eos_and_reject_instead_of_dropping_rows(self):
+        raw = self.grounded_row()
+        _, encoded = self.encode_row(raw, 'grounded_messages')
+        context_tokens = len(encoded['ids'])
+        answer_tokens = sum(label != -100 for label in encoded['labels'])
+        self.assertEqual(answer_tokens, len(self.tok(raw['answer'], add_special_tokens=False)['input_ids']) + 1)
+        entry = self.pinned([raw], 'grounded_messages', epochs=2)
+        items, dropped = trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                             context_tokens, answer_tokens, True)
+        self.assertEqual(items, [encoded, encoded])
+        self.assertEqual(dropped, 0)
+        valid, valid_dropped = trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                                   context_tokens, answer_tokens, False)
+        self.assertEqual(valid, [encoded])
+        self.assertEqual(valid_dropped, 0)
+        # A fitting row must not let the builder return a partial dataset when the next row is lossy.
+        first = dict(raw, id='fits', answer='{}')
+        entry = self.pinned([first, raw], 'grounded_messages')
+        for context_limit, answer_limit, reason in (
+            (context_tokens - 1, answer_tokens, 'over_context_budget'),
+            (context_tokens, answer_tokens - 1, 'over_answer_budget'),
+            (context_tokens, 0, 'over_answer_budget'),
+        ):
+            for expand in (False, True):
+                with self.subTest(context=context_limit, answer=answer_limit, expand=expand):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                            context_limit, answer_limit, expand)
+
+    def test_legacy_manifest_build_retains_whole_row_drop_and_case_answer_contract(self):
+        raw = {'id': 'legacy', 'prompt': '인사해.', 'answer': '반갑습니다.'}
+        _, encoded = self.encode_row(raw)
+        entry = self.pinned([raw], epochs=2)
+        self.assertEqual(trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                             len(encoded['ids']) - 1, 1, True), ([], 2))
+        self.assertEqual(trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                             len(encoded['ids']), 1, True), ([encoded, encoded], 0))
+        case = {'id': 'case', 'question': '색은?', 'context': ['색은 은색이다.'], 'target': '은색 [D1]'}
+        _, encoded = self.encode_row(case, 'case')
+        entry = self.pinned([case], 'case')
+        answer_tokens = sum(label != -100 for label in encoded['labels'])
+        self.assertEqual(trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                             len(encoded['ids']), answer_tokens, False), ([encoded], 0))
+        with self.assertRaisesRegex(ValueError, 'case:over_answer_budget'):
+            trainer.build_items(self.tok, [entry], self.base, 'qwen3',
+                                len(encoded['ids']), answer_tokens - 1, False)
+
     def test_invalid_history_fails_with_file_physical_line_and_row_identity(self):
         invalid = [
             None,
@@ -203,13 +307,14 @@ class HistoryContractTests(unittest.TestCase):
             actual = logits.grad[index].abs().sum(-1).ne(0).tolist()
             self.assertEqual(actual, expected)
 
-    def tiny_qwen3(self):
+    def tiny_qwen3(self, tie_word_embeddings=True):
         from transformers import Qwen3Config, Qwen3ForCausalLM
         with torch.random.fork_rng():
             torch.manual_seed(0)
             model = Qwen3ForCausalLM(Qwen3Config(vocab_size=len(self.tok), hidden_size=32, intermediate_size=64,
                                                num_hidden_layers=2, num_attention_heads=2, num_key_value_heads=1,
-                                               head_dim=16, tie_word_embeddings=True, attention_dropout=0.0))
+                                               head_dim=16, tie_word_embeddings=tie_word_embeddings,
+                                               attention_dropout=0.0))
         model.eval()  # deterministic; gradients still flow
         return model
 
@@ -270,24 +375,28 @@ class HistoryContractTests(unittest.TestCase):
         chunked path must give the same loss, the same gradient on every adapter parameter and the same context
         gradient as the full-logits path, and no gradient on frozen parameters in either."""
         from peft import LoraConfig, get_peft_model
-        model = get_peft_model(self.tiny_qwen3(), LoraConfig(r=2, lora_alpha=4, lora_dropout=0.0,
-                                                             target_modules=trainer.TARGETS, task_type='CAUSAL_LM'))
-        with torch.no_grad():  # nonzero B so the adapter changes the forward pass
-            for name, p in model.named_parameters():
-                if 'lora_B' in name:
-                    p.add_(torch.randn_like(p))
-        model.enable_input_require_grads()  # as the trainer does: the embedding output carries the context gradient
-        model.eval()
-        items = self.two_rows()
-        (full_loss, full_grads, full_context), (opt_loss, opt_grads, opt_context) = self.compare_families(model, items)
-        trainable = {name for name, p in model.named_parameters() if p.requires_grad}
-        self.assertTrue(trainable and all('lora_' in name for name in trainable))
-        self.assertEqual(set(full_grads), trainable)
-        self.assertEqual(set(opt_grads), trainable)
-        self.assertTrue(torch.allclose(full_loss, opt_loss, atol=1e-5))
-        for name in trainable:
-            self.assertTrue(torch.allclose(full_grads[name], opt_grads[name], atol=1e-5), name)
-        self.assertTrue(torch.allclose(full_context, opt_context, atol=1e-5))
+        for tied in (True, False):
+            with self.subTest(tie_word_embeddings=tied):
+                base = self.tiny_qwen3(tie_word_embeddings=tied)
+                self.assertEqual(base.lm_head.weight is base.get_input_embeddings().weight, tied)
+                model = get_peft_model(base, LoraConfig(r=2, lora_alpha=4, lora_dropout=0.0,
+                                                       target_modules=trainer.TARGETS, task_type='CAUSAL_LM'))
+                with torch.no_grad():  # nonzero B so the adapter changes the forward pass
+                    for name, p in model.named_parameters():
+                        if 'lora_B' in name:
+                            p.add_(torch.randn_like(p))
+                model.enable_input_require_grads()  # the embedding output carries the context gradient
+                model.eval()
+                items = self.two_rows()
+                (full_loss, full_grads, full_context), (opt_loss, opt_grads, opt_context) = self.compare_families(model, items)
+                trainable = {name for name, p in model.named_parameters() if p.requires_grad}
+                self.assertTrue(trainable and all('lora_' in name for name in trainable))
+                self.assertEqual(set(full_grads), trainable)
+                self.assertEqual(set(opt_grads), trainable)
+                self.assertTrue(torch.allclose(full_loss, opt_loss, atol=1e-5))
+                for name in trainable:
+                    self.assertTrue(torch.allclose(full_grads[name], opt_grads[name], atol=1e-5), name)
+                self.assertTrue(torch.allclose(full_context, opt_context, atol=1e-5))
 
 
 class PackedHeadTests(unittest.TestCase):

@@ -21,13 +21,17 @@ never filters for quality. Adapters:
     offending ids instead of being trained (pilot-sft-001 trained 57 targets without any [Dn], 36 over 256 tokens).
     Nonempty case history is unsupported and rejected. History must be a list of user/assistant pairs with nonempty
     string content (trid.text.validate_history); invalid history reports the file, line and row id before weights load.
+  - `grounded_messages`: rows {"id", "task", "split", "messages": [{"role": "system", "content": str},
+    {"role": "user", "content": str}], "answer": str}. All fields are nonempty; messages are preserved verbatim.
+    History is forbidden. Context or answer+EOS over budget rejects the input rather than dropping or truncating it.
 Each sample is the native chat template with the generation prompt (Qwen3: the no-thinking prefix must render)
 followed by the answer and the tokenizer's EOS (end of turn); loss covers only those answer tokens. The system,
 all prior user/assistant turns, current user and batch padding stay masked. With --family qwen3 the vocabulary head
 runs only on packed supervised row-position pairs, with at most batch_size * LOGIT_CHUNK tokens per
 non-reentrant checkpoint (chunked_answer_loss). Logits stay within that chunk budget; losses and gradients
 agree with the full-width computation within floating-point tolerance. Rows longer than
---max-tokens are dropped whole and counted (history is never truncated). No upsampling beyond the per-file epochs; the per-file share of trained answer
+--max-tokens are dropped whole and counted for legacy adapters (history is never truncated); grounded_messages
+rejects them. No upsampling beyond the per-file epochs; the per-file share of trained answer
 tokens is recorded. Validation loss per task is recorded at fixed steps only; nothing is selected on evaluation sets.
 Writes the LoRA adapter, optionally the merged model (--merge) for GGUF conversion, and training.json.
 With --checkpoint-every N the adapter is also saved every N steps and at the last step under
@@ -118,6 +122,26 @@ def load_rows(entry, base):
         row = json.loads(line)
         if entry.get('split') and row.get('split') != entry['split']:
             continue  # one pinned file may hold several splits; only the named one is used
+        if entry['adapter'] == 'grounded_messages':
+            try:
+                if 'history' in row:
+                    raise ValueError('grounded_messages adapter does not support history')
+                for field in ('id', 'task', 'split', 'answer'):
+                    if not isinstance(row.get(field), str) or not row[field].strip():
+                        raise ValueError(f'grounded_messages requires nonempty string {field}')
+                messages = row.get('messages')
+                if not isinstance(messages, list) or len(messages) != 2:
+                    raise ValueError('grounded_messages requires exactly system and user messages')
+                for message, role in zip(messages, ('system', 'user')):
+                    if not isinstance(message, dict) or set(message) != {'role', 'content'} or message['role'] != role:
+                        raise ValueError(f'grounded_messages requires a {role} message with only role and content')
+                    if not isinstance(message['content'], str) or not message['content'].strip():
+                        raise ValueError(f'grounded_messages requires nonempty string {role} content')
+            except ValueError as exc:
+                raise ValueError(f"{path}:{line_number}: row {row.get('id')!r}: {exc}") from exc
+            rows.append(dict(id=row['id'], task=row['task'], messages=messages, answer=row['answer'],
+                             adapter='grounded_messages', file=str(path)))
+            continue
         history = row.get('history', [])
         try:
             validate_history(history)
@@ -154,6 +178,8 @@ def case_contract_violation(row, answer_tokens, max_answer_tokens):
 
 def messages_of(row):
     """Native-template input; prior assistant turns are context, never current targets."""
+    if row.get('adapter') == 'grounded_messages':
+        return row['messages']
     messages = [{'role': 'system', 'content': row['system']}] if row['system'] else []
     for turn in row.get('history', []):
         messages += [{'role': 'user', 'content': turn['user']}, {'role': 'assistant', 'content': turn['assistant']}]
@@ -168,8 +194,35 @@ def encode(tok, row, family, max_tokens):
     answer_ids = tok(row['answer'] + tok.eos_token, add_special_tokens=False)['input_ids']
     ids = prompt_ids + answer_ids
     if len(ids) > max_tokens:
+        if row.get('adapter') == 'grounded_messages':
+            raise ValueError(f"{row['file']}: row {row['id']!r}: over_context_budget ({len(ids)} > {max_tokens})")
         return None
     return dict(ids=ids, labels=[-100] * len(prompt_ids) + answer_ids, task=row['task'], file=row['file'])
+
+
+def build_items(tok, entries, base, family, max_tokens, max_answer_tokens, expand):
+    """Build a manifest split, rejecting lossy grounded input before any weights are loaded."""
+    items, dropped, violations = [], 0, []
+    for entry in entries:
+        for _ in range(entry.get('epochs', 1) if expand else 1):
+            for row in load_rows(entry, base):
+                x = encode(tok, row, family, max_tokens)
+                if x is None:
+                    dropped += 1
+                    continue
+                answer_tokens = sum(t != -100 for t in x['labels'])
+                if entry['adapter'] == 'grounded_messages' and answer_tokens > max_answer_tokens:
+                    raise ValueError(f"{row['file']}: row {row['id']!r}: "
+                                     f"over_answer_budget ({answer_tokens} > {max_answer_tokens}, EOS included)")
+                if entry['adapter'] == 'case':
+                    why = case_contract_violation(row, answer_tokens, max_answer_tokens)
+                    if why:
+                        violations.append(f"{row['id']}:{why}")
+                        continue
+                items.append(x)
+    if violations:
+        raise ValueError(f'{len(violations)} case rows break the training contract: {sorted(set(violations))[:20]}')
+    return items, dropped
 
 
 LOGIT_CHUNK = 64  # per-row token budget; packed head chunks contain at most batch_size * LOGIT_CHUNK tokens
@@ -177,7 +230,7 @@ LOGIT_CHUNK = 64  # per-row token budget; packed head chunks contain at most bat
 
 def causal_lm(model):
     """The Qwen3ForCausalLM under an optional PEFT wrapper: `.model` yields the final-norm hidden states that
-    `.lm_head` (the real head; tied embedding, not a LoRA target) consumes. LoRA layers live inside `.model`, so
+    `.lm_head` (the real head, tied or untied, not a LoRA target) consumes. LoRA layers live inside `.model`, so
     calling it directly runs the same adapted computation; PeftModelForCausalLM.forward only filters kwargs."""
     return model.get_base_model() if hasattr(model, 'get_base_model') else model
 
@@ -468,7 +521,7 @@ def main():
     p.add_argument('--dropout', type=float, default=0.05)
     p.add_argument('--max-tokens', type=int, default=1536)
     p.add_argument('--max-answer-tokens', type=int, default=256,
-                   help='case targets above this (serving answer budget, EOS included) break the contract')
+                   help='case and grounded_messages targets above this (serving answer budget, EOS included) break the contract')
     p.add_argument('--valid-every', type=int, default=50)
     p.add_argument('--seed', type=int, default=20261030)
     p.add_argument('--device', default='mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -511,27 +564,10 @@ def main():
     tok = AutoTokenizer.from_pretrained(a.model)
     pad_id = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
 
-    def build(entries, expand):
-        items, dropped, violations = [], 0, []
-        for entry in entries:
-            for _ in range(entry.get('epochs', 1) if expand else 1):
-                for row in load_rows(entry, a.manifest.resolve().parent):
-                    x = encode(tok, row, a.family, a.max_tokens)
-                    if x is None:
-                        dropped += 1
-                        continue
-                    if entry['adapter'] == 'case':
-                        why = case_contract_violation(row, sum(t != -100 for t in x['labels']), a.max_answer_tokens)
-                        if why:
-                            violations.append(f"{row['id']}:{why}")
-                            continue
-                    items.append(x)
-        if violations:
-            raise ValueError(f'{len(violations)} case rows break the training contract: {sorted(set(violations))[:20]}')
-        return items, dropped
-
-    train, dropped = build(manifest['train'], True)
-    valid, valid_dropped = build(manifest.get('valid', []), False)
+    train, dropped = build_items(tok, manifest['train'], a.manifest.resolve().parent, a.family,
+                                 a.max_tokens, a.max_answer_tokens, True)
+    valid, valid_dropped = build_items(tok, manifest.get('valid', []), a.manifest.resolve().parent, a.family,
+                                       a.max_tokens, a.max_answer_tokens, False)
     if not train:
         raise ValueError('No training rows')
     random.shuffle(train)
