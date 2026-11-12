@@ -106,6 +106,16 @@ Git 독자는 [공개 검증 요약](reports/mois-graph-v0.2-verification.json)�
 이는 학습 입력 유실 수정이며 새 학습 실행·데이터 승인·운영 대화 품질 개선을 뜻하지 않습니다.
 학습할 기반 모델·검토된 데이터·평가 분리와 실행 승인은 별도로 확정해야 합니다.
 
+#### 근거 설명용 `grounded_messages` 입력
+
+새 manifest adapter는 `id`, `task`, `split`, `messages`, `answer`를 받습니다. `messages`는 비어 있지 않은 문자열을 담은 **system → user 두 메시지**여야 하며, 근거 생성기가 만든 내용을 다시 조립하거나 줄이지 않고 그대로 사용합니다. 현재 정답을 입력에 덧붙이지 않으며, assistant 역할이나 별도 history가 있는 형식은 거부합니다. 현재 `answer`와 EOS만 감독하며, 입력 본문에 정답 정보가 포함됐는지를 의미적으로 판별하는 기능은 아닙니다.
+
+- 새 adapter에서는 문맥 또는 정답 토큰 예산을 넘으면 **실행을 거부**합니다. 일부 학습 행을 조용히 제외하거나 근거·정답을 잘라 맞추지 않습니다. 기존 `prompt_answer`·`case`의 동작은 유지합니다.
+- 관련 **57개 회귀 테스트**와 공식 Qwen3-14B 토크나이저를 사용하는 **무작위 초기화 tiny Qwen3의 optimizer 1단계 → adapter 저장 → 재로딩**을 실행했습니다. untied head에서 갱신된 출력을 확인했고, 토크나이저 저장·재로딩의 전체 backend 구성 및 후보 36행의 입력·라벨 일치도 확인했습니다.
+- 이는 입력·학습 엔진 검증이지 **14B 사전학습 가중치의 학습·GPU 용량·답변 품질 검증이 아닙니다.** 네 문서군의 후보 36개 중 평가 예약 자료와 실질적 내용이 겹친 2개를 명시적으로 제외했습니다. 남은 34행의 토큰 예산·정답 마스킹은 검증했지만, 원문 대조와 평가 자료의 최종 승인은 아직 진행 중입니다.
+- 새 대형 기반 모델 실험은 **추가 세전 US$50 이내 1회**로 승인받았습니다. 준비 대상은 `Qwen/Qwen3-14B` revision `40c06982`의 표준 HF BF16+LoRA 경로이며, 과거 실패한 1.7B adapter를 이어받지 않습니다. 이 근거 제공 설명 실험을 검색 없는 지식 전문성의 성과로 대체하지 않으며, 운영 배포도 별도입니다.
+- 로컬 실행 증거: `runs/mois-grounded-training-20261112T081606Z/grounded-sft-contract-tests.log`, `grounded-sft-end-to-end-smoke-verified.log`, `grounded-sft-smoke-receipt.json`. 이 기록 시점에는 토크나이저·메타데이터만 확보했고 새 GPU 인스턴스나 14B 가중치는 아직 생성·다운로드하지 않았습니다.
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.
