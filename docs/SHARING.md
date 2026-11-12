@@ -117,6 +117,9 @@
 
 - 기관·규정명을 넣어 물으면 업무 질문은 공유 검색 색인에서 근거를 찾습니다. 다른 후보 문서는 `/doc 번호`로 고정할 수 있습니다(고급 기능).
 - `/pdf`, `/paste`로 넣은 문서가 있으면 그 문서에서만 찾습니다. 텍스트 PDF는 2MB·20페이지·5만 자, 붙여넣기는 5,000자까지입니다.
+- 질문은 웹/API 공통으로 Unicode 코드 포인트 2,000개까지 입력할 수 있습니다. 기본 Qwen의 일반 대화·문서 해설은 `deploy/macmini-site/versions.json`의 `max_tokens: 512`를 사용합니다.
+- 전체 문맥4,096토큰은 질문·이전 대화·지시·근거·출력 예약분을 합친 한도입니다. 오래된 대화를 제외해도 현재 질문이 넘치면 질문을 자르지 않고422로 안내합니다. 글자 수가 한도 안이라고 항상 토큰 한도도 충족하는 것은 아닙니다.
+- 추출 독해기는 자체 tokenizer 기준 질문96토큰 제한이 별도로 남아 있습니다. 출력512토큰은 기본 Qwen에 적용하는 최대치이며, 실제 잘림 안내는 답변의 `자세히`에서 확인할 수 있습니다.
 - 모델 파일은 방문자에게 내려주지 않습니다. GGUF와 llama.cpp 실행 파일은 `runs/`에 있으며 기동할 때 sha256을 검사합니다.
 
 PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
@@ -129,6 +132,7 @@ PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전
   - 문서 값, 모델, 정밀도, 프롬프트, 컨텍스트 4096은 그대로다. 검색·라우팅은 바뀌었다(위 현재 상태).
   - main에는 아직 병합하지 않았다.
   - 맥미니 `~/Services/trid-site/repo`(`DEPLOYED_FROM_COMMIT`)에 있다.
+  - 2026-11-12에는 위 기존 배포본에 질문2,000자·기본 Qwen 출력512토큰·질문 문맥 초과 오류 처리 변경만 추가 적용했습니다. 전체main이나 다른 미커밋 작업을 동기화한 것이 아니며 모델·전체 문맥·색인은 유지했습니다. 적용 전후 소스와 정상 재시작·브라우저 검증은 [별도 실행 기록](../runs/qwen-specialization-013/diagnostic-answers-512-20261112T012044Z/result.json)에 보존합니다.
   - 되돌리기: `rollback-6a5eb37/scripts/`의 두 파일을 `repo/scripts/`로 복사하고, `ADDED-BY-2b8ba92.txt`에 적힌 3개 파일을 제거한다. 그다음 `DEPLOYED_FROM_COMMIT`을 복원하고 `launchctl kickstart -k gui/$(id -u)/co.tridatum.trid.site`를 실행한다.
   - 색인 파생 파일(`dense.f32.npy`, `documents.jsonl`과 기록)은 `python -m trid.service.derived runs/workspace-index/v5 runs/workspace-index/inst-reb-002`로 만든다.
 - **버전 2개만 제공** (`deploy/macmini-site/versions.json`)

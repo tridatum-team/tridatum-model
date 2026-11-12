@@ -3,7 +3,7 @@
 const el = id => document.getElementById(id);
 const token = document.querySelector('meta[name="trid-token"]').content;
 const defaultModel = document.querySelector('meta[name="trid-default-model"]')?.content || '';
-const MAX_QUESTION = 500;
+const MAX_QUESTION = 2000;
 let documentId = null, pages = [], documentName = '', busy = false, lastApplied = null;
 
 function node(tag, cls, text) {

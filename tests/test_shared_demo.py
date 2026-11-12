@@ -101,6 +101,26 @@ class SharedDemoTests(unittest.TestCase):
         self.assertFalse(self.state.sessions)
         self.assertEqual(self.request('POST', '/api/sample', {}, h)[0], 403)
 
+    def test_question_unicode_codepoint_boundary_preserves_accepted_input(self):
+        self.state.versions['v']['assistant'] = True
+        prefix = '아까 제가 말한 내용은?\n'
+        text = '가\U0001f600e\u0301\n' * 400
+        for size, expected_status in ((1999, 200), (2000, 200), (2001, 422)):
+            with self.subTest(codepoints=size):
+                headers = self.visitor()
+                loaded = json.loads(self.request('POST', '/api/sample', {}, headers)[1])
+                question = prefix + text[:size - len(prefix)]
+                status, body, _ = self.request('POST', '/api/ask', {
+                    'document_id': loaded['document_id'], 'question': question}, headers)
+                self.assertEqual(status, expected_status)
+                session = list(self.state.sessions.values())[-1]
+                if expected_status == 200:
+                    self.assertEqual(json.loads(body)['request_type'], 'recall')
+                    self.assertEqual(session.history[0]['content'], question)
+                else:
+                    self.assertIn('error', json.loads(body))
+                    self.assertEqual(session.history, [])
+
     def test_version_cards_are_escaped_and_unknown_version_is_rejected(self):
         status, body, _ = self.request('GET', '/')
         self.assertNotIn(b'<script>', body)
@@ -212,6 +232,32 @@ class ChatBackendTests(unittest.TestCase):
             r = chat_reply('http://127.0.0.1:1', 'qwen3', 4096, history, '그래서?')
         self.assertEqual(r['answer'], '네.')
         self.assertEqual(sent[-1][1:], ['user 2', 'assistant 2', '그래서?'])  # the latest turn kept, the oldest gone
+
+    def test_chat_context_overflow_evicts_whole_pairs_then_refuses_current_question(self):
+        from scripts.shared_demo import chat_reply, QWEN3_NO_THINK
+        question = '긴 질문\n' * 400
+        for pairs in (0, 3):
+            with self.subTest(history_pairs=pairs):
+                history = [{'role': role, 'content': f'{role} {i}'}
+                           for i in range(pairs) for role in ('user', 'assistant')]
+                original = [dict(turn) for turn in history]
+                sent = []
+
+                def request(base, endpoint, payload):
+                    if endpoint == '/apply-template':
+                        sent.append(payload['messages'])
+                        return {'prompt': QWEN3_NO_THINK}
+                    if endpoint == '/tokenize':
+                        return {'tokens': [1] * 4096}
+                    self.fail('An overflowing question must not reach completion')
+
+                with patch('scripts.shared_demo.llama_request', side_effect=request):
+                    with self.assertRaises(DocumentError):
+                        chat_reply(_PLACEHOLDER_MODEL, 'qwen3', 4096, history, question, max_tokens=512)
+                self.assertEqual([messages[1:-1] for messages in sent],
+                                 [original[offset:] for offset in range(0, len(original) + 1, 2)])
+                self.assertTrue(all(messages[-1] == {'role': 'user', 'content': question} for messages in sent))
+                self.assertEqual(history, original)
 
     def test_chat_keeps_the_visitors_first_statement_while_the_conversation_fits(self):
         # GENERAL-CHAT-002: a fixed 6-message window dropped "견과류 알레르기가 있어요" on the 5th turn although the

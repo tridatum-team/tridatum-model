@@ -475,8 +475,10 @@ def chat_reply(base, family, context, history, question, max_tokens=384, explain
     turns = list(history)
     while True:
         r = chat_complete(base, _messages(system, turns, question), family, max_tokens, context)
-        if not r.get('skipped_context') or not turns:
+        if not r.get('skipped_context'):
             break
+        if not turns:
+            raise DocumentError('질문이 모델의 문맥 한도를 넘었습니다. 질문을 줄여 주세요.')
         turns = turns[2:]
     output = (r.get('generated') or '').strip()
     given_text = ' '.join([question] + [h['content'] for h in history if h['role'] == 'user'])
@@ -2018,8 +2020,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                         if not workspace_mode and (session.document is None or request.get('document_id') != session.document_id):
                             self.respond(409, {'error': '이 브라우저에서 문서를 먼저 넣어 주세요.'}); return
                         question = request.get('question')
-                        if not isinstance(question, str) or len(question) > 500:
-                            raise DocumentError('질문은 500자 이하로 입력해 주세요.')
+                        if not isinstance(question, str) or len(question) > 2000:
+                            raise DocumentError('질문은 2,000자 이하로 입력해 주세요.')
                         version_id = request.get('version', state.default)
                         if not isinstance(version_id, str) or version_id not in state.versions:
                             raise DocumentError('목록에 있는 모델 버전을 선택해 주세요.')
@@ -2055,7 +2057,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                             result = no_history_reply()
                         elif intent == 'chat':
                             result = chat_reply(version['base'], version['family'], version['context'],
-                                                conversation_turns(history, kind == 'recall'), question, explain=explain,
+                                                conversation_turns(history, kind == 'recall'), question,
+                                                max_tokens=version.get('max_tokens', 384), explain=explain,
                                                 first_turn=not history)
                         elif workspace_mode and ((kind == 'statistic' and not (inst_ws and not inst_ws.facts
                                                                                and not COMPUTED.search(question)))
@@ -2087,7 +2090,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                 # and follow-ups of a search ("다른 등급은?") keep the not-found reply.
                                 intent, selection, others = 'chat', None, []
                                 result = chat_reply(version['base'], version['family'], version['context'],
-                                                    conversation_turns(history, False), question, first_turn=not history)
+                                                    conversation_turns(history, False), question,
+                                                    max_tokens=version.get('max_tokens', 384), first_turn=not history)
                                 result['scope'] = ('업무 자료에서 맞는 근거를 찾지 못했고 업무 기준을 묻는 말로 보이지 않아 일반 대화로 '
                                                    '답했습니다. ' + result['scope'])
                             elif selection and selection['status'] != 'answer':
@@ -2112,7 +2116,8 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                         result.update(status='review', answer='모델이 근거 충돌로 판단한 구간이 있습니다. 원문을 직접 확인해 주세요.')
                                 elif version.get('answer_mode') == 'case':
                                     result = answer_document_case(document, question, version['base'], version['family'],
-                                                                  version['context'], selected=selected,
+                                                                  version['context'], max_tokens=version.get('max_tokens', 256),
+                                                                  selected=selected,
                                                                   topical=selection['retrieval']['topical_words'] if selection else None,
                                                                   provenance=ws.provenance(selection['applied'])
                                                                   if selection and version.get('provenance_line') else None)
