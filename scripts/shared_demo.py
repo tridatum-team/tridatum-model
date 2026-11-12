@@ -1729,6 +1729,9 @@ class State:
                     if not hasattr(self, 'graph_reply'):
                         from trid.service.mois_graph import GraphStore
                         from trid.service.mois_graph_answers import graph_reply
+                        from trid.service.mois_graph_generation import GENERATION_GRAMMAR, generate_graph_reply
+                        self.generate_graph_reply = generate_graph_reply
+                        self.generation_grammar = GENERATION_GRAMMAR
                         self.graph_reply = graph_reply
                     self.versions[meta['id']] = dict(meta, store=GraphStore.open(ROOT / meta['graph_path']))
                     continue
@@ -1745,6 +1748,21 @@ class State:
                     self.versions[meta['id']] = dict(meta, **servers[key])
                 else:
                     raise ValueError(f"unknown version kind {meta['kind']}")
+            # Resolve references only after all declared runtimes exist; graph releases never start a model.
+            for version in self.versions.values():
+                if version['kind'] != 'graph':
+                    continue
+                generator_id = version.get('generator_version')
+                if not isinstance(generator_id, str) or not generator_id:
+                    raise ValueError(f"{version['id']}: generator_version must name an initialized llama version")
+                generator = self.versions.get(generator_id)
+                if generator is None or generator.get('kind') != 'llama':
+                    raise ValueError(f"{version['id']}: generator_version {generator_id!r} is not a llama version")
+                if (not isinstance(generator.get('base'), str) or not generator['base']
+                        or not isinstance(generator.get('family'), str) or not generator['family']
+                        or type(generator.get('context')) is not int or generator['context'] < 4096):
+                    raise ValueError(f"{version['id']}: generator requires a ready endpoint, family and 4096-token context")
+                version['generator'] = generator
         except BaseException:
             self.close()
             raise
@@ -1882,8 +1900,9 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
     workspace_scope = html.escape(workspace.scope()) if workspace else '공유 검색 자료가 없습니다. 문서를 직접 넣어 주세요.'
     if state.versions[state.default]['kind'] == 'graph':
         workspace_scope = html.escape(
-            '행정안전부 수집 자료의 메타데이터·원문 근거 그래프입니다. 명시적 참조 문서는 실제 발행기관과 구분해 '
-            '표시합니다. 수집 시점 자료이며 현행성·개인별 적용을 보증하지 않습니다. 첨부 문서 질문은 Qwen3 원본을 선택해 주세요.')
+            '행정안전부 수집 자료의 근거 그래프를 조회하고 기존 Qwen3 원본 모델이 설명합니다. 별도 학습은 없으며 '
+            '인용·수치 확인은 의미 검증이 아닙니다. 참조 기관 자료를 구분하고 현행성·개인별 적용을 보증하지 않습니다. '
+            '첨부 문서 질문은 Qwen3 원본을 선택해 주세요.')
     version_options = ''.join(
         f'<option value="{html.escape(v["id"], quote=True)}" data-kind="{html.escape(v["kind"], quote=True)}"'
         f'{" selected" if v["id"] == state.default else ""}>'
@@ -2083,9 +2102,20 @@ def make_server(state, secret, port=0, hostname='test.tridatum.co'):
                                                and last.get('version') == version_id else None)
                                 pinned_doc = (session.graph_pinned_doc if session.graph_version == version_id
                                               else session.pinned_doc)
-                                result = state.graph_reply(version['store'], question, pinned_doc=pinned_doc,
-                                                           context_doc=context_doc)
-                                result['graph']['pinned_doc'] = pinned_doc
+                                evidence = state.graph_reply(version['store'], question, pinned_doc=pinned_doc,
+                                                             context_doc=context_doc)
+                                evidence['graph']['pinned_doc'] = pinned_doc
+                                generator = version['generator']
+
+                                def complete_graph(messages):
+                                    return complete(generator['base'], messages, generator['family'], 512, 4096,
+                                                    state.generation_grammar)
+
+                                identity = {key: generator[key] for key in
+                                            ('id', 'label', 'base_model', 'model_sha256', 'adapter_sha256')
+                                            if key in generator}
+                                result = state.generate_graph_reply(question, evidence, complete_graph,
+                                                                    generator=identity)
                             result.update(model=version['label'], version=version_id,
                                           elapsed_ms=round((time.monotonic() - started) * 1000))
                             graph = result['graph']

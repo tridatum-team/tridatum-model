@@ -70,12 +70,12 @@ function describe(d) {
   return [d.institution, d.title, d.kind, d.date ? `${d.date_type || '기준일'} ${d.date}` : null,
           d.effective_date ? `시행 ${d.effective_date}` : null].filter(Boolean).join(' · ');
 }
-const GRAPH_SCOPE = '행정안전부 수집 자료의 메타데이터·원문 근거 그래프입니다. 참조 기관 자료는 별도 출처로 구분하며, 수집 시점 자료가 현행 법령이나 개인별 적용을 보증하지 않습니다.';
+const GRAPH_SCOPE = '행정안전부 수집 자료의 근거 그래프를 조회하고 기존 Qwen3 원본 모델이 설명합니다(별도 학습 없음). 인용·수치 확인은 의미 검증이 아니며 원문 대조가 필요합니다. 참조 기관 자료를 구분하고 현행성·개인별 적용을 보증하지 않습니다.';
 function updateScope() {
   const graph = graphSelected();
   el('doc-chip').hidden = !documentId && !graph;
   el('doc-name').parentElement.firstChild.textContent = graph
-    ? (documentId ? '첨부 범위 유지 · 문서 질문은 Qwen3 원본 선택 · ' : '행안부 근거 그래프 · 수집 자료 기준')
+    ? (documentId ? '첨부 범위 유지 · 문서 질문은 Qwen3 원본 선택 · ' : '행안부 근거 기반 설명 · 의미 검증 안 됨')
     : '내 문서에서만 찾는 중 · ';
   el('doc-name').textContent = documentId ? `${documentName} (${pages.length}쪽)` : '';
   el('doc-source').hidden = !documentId;
@@ -113,6 +113,12 @@ const STATUS = {
   review: '검증 보류 · 원문 확인 필요', not_found: '근거 못 찾음', clarify: '되묻기',
   unknown_institution: '해당 기관 자료 없음', institution_no_match: '해당 기관 자료에 근거 없음', model_failure: '모델 응답 실패',
 };
+const GENERATION_FAILURE = {
+  context_limit: '근거가 모델 문맥 한도를 초과함',
+  runtime_error: '모델 실행 오류',
+  invalid_output: '생성 형식·인용·수치 검사 미통과',
+  truncated_output: '모델 출력이 끝나기 전에 잘림',
+};
 
 // Evidence the server left out to fit the model context (UI-SCOPE-004): the answer covers only what went in, so one
 // short line sits right under the answer on every such response; the full wording stays in the fold. `context_limits`
@@ -129,14 +135,57 @@ function contextLimitLine(result) {
 function renderGraph(parent, result) {
   const graph = result.graph;
   if (!graph) return;
+  const generation = result.generation;
+  if (generation?.state === 'generated') {
+    note(parent, '인용 ID·수치 일치 확인은 문장의 의미, 사실 또는 개인별 적용이 옳다는 검증이 아닙니다.', 'warn');
+  } else if (GENERATION_FAILURE[generation?.state]) {
+    note(parent, `설명 생성 실패: ${GENERATION_FAILURE[generation.state]}${generation.reason ? ' · ' + generation.reason : ''}. 채택된 모델 설명은 없으며, 아래 표와 출처는 원자료 근거입니다.`, 'warn');
+  }
   if (result.scope) note(parent, result.scope);
   for (const warning of result.warnings || []) note(parent, warning, 'warn');
+  if (result.evidence_table?.length) {
+    const evidence = node('details', 'more');
+    evidence.append(node('summary', '', `원자료 근거 표 ${result.evidence_table.length}행 · 모델 생성 아님`));
+    const table = node('table');
+    table.append(node('caption', '', '검색된 출처에서 구성한 근거 · 현행성·개인별 적용 보증 아님'));
+    const head = node('thead'), headings = node('tr');
+    for (const title of ['근거 ID', '대상', '규정·내용', '조건·예외']) {
+      const cell = node('th', '', title);
+      cell.scope = 'col';
+      headings.append(cell);
+    }
+    head.append(headings);
+    const body = node('tbody');
+    for (const row of result.evidence_table) {
+      const line = node('tr');
+      for (const key of ['source_id', 'subject', 'rule', 'conditions']) line.append(node('td', '', row[key] ?? ''));
+      body.append(line);
+    }
+    table.append(head, body);
+    evidence.append(table);
+    parent.append(evidence);
+  }
   const details = node('details', 'more');
   details.append(node('summary', '', `그래프 출처 ${graph.sources?.length || 0}건 · 관계 ${graph.paths?.length || 0}개`));
   const advanced = node('details', 'more');
   advanced.append(node('summary', '', '고급 · 그래프 데이터와 근거 위치(JSON)'));
   if (graph.release) advanced.append(block('그래프 릴리스', typeof graph.release === 'string' ? graph.release : JSON.stringify(graph.release)));
   if (graph.coverage) advanced.append(block('수집 자료 범위', typeof graph.coverage === 'string' ? graph.coverage : JSON.stringify(graph.coverage, null, 2)));
+  if (generation) {
+    const model = generation.generator || {};
+    advanced.append(block('설명 생성 정보 · 의미 검증 안 됨', [
+      `상태: ${generation.state}`,
+      `생성 모델: ${model.label || model.id || '미상'}`,
+      `입력 토큰: ${generation.prompt_tokens ?? '미실행/미상'} · 출력 토큰: ${generation.output_tokens ?? '미실행/미상'}`,
+      `종료: ${generation.finish_reason ?? '미실행/미상'}`,
+      `인용 ID 검사: ${generation.validation?.citations === 'passed' ? '통과' : '미확인'}`,
+      `인용 근거 내 수치 일치 검사: ${generation.validation?.numeric_values === 'passed' ? '통과' : '미확인'}`,
+      '의미·사실·적용 검증: 수행하지 않음',
+    ].join('\n')));
+    if (generation.paragraphs?.length) advanced.append(block('설명 문단별 인용 근거 ID',
+      generation.paragraphs.map((paragraph, index) => `${index + 1}문단: ${paragraph.sources.map(id => `[${id}]`).join(' ')}`).join('\n')));
+    if (generation.evidence_ids) advanced.append(block('설명 근거 ID와 원자료 연결', JSON.stringify(generation.evidence_ids, null, 2)));
+  }
   for (const source of graph.sources || []) {
     const b = block(source.scope === 'reference' ? '사용한 참조 출처 · 행안부 소유 자료 아님' : '사용한 출처', describe(source));
     if (source.url) b.append(document.createTextNode('\n원문 '), sourceLink(source.url));
@@ -186,7 +235,13 @@ function renderAnswer(result, started) {
   const limitLine = contextLimitLine(result);
   if (limitLine) note(m, limitLine, 'warn limit');
   const tags = node('div', 'tags');
-  if (result.answer_mode === 'graph') tags.append(tag(`근거 그래프 · ${STATUS[result.status] || result.status || '자료 안내'} · 모델 미사용`));
+  if (result.answer_mode === 'graph') {
+    const state = result.generation?.state;
+    tags.append(tag(state === 'generated' ? '모델 생성 설명 · 원문 대조 필요 · 의미 검증 안 됨'
+      : GENERATION_FAILURE[state] ? `설명 생성 실패 · ${GENERATION_FAILURE[state]}`
+      : `근거 그래프 · ${STATUS[result.status] || result.status || '자료 안내'} · 모델 미사용`,
+      GENERATION_FAILURE[state] ? 'bad' : ''));
+  }
   else if (result.intent === 'chat') tags.append(tag('일반 대화 · 문서 근거 없음 · 검증 대상 아님'));
   else tags.append(tag(STATUS[result.status] || result.status || '근거 검색', result.status === 'model_failure' ? 'bad' : ''));
   m.append(tags);
@@ -196,7 +251,7 @@ function renderAnswer(result, started) {
   if (result.source_limits?.length) limits.push(result.source_limits.some(t => t.includes('그림')) ? '원본 그림 제외 추출본' : '원본 추출 한계 있음');
   if (result.table_warning) limits.push('표 행·열 대응 미검증');
   if (limits.length) note(m, `자료 한계: ${limits.join(' · ')} — 자세한 내용은 아래 출처에서 확인하세요`, 'warn');
-  // Graph facts remain primary; full exact quotes are available on demand. Other modes keep inline quotes.
+  // Generated graph explanations stay primary; source-derived tables and exact quotes remain collapsed.
   const quotes = result.answer_mode === 'graph' ? node('details', 'more') : m;
   if (quotes !== m && result.candidates?.length) {
     quotes.append(node('summary', '', `원문 근거 ${result.candidates.length}개`));
@@ -363,7 +418,7 @@ el('info').addEventListener('click', event => { if (event.target === el('info'))
 el('version').addEventListener('change', () => {
   updateFlag();
   if (!document.body.classList.contains('empty')) system(`모델: ${el('version').selectedOptions[0].textContent}`
-    + (graphSelected() ? ' · 수집 자료의 근거 그래프 · 모델 미사용' : ''));
+    + (graphSelected() ? ' · 수집 자료 검색 + Qwen3 원본 설명 · 의미 검증 안 됨' : ''));
   el('command').focus();
 });
 el('version-form').addEventListener('submit', event => event.preventDefault());

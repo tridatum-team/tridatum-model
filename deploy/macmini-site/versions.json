@@ -1,19 +1,20 @@
 [
   {
-    "id": "trid-mois-graph-v0.2",
+    "id": "trid-mois-graph-v0.3",
     "default": true,
-    "label": "TRID 행안부 · 근거 그래프 v0.2",
+    "label": "TRID 행안부 · 근거 기반 답변 v0.3",
     "kind": "graph",
     "answer_mode": "graph",
     "graph_path": "runs/mois-graph/v1",
+    "generator_version": "trid-assistant-qwen3-1.7b",
     "upload_tokenizer": "runs/reader-factorial-01-cpt-v1-v2-v4/tokenizer.json",
     "upload_tokenizer_sha256": "73551e65acfa80834c235602900f31dc353ce230bfb69939ffdf44ca26ebc58d",
-    "base_model": "모델 미사용 · RDF/SPARQL 근거 그래프",
-    "license": "출처별 원자료 이용조건 적용",
-    "version": "v0.2 · 행정안전부 수집 자료와 명시적 참조 문서의 근거 그래프",
-    "status": "수집 시점 자료 기준 · 원문 확인 필요",
-    "evaluation": "모델 학습·성능 개선 주장이 아닙니다. 그래프에 수록한 문서 메타데이터, 원문 구간과 관계를 조회하는 별도 응답 경로입니다.",
-    "limits": "수집 자료의 원문·메타데이터만 근거로 사용합니다. 현행성이나 개인별 법적 적용을 보증하지 않으며, 참조 기관과 미수록 규정을 구분합니다. 첨부 문서 질문은 Qwen3 원본을 선택해 주세요."
+    "base_model": "RDF/SPARQL 근거 그래프 + 기존 Qwen3-1.7B Q8_0 원본 설명 생성",
+    "license": "Qwen3 Apache-2.0 · 출처별 원자료 이용조건 적용",
+    "version": "v0.3 · 행정안전부 수집 자료와 명시적 참조 문서 검색 + Qwen3 원본의 근거 기반 설명",
+    "status": "미배포 개발 후보 · 생성 품질 미수락",
+    "evaluation": "별도 모델 학습이나 성능 개선 주장이 아닙니다. 설정된 생성기는 기존 Qwen3-1.7B 원본이며, 수정 후 생성 품질은 미검증입니다. 별도로 수행한 4B 사전 평가에서 중대한 의미 오류가 확인되어 생성 품질을 수락하지 않았습니다. 4B는 이 설정의 생성기가 아닙니다. 인용 ID·수치 일치 확인은 의미·정답 검증이 아닙니다.",
+    "limits": "수집 자료의 원문·메타데이터만 근거로 사용합니다. 설명은 모델 생성이며 의미 검증되지 않았습니다. 현행성이나 개인별 법적 적용을 보증하지 않으며, 참조 기관과 미수록 규정을 구분합니다. 생성 실패는 숨기지 않고 원자료 근거를 별도로 제공합니다. 첨부 문서 질문은 Qwen3 원본을 선택해 주세요."
   },
   {
     "id": "trid-assistant-qwen3-1.7b",
