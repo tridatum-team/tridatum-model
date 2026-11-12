@@ -1,0 +1,886 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-11-12T07:04:20.781509+00:00",
+  "decision": "NOT_ACCEPTED",
+  "candidate": "MOIS graph-grounded generation v0.3 development path",
+  "production": {
+    "site": "https://test.tridatum.co",
+    "unchanged_default": "trid-mois-graph-v0.2",
+    "deployed_this_work": false,
+    "retained_original_model_runtime_changed": false
+  },
+  "publication": {
+    "implementation_branch": "feature/mois-grounded-generation",
+    "implementation_merged_to_main": false,
+    "main_changes": "Documentation and observed verification report only"
+  },
+  "implementation": {
+    "real_llm_synthesis": true,
+    "source_table_and_provenance_preserved": true,
+    "citation_numeric_checks_are_semantic_verification": false,
+    "source_sha256": "4c49d1f1500e84f3ff5fc1c27e3ac8f1b36de8e2b1ed891e332beb1302c9a7be",
+    "public_candidate_config_generator": "trid-assistant-qwen3-1.7b",
+    "note": "The4B model was exercised separately in an owned local harness, not configured or deployed as the public generator."
+  },
+  "model_free_verification": {
+    "unique_behavior_tests_passed": 54,
+    "exact_head_and_deployed_projection_http_smokes": "passed with synthetic native transport; not model-quality proof",
+    "actual_local_browser_rendering": [
+      "saved response replay",
+      "source table expansion",
+      "visible generation failure",
+      "HTML canaries remained inert text"
+    ],
+    "owned_preview_and_tab_closed": true
+  },
+  "initial_17b_probe": {
+    "host": "existing production CPU native runtime",
+    "questions": 6,
+    "initial_validator_accepted": 1,
+    "quality_passed": false,
+    "observed_semantic_failure": "Overview reverses confidentiality-related registration condition",
+    "corrected_implementation_defects": [
+      "unbounded grammar whitespace exhausted output budget",
+      "equivalent dates rejected by numeric normalization",
+      "selected fact incorrectly treated as covering entire source quotation",
+      "unpaired surrogate output accepted before UTF-8 serialization"
+    ],
+    "revised_inference": "not started: pressure1 admission failed;0requests",
+    "later_resource_observation": {
+      "physical_memory_bytes": 17179869184,
+      "pressure": 2,
+      "swap_used_mib": 8591.81
+    },
+    "comparison_warning": "Prompt and validator changed before4B trial; these are not comparable model accuracy scores."
+  },
+  "local_4b_probe": {
+    "user_authorized": true,
+    "model": "Qwen3.5-4B Q8_0 original",
+    "model_sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+    "model_bytes": 4482403488,
+    "publisher": "unsloth/Qwen3.5-4B-GGUF",
+    "publisher_revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+    "license": "Apache-2.0",
+    "new_downloads": 0,
+    "training": false,
+    "new_paid_resources": false,
+    "cpu_threads": 4,
+    "gpu_layers": 0,
+    "context_tokens": 4096,
+    "max_output_tokens": 512,
+    "decoding": "greedy, seed42, native nonthinking template verified, bounded JSON grammar",
+    "native_binary_sha256": "bf5eeac5b2073cae349dd78f7947596a4e0685fde45098e58b3ef637e120a027",
+    "source_sha256": "4c49d1f1500e84f3ff5fc1c27e3ac8f1b36de8e2b1ed891e332beb1302c9a7be",
+    "limits": {
+      "owned_group_rss_bytes": 6442450944,
+      "seconds_per_chunk": 180,
+      "required_pressure": 1
+    },
+    "chunks": [
+      {
+        "elapsed_seconds": 97.77739570799167,
+        "peak_owned_group_rss_bytes": 6028492800,
+        "maximum_pressure": 1,
+        "harness_exit_code": 0,
+        "soft_stop_reason": null,
+        "cleanup_state": "completed",
+        "reaped": true,
+        "native_port_closed_after": true
+      },
+      {
+        "elapsed_seconds": 68.55485691598733,
+        "peak_owned_group_rss_bytes": 6079545344,
+        "maximum_pressure": 1,
+        "harness_exit_code": 0,
+        "soft_stop_reason": null,
+        "cleanup_state": "completed",
+        "reaped": true,
+        "native_port_closed_after": true
+      }
+    ],
+    "generated_cases": 10,
+    "structurally_accepted": 10,
+    "semantic_review": {
+      "PASS": 4,
+      "LIMITED": 3,
+      "FAIL": 3,
+      "limited_definition": "Factually supported but substantially copied recital rather than requested explanation",
+      "independent_review": true,
+      "parent_agrees_with_three_failures": true
+    },
+    "no_generation_boundary_cases": 5,
+    "boundary_calls": 0,
+    "scope": "Selected development questions, not a general accuracy benchmark or frozen evaluation"
+  },
+  "cases": [
+    {
+      "id": "metadata",
+      "question": "행정안전부 공무국외출장 운영지침의 발령일과 시행일을 알려줘",
+      "answer": "행정안전부 공무국외출장 운영지침의 발령일은 2020 년 3 월 20 일이며, 해당 문서의 시행일 역시 2020 년 3 월 20 일로 명시되어 있습니다. 이 정보는 2020 년 3 월 20 일 발령된 문서의 메타데이터를 통해 확인된 사실에 기반합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "PASS",
+      "review_note": "Both requested dates are supported metadata.",
+      "elapsed_seconds": 11.330279416986741,
+      "completion": {
+        "prompt_tokens": 585,
+        "output_tokens": 106,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "b4cb3af10a956d85c98c46a9c20de5418be3f667839d9d96ff2e31fc98200d17",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "predicate": "metadata",
+          "field": "effective_date",
+          "value": "2020-03-20"
+        },
+        {
+          "predicate": "metadata",
+          "field": "date",
+          "value": "2020-03-20"
+        },
+        {
+          "predicate": "metadata",
+          "field": "date_type",
+          "value": "발령일자"
+        },
+        {
+          "predicate": "metadata",
+          "field": "version",
+          "value": "2100000187731"
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "overview",
+      "question": "행안부 공무국외출장은 어떤 절차로 진행해?",
+      "answer": "행정안전부 소속 공무원의 공무국외출장은 행정안전부장관이 최종 허가하며, 허가권자는 직급에 따라 위임받을 수 있습니다. 출장자는 출장일 20 일 전까지 출장계획서를 공무국외출장 총괄 부서장에게 제출하고, 출장일 7 일 전까지 총괄 부서장과 사전 협의를 실시해야 합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "FAIL",
+      "review_note": "Consultation is incorrectly tied to departure, not plan submission; excluded days and major stages omitted.",
+      "elapsed_seconds": 35.28648750000866,
+      "completion": {
+        "prompt_tokens": 3039,
+        "output_tokens": 131,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "0b57e09cd84a9d91b325b2280666b19583fe199d911a7ee5408b821e377274ba",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.applicability",
+          "subject": "이 규정의 적용범위",
+          "predicate": "appliesTo",
+          "object": "다른 법령 또는 행정안전부장관이 특별히 정한 경우를 제외하고, 행정안전부 소속 공무원이 공무의 수행이나 그 밖에 그 직무와 관련하여 국외에 출장하는 경우 및 그 밖의 사람이 행정안전부의 예산으로 공무의 수행을 위하여 국외에 출장하는 경우에 적용한다.",
+          "qualifiers": {
+            "article": "제2조",
+            "exclusions": "다른 법령 또는 행정안전부장관이 특별히 정한 경우"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.prior-consultation",
+          "subject": "출장자의 출장계획서 등 제출 전 사전 협의",
+          "predicate": "deadline",
+          "object": "출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다.",
+          "qualifiers": {
+            "action": "공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의",
+            "amount": 7,
+            "article": "제4조제3항",
+            "direction": "before",
+            "excluded_days": [
+              "토요일",
+              "공휴일"
+            ],
+            "trigger": "출장계획서 등 제출",
+            "unit": "일"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.plan-submission",
+          "subject": "공무국외출장을 실시하려는 자의 출장계획서 등 허가요청",
+          "predicate": "deadline",
+          "object": "공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다.",
+          "qualifiers": {
+            "action": "출장계획서 등 작성 및 허가요청",
+            "amount": 20,
+            "article": "제4조제1항",
+            "direction": "before",
+            "excluded_days": [
+              "토요일",
+              "공휴일"
+            ],
+            "forms": [
+              "별지 제1호서식",
+              "별지 제2호서식",
+              "별지 제3호서식",
+              "별지 제4호서식"
+            ],
+            "recipient": "공무국외출장 총괄 부서장",
+            "trigger": "출장일",
+            "unit": "일"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.approval-review",
+          "subject": "허가권자 및 공무국외출장 총괄 부서장",
+          "predicate": "requires",
+          "object": "허가권자는 제4조제1항의 허가요청에 대해 별표의 기준에 따라 검토하여 적정한 경우 허가한다. 다만 공무국외출장 총괄 부서장은 제출받은 공무국외출장이 제5조제1항 각 호의 어느 하나에 해당할 경우 허가권자의 허가 이전에 공무국외출장 심사위원회의 사전심사를 거쳐야 한다.",
+          "qualifiers": {
+            "article": "제4조제2항",
+            "condition": "제5조제1항 각 호의 어느 하나에 해당할 경우",
+            "sequence": "허가권자의 허가 이전에 심사위원회 사전심사"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.permission",
+          "subject": "행정안전부장관",
+          "predicate": "authorizes",
+          "object": "제2조에 따라 이 규정의 적용을 받는 공무원 등의 공무국외출장은 행정안전부장관이 허가한다. 장관은 출장자 또는 출장자 대표의 직급에 따라 허가권을 위임할 수 있으며, 이 경우 위임범위는 「행정안전부 위임전결규정」에 따른다.",
+          "qualifiers": {
+            "article": "제3조",
+            "condition": "제2조에 따라 이 규정의 적용을 받는 공무원 등의 공무국외출장",
+            "delegation_basis": "행정안전부 위임전결규정"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.return-report",
+          "subject": "공무국외출장자의 결과보고서 제출 및 등록",
+          "predicate": "deadline",
+          "object": "공무국외출장자는 귀국 후 30일 이내(출장을 마친 날의 다음 날부터 기산)에 결과보고서를 별지 제5호서식에 따라 작성하여 해당 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 인사혁신처 국외출장연수정보시스템 및 홈페이지, 내부게시판 등에 등록하여야 한다.",
+          "qualifiers": {
+            "action": "결과보고서 제출 및 등록",
+            "amount": 30,
+            "article": "제11조제1항",
+            "count_start": "출장을 마친 날의 다음 날",
+            "direction": "after",
+            "form": "별지 제5호서식",
+            "prior_approval": "해당 부서장 검토·결재",
+            "recipient": "허가권자",
+            "registration_destinations": [
+              "인사혁신처 국외출장연수정보시스템",
+              "홈페이지",
+              "내부게시판 등"
+            ],
+            "registration_with": "출장계획서",
+            "trigger": "귀국",
+            "unit": "일"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.report-registration-exception",
+          "subject": "결과보고서의 비공개 사유 미등록에 관한 서식 기재",
+          "predicate": "exception",
+          "object": "별지 제7호서식은 국외출장연수정보시스템의 비공개 사유 미등록 건수를 별도로 구분한다. 그 사유로 국가기밀의 보호·보안유지 등을 위하여 필요한 경우에 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우를 기재한다. 이는 서식에 기록된 등록 관련 예외이며, 결과보고서 제출 자체를 면제하는 근거로 해석하지 않는다. 서식의 불완전한 조문 표기는 보정하지 않았고 현행 적용 여부는 재확인하지 않았다.",
+          "qualifiers": {
+            "article": "별지 제7호서식 보고서 제출·등록 건수의 주석",
+            "conditions": [
+              "국가기밀의 보호·보안유지 등을 위하여 필요한 경우",
+              "부서장이 그 사유를 구체적으로 밝혀 인사혁신처장에게 통보한 경우"
+            ],
+            "exception_to": "mois.foreign-trip.return-report",
+            "limitation": "원문 조문 인용이 불완전하며 현행 적용 여부를 재확인하지 않음",
+            "scope": "국외출장연수정보시스템 등록에 관한 서식 기재; 결과보고서 제출 면제와 구별",
+            "source_citation_as_written": "국가공무원 복무규정 제13조의6제항 단서조항"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.report-registration-exception",
+          "predicate": "qualifiesRule",
+          "object": "mois.foreign-trip.return-report"
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "plan",
+      "question": "행안부 국외출장 계획서는 언제까지 누구에게 제출해야 해?",
+      "answer": "공무국외출장을 실시하려는 자는 출장일 20 일 (토요일 및 공휴일 제외) 전까지 출장계획서 등을 작성하여 공무국외출장 총괄 부서장에게 요청해야 합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "LIMITED",
+      "review_note": "Requested deadline, exclusions and recipient correct; near-verbatim recital.",
+      "elapsed_seconds": 12.824189832987031,
+      "completion": {
+        "prompt_tokens": 1002,
+        "output_tokens": 67,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "4998d467de15f0b50784b78ad0a26697b7ba9effe67de13b751f4ca170da3c42",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.plan-submission",
+          "subject": "공무국외출장을 실시하려는 자의 출장계획서 등 허가요청",
+          "predicate": "deadline",
+          "object": "공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다.",
+          "qualifiers": {
+            "action": "출장계획서 등 작성 및 허가요청",
+            "amount": 20,
+            "article": "제4조제1항",
+            "direction": "before",
+            "excluded_days": [
+              "토요일",
+              "공휴일"
+            ],
+            "forms": [
+              "별지 제1호서식",
+              "별지 제2호서식",
+              "별지 제3호서식",
+              "별지 제4호서식"
+            ],
+            "recipient": "공무국외출장 총괄 부서장",
+            "trigger": "출장일",
+            "unit": "일"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "consult",
+      "question": "국외출장 계획서를 제출하기 전에 사전 협의는 언제 해야 해?",
+      "answer": "출장자는 출장계획서 등을 제출하기 7 일 (토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "LIMITED",
+      "review_note": "Correct pre-submission deadline and exclusions; near-verbatim recital.",
+      "elapsed_seconds": 11.596745542017743,
+      "completion": {
+        "prompt_tokens": 921,
+        "output_tokens": 58,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "f155103604b728509aecf8029d971005449723020e970ee69760b17cff4cc250",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.prior-consultation",
+          "subject": "출장자의 출장계획서 등 제출 전 사전 협의",
+          "predicate": "deadline",
+          "object": "출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다.",
+          "qualifiers": {
+            "action": "공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의",
+            "amount": 7,
+            "article": "제4조제3항",
+            "direction": "before",
+            "excluded_days": [
+              "토요일",
+              "공휴일"
+            ],
+            "trigger": "출장계획서 등 제출",
+            "unit": "일"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "two_deadlines",
+      "question": "행안부 국외출장 계획서 제출 기한과 사전협의 기한을 둘 다 알려줘",
+      "answer": "출장계획서 제출 기한은 출장일로부터 20 일 (토요일 및 공휴일 제외) 전까지이며, 사전협의 기한은 출장계획서 제출 후 7 일 (토요일 및 공휴일 제외) 전까지입니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "FAIL",
+      "review_note": "Unsupported and contradictory after-submission/before relationship.",
+      "elapsed_seconds": 14.733955749979941,
+      "completion": {
+        "prompt_tokens": 1173,
+        "output_tokens": 75,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "f7326dc9a6093f4d7ceb78119bc1d35dcc83b254d9d9f6ea118600508297861a",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.prior-consultation",
+          "subject": "출장자의 출장계획서 등 제출 전 사전 협의",
+          "predicate": "deadline",
+          "object": "출장자는 원활한 심사 및 허가절차 진행과 내실 있는 출장을 위해 출장계획서 등을 제출하기 7일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 한다.",
+          "qualifiers": {
+            "action": "공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의",
+            "amount": 7,
+            "article": "제4조제3항",
+            "direction": "before",
+            "excluded_days": [
+              "토요일",
+              "공휴일"
+            ],
+            "trigger": "출장계획서 등 제출",
+            "unit": "일"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.plan-submission",
+          "subject": "공무국외출장을 실시하려는 자의 출장계획서 등 허가요청",
+          "predicate": "deadline",
+          "object": "공무국외출장을 실시하려는 자는 출장일 20일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 별지 제1호서식부터 별지 제4호서식까지에 따라 작성하여 공무국외출장 총괄 부서장(「행정안전부와 그 소속기관 직제 시행규칙」 제4조제9항에 따른 국제협력담당관)에게 요청하여야 한다.",
+          "qualifiers": {
+            "action": "출장계획서 등 작성 및 허가요청",
+            "amount": 20,
+            "article": "제4조제1항",
+            "direction": "before",
+            "excluded_days": [
+              "토요일",
+              "공휴일"
+            ],
+            "forms": [
+              "별지 제1호서식",
+              "별지 제2호서식",
+              "별지 제3호서식",
+              "별지 제4호서식"
+            ],
+            "recipient": "공무국외출장 총괄 부서장",
+            "trigger": "출장일",
+            "unit": "일"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "question": "행안부 국외출장을 다녀오면 결과보고서는 언제까지 내야 해?",
+      "answer": "행정안전부 공무국외출장 운영지침에 따르면 공무국외출장자는 귀국 후 출장을 마친 날의 다음 날부터 30 일 이내에 결과보고서를 작성하여 허가권자에게 제출하고, 출장계획서와 함께 인사혁신처 국외출장연수정보시스템 등에도 등록해야 합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "FAIL",
+      "review_note": "Correct reporting deadline, but adds an unqualified registration obligation despite the supplied security-related non-registration qualification.",
+      "elapsed_seconds": 19.071669249999104,
+      "completion": {
+        "prompt_tokens": 1614,
+        "output_tokens": 88,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "3b88fac70fb1efc5bf6940af173a90a01ab551265690195feb6663bb471ba85f",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.return-report",
+          "subject": "공무국외출장자의 결과보고서 제출 및 등록",
+          "predicate": "deadline",
+          "object": "공무국외출장자는 귀국 후 30일 이내(출장을 마친 날의 다음 날부터 기산)에 결과보고서를 별지 제5호서식에 따라 작성하여 해당 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 인사혁신처 국외출장연수정보시스템 및 홈페이지, 내부게시판 등에 등록하여야 한다.",
+          "qualifiers": {
+            "action": "결과보고서 제출 및 등록",
+            "amount": 30,
+            "article": "제11조제1항",
+            "count_start": "출장을 마친 날의 다음 날",
+            "direction": "after",
+            "form": "별지 제5호서식",
+            "prior_approval": "해당 부서장 검토·결재",
+            "recipient": "허가권자",
+            "registration_destinations": [
+              "인사혁신처 국외출장연수정보시스템",
+              "홈페이지",
+              "내부게시판 등"
+            ],
+            "registration_with": "출장계획서",
+            "trigger": "귀국",
+            "unit": "일"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.report-registration-exception",
+          "subject": "결과보고서의 비공개 사유 미등록에 관한 서식 기재",
+          "predicate": "exception",
+          "object": "별지 제7호서식은 국외출장연수정보시스템의 비공개 사유 미등록 건수를 별도로 구분한다. 그 사유로 국가기밀의 보호·보안유지 등을 위하여 필요한 경우에 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우를 기재한다. 이는 서식에 기록된 등록 관련 예외이며, 결과보고서 제출 자체를 면제하는 근거로 해석하지 않는다. 서식의 불완전한 조문 표기는 보정하지 않았고 현행 적용 여부는 재확인하지 않았다.",
+          "qualifiers": {
+            "article": "별지 제7호서식 보고서 제출·등록 건수의 주석",
+            "conditions": [
+              "국가기밀의 보호·보안유지 등을 위하여 필요한 경우",
+              "부서장이 그 사유를 구체적으로 밝혀 인사혁신처장에게 통보한 경우"
+            ],
+            "exception_to": "mois.foreign-trip.return-report",
+            "limitation": "원문 조문 인용이 불완전하며 현행 적용 여부를 재확인하지 않음",
+            "scope": "국외출장연수정보시스템 등록에 관한 서식 기재; 결과보고서 제출 면제와 구별",
+            "source_citation_as_written": "국가공무원 복무규정 제13조의6제항 단서조항"
+          }
+        },
+        {
+          "fact_id": "mois.foreign-trip.report-registration-exception",
+          "predicate": "qualifiesRule",
+          "object": "mois.foreign-trip.return-report"
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "population",
+      "question": "행안부 직원이 아니어도 행안부 예산으로 가는 공무국외출장에 이 지침이 적용돼?",
+      "answer": "이 지침은 행정안전부 예산으로 공무를 수행하기 위해 국외에 출장하는 사람에 적용되므로, 해당 직원이 행안부 소속 공무원이 아니더라도 예산 출처가 행안부라면 적용됩니다. 다만, 다른 법령이나 행정안전부장관이 특별히 정한 경우에는 예외로 적용되지 않습니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "PASS",
+      "review_note": "Explains non-employee coverage with official-purpose/overseas/budget conditions and exclusions.",
+      "elapsed_seconds": 11.166169417003402,
+      "completion": {
+        "prompt_tokens": 722,
+        "output_tokens": 83,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "40d79bcb0c159e7d7845163a688dc5085bb3bdd6921edd17071d62d2b809b5f5",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.applicability",
+          "subject": "이 규정의 적용범위",
+          "predicate": "appliesTo",
+          "object": "다른 법령 또는 행정안전부장관이 특별히 정한 경우를 제외하고, 행정안전부 소속 공무원이 공무의 수행이나 그 밖에 그 직무와 관련하여 국외에 출장하는 경우 및 그 밖의 사람이 행정안전부의 예산으로 공무의 수행을 위하여 국외에 출장하는 경우에 적용한다.",
+          "qualifiers": {
+            "article": "제2조",
+            "exclusions": "다른 법령 또는 행정안전부장관이 특별히 정한 경우"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "exception",
+      "question": "행안부 국외출장 비용을 직무상 이해관계자가 부담해도 돼?",
+      "answer": "행정안전부 공무국외출장 운영지침에 따르면 직무상 이해관계자가 출장 경비를 부담하는 것은 원칙적으로 금지됩니다. 다만, 그 필요성이 인정된 경우 심사위원회의 심사를 거쳐 장관이 허가한 예외적 상황에서는 부담이 허용되나, 이는 「공무원 여비 규정」에서 정한 범위 내에서만 가능합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "PASS",
+      "review_note": "Preserves prohibition, conjunctive exception conditions and expense ceiling without inventing amounts.",
+      "elapsed_seconds": 13.039847667008871,
+      "completion": {
+        "prompt_tokens": 880,
+        "output_tokens": 92,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "027bdca6c66a33cb0b2d51d5f91e8f238ee72e8867b6f54e7737bef14cd72ed8",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.interested-party-expenses",
+          "subject": "직무상 이해관계자가 경비를 부담하는 공무국외출장",
+          "predicate": "prohibits",
+          "object": "직무상 이해관계가 있는 기관·단체 또는 개인이 출장경비의 전부 또는 일부를 부담하는 공무국외출장은 할 수 없다. 다만 필요성이 인정된 경우로서 심사위원회의 심사를 거쳐 장관이 허가한 경우는 예외로 하며, 이 경우 이해관계자가 부담하는 경비는 「공무원 여비 규정」에서 정한 범위의 운임과 숙박비·식비 등을 초과할 수 없다.",
+          "qualifiers": {
+            "article": "제8조제1항 및 제2항",
+            "exception_conditions": [
+              "필요성이 인정된 경우",
+              "심사위원회의 심사",
+              "장관의 허가"
+            ],
+            "expense_ceiling_basis": "공무원 여비 규정에서 정한 범위의 운임과 숙박비·식비 등"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "mileage",
+      "question": "공무국외출장 항공마일리지를 개인적으로 써도 되나?",
+      "answer": "행정안전부 공무국외출장 운영지침에 따라 공무국외출장에 의해 취득한 항공마일지지는 사적 목적으로 활용하여서는 아니 됩니다. 이는 공무출장자 개인이 마일지지를 자유롭게 사용할 수 있는 것이 아니라, 공적 목적 내에서만 활용해야 함을 명시하고 있습니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "PASS",
+      "review_note": "Correct official-mileage private-use prohibition; minor Korean word errors remain.",
+      "elapsed_seconds": 12.52529429201968,
+      "completion": {
+        "prompt_tokens": 842,
+        "output_tokens": 85,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "c9a88a24d3a90f6ae2b7d1d99862461da963eb394dc19ca3ab4a2334f12b39cc",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.mileage-use",
+          "subject": "공무국외출장에 의해 취득한 항공마일리지",
+          "predicate": "requires",
+          "object": "공무국외출장에 의해 취득한 항공마일리지는 사적 목적으로 활용하여서는 아니 된다. 공무국외출장자는 출국 전 전자인사관리시스템(e-사람)으로 공무국외출장으로 발생한 누적항공마일리지를 확인하고 보너스항공권 구매 또는 좌석 등급 상향 등을 통한 활용에 적극 노력하며 변동 사항을 입력하여야 한다. 부득이하게 출국 전 입력이 어려울 경우에는 귀국 후 14일 이내에 전자인사관리시스템에 변동 사항을 입력하여야 한다.",
+          "qualifiers": {
+            "article": "제9조",
+            "exception": "부득이하게 출국 전 입력이 어려울 경우 귀국 후 14일 이내 입력",
+            "system": "전자인사관리시스템(e-사람)"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "annual",
+      "question": "행안부 다음 연도 공무국외출장 연간계획은 언제까지 제출해?",
+      "answer": "다음 연도에 공무국외출장을 계획하고 있는 자는 연간 공무국외출장계획서를 작성하여 매년 12 월 20 일까지 공무국외출장 총괄 부서장에게 제출해야 합니다.",
+      "generation_state": "generated",
+      "model_completion_requests": 1,
+      "semantic_verdict": "LIMITED",
+      "review_note": "Correct annual deadline and recipient; near-verbatim recital.",
+      "elapsed_seconds": 11.247923332994105,
+      "completion": {
+        "prompt_tokens": 838,
+        "output_tokens": 63,
+        "finish_reason": "eos",
+        "truncated_output": false,
+        "context_truncated": false,
+        "rendered_prompt_sha256": "1e91934c4b7192adba0d90dfbee1be62ae1ebc51558c097259d6dc2a50ea5aa5",
+        "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3"
+      },
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.annual-plan",
+          "subject": "다음 연도 공무국외출장을 계획하고 있는 자의 연간계획 제출",
+          "predicate": "deadline",
+          "object": "다음 연도에 공무국외출장을 계획하고 있는 자는 연간 공무국외출장계획서를 별지 제6호서식에 따라 작성하여 매년 12월 20일까지 공무국외출장 총괄 부서장에게 제출하여야 한다.",
+          "qualifiers": {
+            "action": "연간 공무국외출장계획서 제출",
+            "article": "제15조제1항",
+            "condition": "다음 연도에 공무국외출장을 계획하고 있는 자",
+            "deadline": "매년 12월 20일까지",
+            "form": "별지 제6호서식",
+            "recipient": "공무국외출장 총괄 부서장"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "delegation_missing",
+      "question": "행정안전부 위임전결규정에서 직급별 국외출장 허가권 위임범위를 알려줘",
+      "answer": "참조 관계는 확인되지만 해당 참조 규정 본문은 이 그래프에 없습니다. 위임·전결권자나 세부 기준을 확정할 수 없습니다.\n\n허가권 위임범위 (제3조제2항) — 검토된 근거 사실: 행정안전부 위임전결규정 [1]",
+      "generation_state": null,
+      "model_completion_requests": 0,
+      "semantic_verdict": "BOUNDARY_PASS",
+      "review_note": "No generation; scope or missing-evidence boundary preserved. Not a model-generated answer-quality pass.",
+      "elapsed_seconds": 3.674998879432678e-05,
+      "completion": null,
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.delegation-reference",
+          "subject": "허가권 위임범위",
+          "predicate": "references",
+          "object": "행정안전부 위임전결규정",
+          "qualifiers": {
+            "article": "제3조제2항",
+            "condition": "장관이 출장자 또는 출장자 대표의 직급에 따라 허가권을 위임하는 경우",
+            "limitation": "참조 대상 본문이 색인에 없어 직급별 위임범위를 확인할 수 없음",
+            "resolution": "unresolved",
+            "target_title": "행정안전부 위임전결규정"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "domestic_boundary",
+      "question": "행안부 국내출장에도 이 국외출장 운영지침의 20일 기한을 적용해?",
+      "answer": "「행정안전부 공무국외출장 운영지침」은 국외출장 문서입니다. 국내출장의 지급액·절차 근거로 대체할 수 없습니다.",
+      "generation_state": null,
+      "model_completion_requests": 0,
+      "semantic_verdict": "BOUNDARY_PASS",
+      "review_note": "No generation; scope or missing-evidence boundary preserved. Not a model-generated answer-quality pass.",
+      "elapsed_seconds": 2.2042018827050924e-05,
+      "completion": null,
+      "evidence_facts": [
+        {
+          "predicate": "metadata",
+          "field": "title",
+          "value": "행정안전부 공무국외출장 운영지침"
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "other_agency",
+      "question": "국가보훈부 공무국외출장 계획서는 언제까지 내야 해?",
+      "answer": "국가보훈부의 규정으로 답할 근거 범위를 선택하지 않았습니다. 행정안전부 규정을 다른 기관에 적용하지 않습니다. 수록된 참조 문서는 정확한 문서명으로 지정해 주세요.",
+      "generation_state": null,
+      "model_completion_requests": 0,
+      "semantic_verdict": "BOUNDARY_PASS",
+      "review_note": "No generation; scope or missing-evidence boundary preserved. Not a model-generated answer-quality pass.",
+      "elapsed_seconds": 8.792005246505141e-06,
+      "completion": null,
+      "evidence_facts": [],
+      "sources": []
+    },
+    {
+      "id": "amount_boundary",
+      "question": "행안부 국외출장 식비는 하루에 얼마야?",
+      "answer": "이 질문의 지급액·상한·계산 결과를 확정할 검증된 금액 근거가 없습니다. 직급·국가·등급 등 적용 조건과 검증된 표 없이 금액을 계산하지 않습니다.\n아래는 참조 관계에 관해 검토된 사실일 뿐 금액 또는 참조 판본의 적용을 확정한 근거는 아닙니다.\n\n제8조제1항 단서에 해당하는 이해관계자 부담 경비의 상한 근거 (제8조제2항) — 검토된 근거 사실: 공무원 여비 규정 [1]",
+      "generation_state": null,
+      "model_completion_requests": 0,
+      "semantic_verdict": "BOUNDARY_PASS",
+      "review_note": "No generation; scope or missing-evidence boundary preserved. Not a model-generated answer-quality pass.",
+      "elapsed_seconds": 2.879201201722026e-05,
+      "completion": null,
+      "evidence_facts": [
+        {
+          "fact_id": "mois.foreign-trip.travel-expense-reference",
+          "subject": "제8조제1항 단서에 해당하는 이해관계자 부담 경비의 상한 근거",
+          "predicate": "references",
+          "object": "공무원 여비 규정",
+          "qualifiers": {
+            "article": "제8조제2항",
+            "condition": "필요성이 인정된 경우로서 심사위원회 심사를 거쳐 장관이 허가한 제1항 단서의 경우",
+            "resolution": "resolved",
+            "target_issuer": "인사혁신처",
+            "target_issuer_id": "행정기관코드:1760000",
+            "target_title": "공무원 여비 규정",
+            "version_alignment": "참조 제목에 대응하는 색인 문서이며 원문 작성 당시 판본 또는 현재 유효성 일치를 뜻하지 않음"
+          }
+        }
+      ],
+      "sources": [
+        {
+          "doc_id": "law-go-kr:admrul:2100000187731",
+          "title": "행정안전부 공무국외출장 운영지침",
+          "date": "2020-03-20",
+          "effective_date": "2020-03-20",
+          "retrieved_at": "2026-10-28",
+          "url": "http://www.law.go.kr/DRF/lawService.do?target=admrul&ID=2100000187731&type=HTML"
+        }
+      ]
+    },
+    {
+      "id": "unknown",
+      "question": "행안부 화성 우주출장 식비 기준을 알려줘",
+      "answer": "질문의 대상·상황에 맞는 검증된 근거를 확인하지 못했습니다. '출장'이나 '비용' 같은 일부 단어가 같다는 이유로 다른 대상의 규정을 적용하지 않습니다.",
+      "generation_state": null,
+      "model_completion_requests": 0,
+      "semantic_verdict": "BOUNDARY_PASS",
+      "review_note": "No generation; scope or missing-evidence boundary preserved. Not a model-generated answer-quality pass.",
+      "elapsed_seconds": 8.791015716269612e-06,
+      "completion": null,
+      "evidence_facts": [],
+      "sources": []
+    }
+  ],
+  "limitations": [
+    "Collected2020-03-20 MOIS travel guideline is not revalidated as current law.",
+    "No frozen DEV/final24 or deferred base-adapter comparison was run.",
+    "Existing trained-adapter failures remain unchanged.",
+    "Numeric/citation consistency and correct tables do not repair incorrect generated narrative.",
+    "Observed local CPU latency and RSS do not establish shared-host serving admission or capacity."
+  ],
+  "local_evidence": "runs/mois-grounded-generation-20261112 (ignored runtime evidence; not a GitHub-hosted link)"
+}
