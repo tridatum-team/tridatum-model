@@ -18,9 +18,10 @@
     "real_llm_synthesis": true,
     "source_table_and_provenance_preserved": true,
     "citation_numeric_checks_are_semantic_verification": false,
-    "source_sha256": "4c49d1f1500e84f3ff5fc1c27e3ac8f1b36de8e2b1ed891e332beb1302c9a7be",
+    "source_sha256": "6473356268fcbfbb2d07ab5de003ca57dd38a10e61a84256f1311fc7c22441da",
+    "baseline_source_sha256": "4c49d1f1500e84f3ff5fc1c27e3ac8f1b36de8e2b1ed891e332beb1302c9a7be",
     "public_candidate_config_generator": "trid-assistant-qwen3-1.7b",
-    "note": "The4B model was exercised separately in an owned local harness, not configured or deployed as the public generator."
+    "note": "The4B and9B models were exercised separately in owned local harnesses, not configured or deployed as the public generator. Follow-up results below bind their exact source revisions."
   },
   "model_free_verification": {
     "unique_behavior_tests_passed": 54,
@@ -882,5 +883,539 @@
     "Numeric/citation consistency and correct tables do not repair incorrect generated narrative.",
     "Observed local CPU latency and RSS do not establish shared-host serving admission or capacity."
   ],
+  "followup_generation_probe": {
+    "recorded_at_utc": "2026-11-12T07:47:53.094629+00:00",
+    "decision": "NOT_ACCEPTED",
+    "no_more_candidate_expansion_this_phase": true,
+    "no_new_training_downloads_gpu_or_paid_resources": true,
+    "production_changed": false,
+    "reviewer": "Independent read-only ReviewLocal4BAnswers; generated narrative assessed against actual supplied evidence, not correctness of source table.",
+    "limits": {
+      "cpu_only": true,
+      "rss_bytes": 6442450944,
+      "duration_seconds": 180,
+      "pressure_required": 1
+    },
+    "baseline_9b": {
+      "source_sha256": "4c49d1f1500e84f3ff5fc1c27e3ac8f1b36de8e2b1ed891e332beb1302c9a7be",
+      "model": "runs/open-weight-base/qwen3.5-9b-gguf-rev3885219b/Qwen3.5-9B-Q4_K_M.gguf",
+      "model_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+      "model_bytes": 5680522464,
+      "publisher_revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+      "license": "Apache-2.0",
+      "initial_attempt": {
+        "stop_reason": "harness_exit",
+        "first_soft_stop_reason": "external_6GiB_RSS_ceiling",
+        "harness_exit_code": -15,
+        "rss_peak_bytes": 6604652544,
+        "pressure_max": 1,
+        "elapsed_seconds": 2.0038592079945374,
+        "cleanup": "completed",
+        "reaped": true,
+        "completed_cases": 0,
+        "native_port_closed": true,
+        "inference_started": true,
+        "note": "First completion task started, but RSS stop occurred before any completed answer; limits not raised."
+      },
+      "resource_adjustment": "Native input batch32/microbatch32; unused prompt cache/checkpoints disabled; source-identical request/complete functions AST-loaded without unrelated benchmark imports. Not a like-for-like latency benchmark against4B.",
+      "bounded_runs": [
+        {
+          "case": "overview",
+          "elapsed_seconds": 154.19201041699853,
+          "answer_seconds": 152.96943699999247,
+          "peak_group_rss_bytes": 6413828096,
+          "pressure_max": 1,
+          "soft_stop_reason": null,
+          "cleanup": "completed",
+          "reaped": true,
+          "native_port_closed": true
+        },
+        {
+          "case": "two_deadlines",
+          "elapsed_seconds": 62.81252599999425,
+          "answer_seconds": 61.80261620899546,
+          "peak_group_rss_bytes": 6413844480,
+          "pressure_max": 1,
+          "soft_stop_reason": null,
+          "cleanup": "completed",
+          "reaped": true,
+          "native_port_closed": true
+        },
+        {
+          "case": "report",
+          "elapsed_seconds": 85.92947545798961,
+          "answer_seconds": 84.85745962499641,
+          "peak_group_rss_bytes": 6413942784,
+          "pressure_max": 1,
+          "soft_stop_reason": null,
+          "cleanup": "completed",
+          "reaped": true,
+          "native_port_closed": true
+        }
+      ],
+      "semantic_counts": {
+        "PASS": 1,
+        "LIMITED": 1,
+        "FAIL": 1
+      },
+      "cases": [
+        {
+          "id": "overview",
+          "question": "행안부 공무국외출장은 어떤 절차로 진행해?",
+          "answer": "행정안전부 공무국외출장은 출장일 20 일 전까지 출장계획서 등을 작성하여 총괄 부서장에 요청한 후, 허가권자의 허가를 받아야 합니다. 다만, 제 5 조에 해당하는 경우에는 심사위원회의 사전심사를 거쳐야 하며, 출장계획서 제출 7 일 전까지 총괄 부서장과 사전 협의를 해야 합니다.\n\n출장자는 귀국 후 30 일 이내에 결과보고서를 작성하여 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 관련 시스템 및 게시판에 등록해야 합니다.",
+          "elapsed_seconds": 152.96943699999247,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E2",
+              "E3",
+              "E4",
+              "E5",
+              "E9"
+            ],
+            [
+              "E6",
+              "E11"
+            ]
+          ],
+          "raw_output_sha256": "a4434e33453447f70dcf97837a1475bf0927267d1f7784aadc9f3aade1f99ce7",
+          "native_completion": {
+            "rendered_prompt_sha256": "0b57e09cd84a9d91b325b2280666b19583fe199d911a7ee5408b821e377274ba",
+            "prompt_tokens": 3039,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 162,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 3039,
+              "prompt_ms": 141139.476,
+              "prompt_per_token_ms": 46.44273642645607,
+              "prompt_per_second": 21.531892324724232,
+              "predicted_n": 162,
+              "predicted_ms": 11820.143,
+              "predicted_per_token_ms": 73.41703726708074,
+              "predicted_per_second": 13.620816600949752
+            }
+          },
+          "review": {
+            "verdict": "FAIL",
+            "reason": "Actionable20/7day deadlines omit Saturdays/publicholidays; unqualified registration omits supplied system-nonregistration exception; report count-start precision also lost."
+          }
+        },
+        {
+          "id": "two_deadlines",
+          "question": "행안부 국외출장 계획서 제출 기한과 사전협의 기한을 둘 다 알려줘",
+          "answer": "공무국외출장을 실시하려는 자는 출장일 20 일(토요일 및 공휴일 제외) 전까지 출장계획서 등을 작성하여 공무국외출장 총괄 부서장에게 허가요청해야 합니다.\n\n출장자는 원활한 심사 및 허가절차 진행을 위해 출장계획서 등을 제출하기 7 일(토요일 및 공휴일 제외) 전까지 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시하여야 합니다.",
+          "elapsed_seconds": 61.80261620899546,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E2",
+              "E3"
+            ],
+            [
+              "E1",
+              "E3"
+            ]
+          ],
+          "raw_output_sha256": "8aeec135879438772e5154855c3106274789daf212fe4a7e2d041cf7c204e590",
+          "native_completion": {
+            "rendered_prompt_sha256": "f7326dc9a6093f4d7ceb78119bc1d35dcc83b254d9d9f6ea118600508297861a",
+            "prompt_tokens": 1173,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 134,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1173,
+              "prompt_ms": 52566.043,
+              "prompt_per_token_ms": 44.813335890878086,
+              "prompt_per_second": 22.314785992166083,
+              "predicted_n": 134,
+              "predicted_ms": 9230.669,
+              "predicted_per_token_ms": 69.40352631578948,
+              "predicted_per_second": 14.408489785518254
+            }
+          },
+          "review": {
+            "verdict": "LIMITED",
+            "reason": "Correct trigger/direction/exclusions and no factual error; shortened source recital, not explanatory synthesis."
+          }
+        },
+        {
+          "id": "report",
+          "question": "행안부 국외출장을 다녀오면 결과보고서는 언제까지 내야 해?",
+          "answer": "행정안전부 공무국외출장 운영지침에 따르면, 공무국외출장자는 귀국 후 30일 이내(출장을 마친 날의 다음 날부터 기산)에 결과보고서를 작성하여 허가권자에게 제출하고 관련 시스템 등에 등록해야 합니다.\n\n다만, 국가기밀 보호 등을 위해 부서장이 인사혁신처장에게 통보한 경우 등 특정 사유로 등록을 하지 않는 건수는 별지 제7호서식에서 별도로 구분되며, 이는 결과보고서 제출 자체를 면제하는 근거가 아닙니다.",
+          "elapsed_seconds": 84.85745962499641,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E1",
+              "E3"
+            ],
+            [
+              "E2",
+              "E4"
+            ]
+          ],
+          "raw_output_sha256": "a84dcab3b2483ec0aad2e744f9f35512b08f1dfaaec4ba5500c54a982a9fda47",
+          "native_completion": {
+            "rendered_prompt_sha256": "3b88fac70fb1efc5bf6940af173a90a01ab551265690195feb6663bb471ba85f",
+            "prompt_tokens": 1614,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 144,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1614,
+              "prompt_ms": 74830.852,
+              "prompt_per_token_ms": 46.363600991325896,
+              "prompt_per_second": 21.568643906393046,
+              "predicted_n": 144,
+              "predicted_ms": 10020.57,
+              "predicted_per_token_ms": 70.07391608391609,
+              "predicted_per_second": 14.270645282653582
+            }
+          },
+          "review": {
+            "verdict": "PASS",
+            "reason": "Asked deadline30days and next-day start preserved; distinguishes security-related recorded system nonregistration from submission duty. Not complete workflow/exemption eligibility checklist."
+          }
+        }
+      ]
+    },
+    "prompt_revision": {
+      "source_sha256": "6473356268fcbfbb2d07ab5de003ca57dd38a10e61a84256f1311fc7c22441da",
+      "system_prompt_sha256": "c31c48eb5a4149c835241530730d4a9a3835e52975bf92e5e72cdefcae314a8b",
+      "change": "Remove2–3sentence/~250character target and table-as-detail-substitute hint. Preserve full qualifications per stated rule/action, including linked exceptions even when not asked. No answer-specific rules or semantic keyword checker.",
+      "finding": "Coverage improved in some answers, but critical semantic failures persist. This does not establish a general model accuracy improvement."
+    },
+    "revised_4b": {
+      "model_sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+      "case_count": 3,
+      "semantic_counts": {
+        "PASS": 0,
+        "LIMITED": 1,
+        "FAIL": 2
+      },
+      "resource": {
+        "directory": "runs/mois-grounded-generation-20261112/local-4b-revised-critical",
+        "elapsed_seconds": 108.93213504101732,
+        "peak_group_rss_bytes": 5664849920,
+        "pressure_max": 1,
+        "soft_stop_reason": null,
+        "cleanup": "completed",
+        "reaped": true,
+        "native_port_closed": true
+      },
+      "plan_metadata_correction": {
+        "note": "Executed plan retained stale baseline module_sha256 while its explicit generation_module_sha256 correctly binds revised module. Recorded actual system messages for all3completions equal revised source _SYSTEM_PROMPT; no output/plan rewritten.",
+        "stale_baseline_module_sha256": "4c49d1f1500e84f3ff5fc1c27e3ac8f1b36de8e2b1ed891e332beb1302c9a7be",
+        "actual_module_sha256": "6473356268fcbfbb2d07ab5de003ca57dd38a10e61a84256f1311fc7c22441da",
+        "actual_system_prompt_sha256": "c31c48eb5a4149c835241530730d4a9a3835e52975bf92e5e72cdefcae314a8b",
+        "verified_cases": [
+          "overview",
+          "two_deadlines",
+          "report"
+        ]
+      },
+      "cases": [
+        {
+          "id": "overview",
+          "question": "행안부 공무국외출장은 어떤 절차로 진행해?",
+          "answer": "행정안전부 공무국외출장은 행정안전부 소속 공무원이나 해당 예산으로 출장하는 사람이 출장일을 기준으로 20 일 전 (토요일 및 공휴일 제외) 에 출장계획서 등을 작성하여 공무국외출장 총괄 부서장에게 허가요청을 해야 합니다. 이 요청은 출장일 7 일 전 (토요일 및 공휴일 제외) 에 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시해야 하며, 허가권자는 요청을 검토하여 적정한 경우 허가합니다.\n\n허가권자가 허가할 경우, 제5 조 제1 항 각 호의 어느 하나에 해당할 경우에는 허가권자의 허가 이전에 공무국외출장 심사위원회의 사전심사를 거쳐야 합니다. 허가권자는 행정안전부장관이 직접 허가하거나, 직급에 따라 위임받은 권한으로 허가할 수 있으며 위임범위는 행정안전부 위임전결규정에 따릅니다.\n\n출장자는 귀국 후 출장을 마친 날의 다음 날부터 30 일 이내에 결과보고서를 작성하여 해당 부서장 검토·결재 후 허가권자에게 제출해야 합니다. 제출된 결과보고서는 출장계획서와 함께 인사혁신처 국외출장연수정보시스템, 홈페이지 및 내부게시판 등에 등록해야 하며, 보고서에는 주요 논의사항과 활동 내용 등 상세한 결과가 포함되어야 합니다.\n\n결과보고서 등록 건수에 관하여, 국가기밀의 보호나 보안유지 등을 위하여 필요한 경우로서 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우에는 국외출장연수정보시스템에 미등록할 수 있습니다. 이는 보고서 제출 자체를 면제하는 근거가 아니라, 등록 관련 서식 기재의 예외로 해석되며, 현행 적용 여부는 재확인되지 않았습니다.",
+          "elapsed_seconds": 57.01904829099658,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E1",
+              "E2",
+              "E3",
+              "E4",
+              "E5"
+            ],
+            [
+              "E4",
+              "E5"
+            ],
+            [
+              "E6",
+              "E7",
+              "E11"
+            ],
+            [
+              "E7",
+              "E12"
+            ]
+          ],
+          "raw_output_sha256": "0210dea091303a593ec8a161aa0f21b2c9247a227a5358f743768a0f66ea5860",
+          "native_completion": {
+            "rendered_prompt_sha256": "7c4573325bd62fdefb327bac7714785220dd1d159cd6b7deccb7aa5a00e07870",
+            "prompt_tokens": 3039,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 444,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 3039,
+              "prompt_ms": 28094.203,
+              "prompt_per_token_ms": 9.244555116814743,
+              "prompt_per_second": 108.17178191529406,
+              "predicted_n": 444,
+              "predicted_ms": 28916.3,
+              "predicted_per_token_ms": 65.27381489841986,
+              "predicted_per_second": 15.320078986592337
+            }
+          },
+          "review": {
+            "verdict": "FAIL",
+            "reason": "Consultation still7days before departure rather than before plan submission;20days before phrased as fixed day rather than latest deadline. Exclusions/reporting/exception coverage improved but false trigger remains."
+          }
+        },
+        {
+          "id": "two_deadlines",
+          "question": "행안부 국외출장 계획서 제출 기한과 사전협의 기한을 둘 다 알려줘",
+          "answer": "행정안전부 공무국외출장 운영지침에 따르면, 출장일을 기준으로 토요일과 공휴일을 제외하고 20 일 전까지 출장계획서 등을 작성하여 공무국외출장 총괄 부서장에게 제출해야 합니다.\n\n또한 원활한 심사 및 허가 절차 진행을 위해 출장계획서 등을 제출하기 7 일 전까지도 토요일과 공휴일을 제외하고 공무국외출장 총괄 부서장과 메모보고 등을 활용한 사전 협의를 실시해야 합니다.",
+          "elapsed_seconds": 19.21726537498762,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E1",
+              "E2",
+              "E3"
+            ],
+            [
+              "E1",
+              "E2",
+              "E3"
+            ]
+          ],
+          "raw_output_sha256": "8c350e43aba671aaa67d3333637655db08bea5cfb7e840f87052b317015c1e30",
+          "native_completion": {
+            "rendered_prompt_sha256": "7a6ee89d047da3010477790279fe26850b182c919439d30e236181a59a40d99d",
+            "prompt_tokens": 1173,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 139,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1173,
+              "prompt_ms": 10908.034,
+              "prompt_per_token_ms": 9.299261722080136,
+              "prompt_per_second": 107.53541838978501,
+              "predicted_n": 139,
+              "predicted_ms": 8227.104,
+              "predicted_per_token_ms": 59.61669565217391,
+              "predicted_per_second": 16.773824665398664
+            }
+          },
+          "review": {
+            "verdict": "LIMITED",
+            "reason": "Correct triggers,directions,excluded days and recipients; still predominantly shortened legal recital."
+          }
+        },
+        {
+          "id": "report",
+          "question": "행안부 국외출장을 다녀오면 결과보고서는 언제까지 내야 해?",
+          "answer": "행정안전부 공무국외출장 운영지침에 따르면 공무국외출장자는 귀국 후 30 일 이내에 결과보고서를 제출해야 합니다. 이 기한은 출장을 마친 날의 다음 날부터 기산하며, 제출 대상은 해당 부서장 검토·결재 후 허가권자입니다.\n\n결과보고서는 출장계획서와 함께 인사혁신처 국외출장연수정보시스템, 홈페이지, 내부게시판 등에 등록해야 합니다. 다만, 국가기밀 보호나 보안유지 등 필요한 경우 부서장이 구체적인 사유를 밝혀 인사혁신처장에게 통보한 경우에는 해당 건을 비공개 사유로 미등록할 수 있습니다.\n\n결과보고서 제출 자체를 면제하는 근거는 아니며, 서식 기재상의 예외 조항으로만 해석됩니다. 또한 원문 조문 표기가 불완전하고 현행 적용 여부는 재확인되지 않았으므로, 이 예외 조항의 구체적 적용 가능성은 현재로서는 확정할 수 없습니다.",
+          "elapsed_seconds": 30.275225290999515,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E1",
+              "E3"
+            ],
+            [
+              "E1",
+              "E2",
+              "E4"
+            ],
+            [
+              "E2",
+              "E4"
+            ]
+          ],
+          "raw_output_sha256": "7868561c0be97f48e4a7aefb6c14de87ffaeace30a3cb144cdc6cea21fc747a5",
+          "native_completion": {
+            "rendered_prompt_sha256": "4ec2329406270cc78563ed2fc565419c634693310f638306c4b1057899910fdf",
+            "prompt_tokens": 1614,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 250,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 1614,
+              "prompt_ms": 15255.456,
+              "prompt_per_token_ms": 9.451955390334573,
+              "prompt_per_second": 105.79821409468192,
+              "predicted_n": 250,
+              "predicted_ms": 14999.33,
+              "predicted_per_token_ms": 60.238273092369475,
+              "predicted_per_second": 16.600741499786988
+            }
+          },
+          "review": {
+            "verdict": "FAIL",
+            "reason": "Requested30days and next-day start correct. Nonregistration exception follows system/website/internal-board list without confining its scope to the national overseas-travel information system; submission distinction preserved but destination scope overbroad."
+          }
+        }
+      ]
+    },
+    "revised_9b": {
+      "model_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+      "case_count": 1,
+      "semantic_counts": {
+        "PASS": 0,
+        "LIMITED": 0,
+        "FAIL": 1
+      },
+      "resource": {
+        "directory": "runs/mois-grounded-generation-20261112/local-9b-revised-overview",
+        "elapsed_seconds": 163.19083854198107,
+        "peak_group_rss_bytes": 6351126528,
+        "pressure_max": 1,
+        "soft_stop_reason": null,
+        "cleanup": "completed",
+        "reaped": true,
+        "native_port_closed": true
+      },
+      "cases": [
+        {
+          "id": "overview",
+          "question": "행안부 공무국외출장은 어떤 절차로 진행해?",
+          "answer": "행정안전부 공무국외출장은 출장일 20 일 전까지 출장계획서 등을 작성하여 공무국외출장 총괄 부서장에게 요청해야 하며, 출장계획서 제출 7 일 전까지 총괄 부서장과 사전 협의를 거쳐야 합니다.\n\n허가권자는 출장요청을 검토하여 허가하지만, 제 5 조에 해당하는 경우에는 허가 전에 공무국외출장 심사위원회의 사전심사를 거쳐야 합니다.\n\n최종 허가권자는 행정안전부장관이며, 장관은 직급에 따라 허가권을 위임할 수 있습니다.\n\n출장자는 귀국 후 30 일 이내에 결과보고서를 작성하여 부서장 검토·결재 후 허가권자에게 제출하고, 출장계획서와 함께 관련 시스템 및 홈페이지 등에 등록해야 합니다.\n\n국가기밀 보호 등 필요한 경우 부서장이 인사혁신처장에게 통보한 비공개 사유로 등록을 하지 않은 건수는 별지 제 7 호서식에 기재되지만, 이는 결과보고서 제출 자체를 면제하는 근거가 아닙니다.",
+          "elapsed_seconds": 161.48664408401237,
+          "generation_state": "generated",
+          "automatic_semantic_verification": "unverified",
+          "structural_validation": {
+            "citations": "passed",
+            "numeric_values": "passed"
+          },
+          "paragraph_citations": [
+            [
+              "E2",
+              "E3",
+              "E9"
+            ],
+            [
+              "E4",
+              "E9"
+            ],
+            [
+              "E5",
+              "E10"
+            ],
+            [
+              "E6",
+              "E11"
+            ],
+            [
+              "E7",
+              "E12"
+            ]
+          ],
+          "raw_output_sha256": "2cf481939c96148175b7dd99d142042ab7bbea73e531e1682321f4a2d18cac02",
+          "native_completion": {
+            "rendered_prompt_sha256": "7c4573325bd62fdefb327bac7714785220dd1d159cd6b7deccb7aa5a00e07870",
+            "prompt_tokens": 3039,
+            "grammar_sha256": "f068d09b252137fe5a56b3adf870c75d12e9c6644d4594ac249704ebb528d8a3",
+            "output_tokens": 288,
+            "finish_reason": "eos",
+            "truncated_output": false,
+            "context_truncated": false,
+            "timings": {
+              "cache_n": 0,
+              "prompt_n": 3039,
+              "prompt_ms": 139983.469,
+              "prompt_per_token_ms": 46.062345837446536,
+              "prompt_per_second": 21.709706308249867,
+              "predicted_n": 288,
+              "predicted_ms": 21495.154,
+              "predicted_per_token_ms": 74.8960069686411,
+              "predicted_per_second": 13.351846653436398
+            }
+          },
+          "review": {
+            "verdict": "FAIL",
+            "reason": "Both20/7day deadlines omit Saturdays/public holidays, despite correct distinct triggers. Reporting next-day count start also omitted. Registration/submission distinction improved, but supplied qualifications not fully preserved."
+          }
+        }
+      ],
+      "not_run": "Other revised9Bcases/full15cases not expanded after decisive overview failure."
+    },
+    "post_revision_verification": {
+      "existing_unittests_passed": 54,
+      "unittest_seconds": 0.285,
+      "receipt": {
+        "argv": [
+          "/Users/eomgyuhyeon/사업/trid/.venv/bin/python",
+          "-m",
+          "unittest",
+          "tests.test_mois_graph",
+          "tests.test_mois_graph_answers",
+          "tests.test_mois_graph_generation",
+          "-v"
+        ],
+        "deadline_seconds": 120,
+        "rss_limit_bytes": 1073741824,
+        "elapsed_seconds": 0.6213874160021078,
+        "rss_peak_bytes": 51118080,
+        "pressure_before": 1,
+        "max_pressure": 1,
+        "pressure_policy": "admit1or2; stopabove2",
+        "sample_count": 2,
+        "exit_code": 0,
+        "stop_reason": "child_exit",
+        "reaped": true,
+        "remaining_live_group_members": [],
+        "threads": 1,
+        "scope": "Generated-only local verification; no pretrained model or cloud execution"
+      },
+      "http_ui_scope": "Previously observed HTTP/local-browser checks apply to unchanged integration/UI; only prompt text changed afterward. Actual revised model runs above exercise changed generation path."
+    },
+    "interpretation": "Small non-frozen development probes, not a general accuracy benchmark or service capacity test. Original and revised prompt results remain separate. Citation/numeric acceptance is not semantic correctness. Public candidate still references original1.7B; neither4B nor9B was configured/deployed. Latest prompt not quality-validated on1.7B; serving-host admission remains unproven."
+  },
   "local_evidence": "runs/mois-grounded-generation-20261112 (ignored runtime evidence; not a GitHub-hosted link)"
 }
