@@ -112,9 +112,20 @@ Git 독자는 [공개 검증 요약](reports/mois-graph-v0.2-verification.json)�
 
 - 새 adapter에서는 문맥 또는 정답 토큰 예산을 넘으면 **실행을 거부**합니다. 일부 학습 행을 조용히 제외하거나 근거·정답을 잘라 맞추지 않습니다. 기존 `prompt_answer`·`case`의 동작은 유지합니다.
 - 관련 **57개 회귀 테스트**와 공식 Qwen3-14B 토크나이저를 사용하는 **무작위 초기화 tiny Qwen3의 optimizer 1단계 → adapter 저장 → 재로딩**을 실행했습니다. untied head에서 갱신된 출력을 확인했고, 토크나이저 저장·재로딩의 전체 backend 구성 및 후보 36행의 입력·라벨 일치도 확인했습니다.
-- 이는 입력·학습 엔진 검증이지 **14B 사전학습 가중치의 학습·GPU 용량·답변 품질 검증이 아닙니다.** 네 문서군의 후보 36개 중 평가 예약 자료와 실질적 내용이 겹친 2개를 명시적으로 제외했습니다. 남은 34행의 토큰 예산·정답 마스킹은 검증했지만, 원문 대조와 평가 자료의 최종 승인은 아직 진행 중입니다.
+- 이는 입력·학습 엔진 검증이지 **14B 사전학습 가중치의 학습·GPU 용량·답변 품질 검증이 아닙니다.** 네 문서군의 후보 36개 중 평가 예약 자료와 실질적 내용이 겹친 2개를 명시적으로 제외했습니다. 남은 34행은 최대 전체 1,602토큰·답변+EOS 429토큰이며, 누락된 원문 `②`를 보완한 행은 1,000개 예약 문서군 대조와 독립 검토를 다시 통과했습니다. 다른 33행은 그대로 보존했습니다. 최종 평가 문항과 실행 데이터 승인은 별도입니다.
 - 새 대형 기반 모델 실험은 **추가 세전 US$50 이내 1회**로 승인받았습니다. 준비 대상은 `Qwen/Qwen3-14B` revision `40c06982`의 표준 HF BF16+LoRA 경로이며, 과거 실패한 1.7B adapter를 이어받지 않습니다. 이 근거 제공 설명 실험을 검색 없는 지식 전문성의 성과로 대체하지 않으며, 운영 배포도 별도입니다.
 - 로컬 실행 증거: `runs/mois-grounded-training-20261112T081606Z/grounded-sft-contract-tests.log`, `grounded-sft-end-to-end-smoke-verified.log`, `grounded-sft-smoke-receipt.json`. 이 기록 시점에는 토크나이저·메타데이터만 확보했고 새 GPU 인스턴스나 14B 가중치는 아직 생성·다운로드하지 않았습니다.
+
+#### 단일 HF GPU 실험 실행 경로
+
+`scripts/aws_eval/grounded_hf_lifecycle.py`는 오프라인 `validate`, 읽기 전용 `preflight`, 1회성 `launch`, 소유 리소스 종료용 `reconcile`을 제공합니다. `grounded_hf_worker.py`와 `grounded_hf_bootstrap.sh`가 실제 기반 모델의 용량 확인, 원본 평가, 유한 학습, 같은 질문의 adapter 평가를 순서대로 수행합니다.
+
+- 학습 계획은 34행을 각 3회 사용하는 **102개 표본 노출·51 optimizer 단계**입니다. 원본과 학습본에 같은 평가 입력을 사용하고 정답은 worker에 보내지 않습니다. 용량 확인용 adapter는 버린 뒤 새 adapter를 학습합니다.
+- 새 GPU 경로만 L40S 1대·인스턴스 최대 4시간·마지막 30분 종료/반출 여유를 사용합니다. worker의 호스트 메모리 48GiB, swap 0, CPU 6개, CUDA allocator 40GiB 및 외부 GPU 감시 42GiB 한도를 별도로 묶으며 기존 로컬 6GiB 제한은 바꾸지 않습니다.
+- 독립 종료 스케줄과 부팅 환경 확인 전에는 모델 가중치를 내려받지 않습니다. EBS 암호화 키도 승인된 ARN으로 지정하고 생성된 볼륨의 실제 키를 대조합니다. 모호한 실행 결과를 새 인스턴스 재시도로 처리하지 않으며, 정확한 인스턴스 종료와 소유 EBS 삭제 확인 전에는 종료 보호를 지우지 않습니다.
+- 관측 단가로 계산한 조건부 비용 계획은 **추가 세전 약 US$21.15**, 승인 한도는 US$50입니다. 저장·전송·부수 비용과 별도 종료 지연 여유를 포함하지만, 종료 실패까지 보장하는 AWS 청구 하드 한도나 실제 청구액은 아닙니다.
+- 관련 **102개 테스트**와 CPU 합성 경로를 확인했습니다. 이는 새 호스트의 CUDA·14B 학습 성공 증거가 아닙니다. 이 기록 시점에는 AWS 리소스를 생성하지 않았고, 실제 14B 가중치 학습·답변 비교·운영 배포도 아직 실행하지 않았습니다.
+- 실행 근거는 `runs/mois-grounded-training-20261112T081606Z/`의 `native-lifecycle-kms-binding-tests.log`, `native-bucket-worker-after-kms-tests.log`, `cloud-observed-decimal-envelope.json`, `v5-correction-audits/`에 보관합니다.
 
 ### Packed-head 학습 엔진
 
