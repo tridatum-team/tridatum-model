@@ -36,10 +36,20 @@ class StaticTests(unittest.TestCase):
         self.assertIn('TRID_MAX_BODY', (ROOT / 'docs' / 'ONPREM.md').read_text(encoding='utf-8'))
 
 
+class WorkerMessageTests(unittest.TestCase):
+    def test_limit_labels_use_the_actual_values(self):
+        from trid import pdf_extract_worker as w
+        self.assertEqual(w._size_label(2 * 1024 * 1024), '2MB')
+        self.assertEqual(w._size_label(5 * 1024 * 1024 // 2), '2.5MB')
+        self.assertEqual(w._chars_label(50000), '5만 자')
+        self.assertEqual(w._chars_label(12345), '12,345자')
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     suite.addTest(LimitPageTests('test_page_carries_configured_max_bytes'))
     suite.addTests(loader.loadTestsFromTestCase(StaticTests))
+    suite.addTests(loader.loadTestsFromTestCase(WorkerMessageTests))
     return suite
 
 
