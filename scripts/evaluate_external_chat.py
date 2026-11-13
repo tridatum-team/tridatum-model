@@ -36,7 +36,6 @@ GRAMMAR = re.compile(r'([^\[\]]+?)\s*\[(D[1-9])\](?:\s*,\s*([^\[\]]+?)\s*\[(D[1-
 SOURCE_FIRST = re.compile(r'\[(D[1-9])\]\s*([^\[\],\n]+)')
 MAX_TOKENS = 64
 FREEFORM_MAX_TOKENS = 256
-QWEN3_NO_THINK = '<think>\n\n</think>\n\n'
 SCORED = ('strict', 'strict_product', 'value', 'lenient_value', 'source', 'abstained',
           'content_strict', 'content_value', 'mentions_gold', 'exact')
 CONDITIONS = {'prompt_only': (None, False), 'grammar_instructed': (SYSTEM, False),
