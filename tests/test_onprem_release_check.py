@@ -68,7 +68,7 @@ def start_fake(login_status='ok', fail_question=None):
                     self.send(502, {'error': '모델 서버에 연결할 수 없습니다. 관리자에게 문의해 주세요.'}); return
                 cands = [{'page': 2, 'text': 't', 'prediction': {'source_character_span': [0, 1]}},
                          {'page': 3, 'text': 't', 'prediction': {'source_character_span': [0, 0]}}]
-                self.send(200, {'status': 'answered', 'answer': SECRET_ANSWER, 'candidates': cands,
+                self.send(200, {'status': 'quoted', 'answer': SECRET_ANSWER, 'candidates': cands,
                                 'commentary': SECRET_ANSWER if n == 1 else None}); return
             if self.path == '/api/logout':
                 self.send(200, {'ok': True}); return
@@ -112,7 +112,7 @@ class ReleaseCheckTests(unittest.TestCase):
         report = json.loads(self.out.read_text(encoding='utf-8'))
         self.assertEqual([r['id'] for r in report['questions']], ['q1', 'q2'])
         first = report['questions'][0]
-        self.assertEqual(first['status'], 'answered')
+        self.assertEqual(first['status'], 'quoted')
         self.assertEqual(first['quotes'], 1)
         self.assertEqual(first['pages'], [2])
         self.assertTrue(first['has_commentary'])
@@ -149,7 +149,7 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(self.run_check(base), 1)
         report = json.loads(self.out.read_text(encoding='utf-8'))
         self.assertEqual(report['questions'][0]['status'], 'http_502')
-        self.assertEqual(report['questions'][1]['status'], 'answered')
+        self.assertEqual(report['questions'][1]['status'], 'quoted')
         self.assertEqual(state['calls'][-1], ('POST', '/api/logout'))
 
     def test_password_is_not_a_command_line_option(self):

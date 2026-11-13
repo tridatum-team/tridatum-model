@@ -215,6 +215,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 text = (page('index.html')
                         .replace('TOKEN_PLACEHOLDER', html.escape(session.csrf, quote=True))
                         .replace('MUST_CHANGE_PLACEHOLDER', '1' if session.must_change else '0')
+                        .replace('MAX_BYTES_PLACEHOLDER', str(int(config.pdf.max_bytes)))
                         .replace('ROLE_PLACEHOLDER', html.escape(session.role, quote=True))
                         .replace('USERNAME_PLACEHOLDER', html.escape(session.username, quote=True))
                         .replace('MODEL_STATUS_PLACEHOLDER', status_text)

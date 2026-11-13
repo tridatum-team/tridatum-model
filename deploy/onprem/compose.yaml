@@ -34,6 +34,7 @@ services:
     depends_on: [app]
     environment:
       TRID_HOSTNAME: ${TRID_HOSTNAME:?set TRID_HOSTNAME in .env}
+      TRID_MAX_BODY: ${TRID_MAX_BODY:-3MB}
     ports:
       - "443:443"
     volumes:

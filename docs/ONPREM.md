@@ -11,7 +11,7 @@
 
 | 서비스 | 역할 | 외부 노출 |
 | --- | --- | --- |
-| `tls` (Caddy 2.8.4) | HTTPS 종단, 요청 본문 3MB 제한, 클라이언트 IP를 `X-Real-IP`로 앱에 전달 | 443 포트만 공개 |
+| `tls` (Caddy 2.8.4) | HTTPS 종단, 요청 본문 제한(기본 3MB, `.env`의 `TRID_MAX_BODY`), 클라이언트 IP를 `X-Real-IP`로 앱에 전달 | 443 포트만 공개 |
 | `app` | 웹 화면, 로그인, PDF 읽기, 이용 기록 (SQLite) | 내부 네트워크만 |
 | `llm` | llama.cpp 서버와 모델 파일(Qwen3-1.7B Q8_0) | 내부 네트워크만 |
 
@@ -34,7 +34,7 @@
 - 관련도 상위 구간(최대 6개)만 확인합니다. "찾지 못했다"는 결과가 문서의 다른 곳에 정보가 없다는 보장은 아닙니다. 근거를 찾지 못한 질문에 모델이 기억으로 답하지 않습니다.
 - 질문마다 독립 처리합니다. 앞선 질문과 답을 기억하지 못하므로 "그럼 그건?" 같은 이어 묻기는 되지 않습니다.
 - 이미지·스캔 PDF는 지원하지 않습니다(텍스트가 들어 있는 PDF만). 표는 행·열 대응을 검증하지 않습니다.
-- 한 번에 한 건의 생성만 처리합니다. 동시에 질문이 겹치면 "다른 질문을 처리 중입니다. 잠시 후 다시 시도해 주세요."가 표시되고 다시 시도하면 됩니다. 동시 사용자는 5~10명 정도를 기준으로 합니다(로그인 세션은 최대 32개, 사용자당 분당 요청 20회).
+- 한 번에 한 건의 생성만 처리합니다. 동시에 질문이 겹치면 "다른 질문을 처리 중입니다. 잠시 후 다시 시도해 주세요."가 표시되고 다시 시도하면 됩니다. 동시 사용자는 5~10명 정도를 기준으로 합니다(로그인 세션은 최대 32개, 세션당 분당 요청 20회).
 - 업로드 제한(기본값, `data/onprem.json`의 설정으로 변경 가능): 파일 2MiB, 20쪽, 추출 글자 50,000자, 읽기 15초. 초과하면 화면에 사유가 표시됩니다.
 
 ## 2. 권장 사양
@@ -100,7 +100,7 @@ echo 'TRID_HOSTNAME=trid.example.internal' > .env
 
 `TRID_HOSTNAME`은 인증서의 이름(SAN)과 일치해야 하고, 다음 절 설정 파일의 `hostname`과 정확히 같아야 합니다. 앱은 모든 POST 요청의 `Origin`이 `https://<hostname>`인지 확인하므로, 값이 다르면 로그인을 포함한 모든 POST가 "허용되지 않은 요청입니다."로 실패합니다. 접속 주소는 포트 없이 `https://<호스트 이름>/` 이어야 합니다.
 
-선택: `.env`에 `LLM_THREADS=<숫자>`를 적으면 모델 서버 스레드 수를 바꿉니다(기본 4).
+선택: `.env`에 `LLM_THREADS=<숫자>`를 적으면 모델 서버 스레드 수를, `TRID_MAX_BODY=<크기>`를 적으면 Caddy의 요청 본문 상한을 바꿉니다(기본 3MB, 3-4절).
 
 ### 3-4. 설정 파일과 `data` 폴더
 
@@ -124,7 +124,7 @@ chown -R 10001:10001 data     # 앱은 uid 10001로 실행됩니다
 
 - `hostname` 외 값은 보통 바꾸지 않습니다. `port`, `data_dir`, `llm_base`, `tokenizer_path`는 컨테이너 내부 값이므로 그대로 두십시오.
 - `retention_days`: 이용 기록 보관 일수(기본 365, 1 이상). 4-4절 참조.
-- 업로드 제한을 바꾸려면 `"pdf": {"max_bytes": 2097152, "max_pages": 20, "max_characters": 50000, "wall_seconds": 15.0}` 형태로 필요한 키만 추가합니다. Caddy가 요청 본문을 3MB로 제한하고 웹 화면도 2MB 초과 파일을 올리기 전에 막으므로, `max_bytes`를 올려도 화면에서는 2MB가 실질 상한입니다. 쪽 수·글자 수 제한만 설정으로 의미 있게 바꿀 수 있습니다.
+- 업로드 제한을 바꾸려면 `"pdf": {"max_bytes": 2097152, "max_pages": 20, "max_characters": 50000, "wall_seconds": 15.0}` 형태로 필요한 키만 추가합니다. 웹 화면은 `max_bytes` 값을 서버에서 받아 그 크기를 넘는 파일을 올리기 전에 막습니다. 단 Caddy가 요청 본문을 `TRID_MAX_BODY`(기본 3MB)로 제한하므로, `max_bytes`를 올릴 때는 `.env`에 `TRID_MAX_BODY=<max_bytes + 1MB 이상>`(예: `TRID_MAX_BODY=6MB`)도 함께 적고 `docker compose up -d`로 `tls`를 다시 만드십시오. 변경한 뒤 `docker compose restart app`도 필요합니다.
 - 알 수 없는 키나 잘못된 형식이 있으면 서버가 시작되지 않고 오류가 표시됩니다.
 
 ### 3-5. 인증서
@@ -178,7 +178,7 @@ docker compose exec app python -I -m trid.onprem create-admin --config /data/onp
    soffice --headless --convert-to pdf release-document.txt
    ```
 
-   만들어진 `release-document.pdf`가 2MiB 이하이고 텍스트 PDF(글자를 드래그해 복사할 수 있음)인지 확인합니다. 한글 글꼴이 없으면 글자가 깨지므로 한글 글꼴이 설치된 PC에서 변환하십시오.
+   만들어진 `release-document.pdf`가 2MiB 이하이고 텍스트 PDF(글자를 드래그해 복사할 수 있음)인지 확인합니다. 한글 글꼴이 없으면 글자가 깨지므로 한글 글꼴이 설치된 PC에서 변환하고, 변환된 PDF를 열어 한글이 깨지지 않았는지 반드시 눈으로 확인하십시오.
 2. 점검을 실행합니다.
 
    ```sh
@@ -220,10 +220,10 @@ docker compose exec app python -I -m trid.onprem create-admin --config /data/onp
 
 | 이벤트 | 시점 |
 | --- | --- |
-| `login_ok`, `login_failed`, `login_locked`, `logout`, `session_expired` | 로그인, 실패, 잠김, 로그아웃, 세션 만료 |
+| `login_ok`, `login_failed`(비밀번호 오류, 잠금 계정이면 `error=disabled`), `login_locked`, `logout`, `session_expired` | 로그인, 실패, 잠김, 로그아웃, 세션 만료 |
 | `password_changed` | 비밀번호 변경 |
 | `pdf_upload` | PDF 올리기. 부가 항목: PDF 파일 전체의 `sha256`, `pages`(쪽 수), `status` |
-| `ask` | 질문. 부가 항목: 처리 시간 `seconds`, 결과 `status`(예: answered, not_found), 오류일 때 `error` 코드(`busy`, `context_overflow`, `bad_request`, `model_unavailable`) |
+| `ask` | 질문. 부가 항목: 처리 시간 `seconds`, 결과 `status`(`quoted` 원문 일치 인용 있음, `answer` 원문 위치 일치, `unverified` 인용 없이 해설만, `review` 검증 보류, `not_found` 근거 못 찾음, `clarify` 되묻기, `model_failure` 모델이 질문·지시문을 되풀이하는 등 응답 실패), 오류일 때 `error` 코드(`busy`, `context_overflow`, `bad_request`, `model_unavailable`) |
 | `clear` | 올린 문서 지우기 |
 | `admin_create_user`, `admin_update_user`, `admin_reset_password` | 관리자의 계정 작업. 부가 항목: 대상 계정 `target`, `action` |
 | `admin_export` | CSV 내려받기. 부가 항목: 내보낸 건수 `count` |
@@ -260,11 +260,13 @@ cp -a data data-backup-$(date +%Y%m%d)
 docker compose start app
 ```
 
-**방법 B. 서비스를 멈추지 않고 SQLite 백업.** 호스트에 `sqlite3`가 있을 때입니다.
+**방법 B. SQLite 백업.** 호스트에 `sqlite3`가 있을 때입니다. `data/`는 uid 10001 소유이고 WAL 모드라 일반 사용자는 열 수 없으므로 `sudo`가 필요하며, 앱이 쓰는 중에는 하지 말고 `docker compose stop app` 뒤에 실행하십시오.
 
 ```sh
-sqlite3 data/onprem.db ".backup 'backup-onprem.db'"
-cp data/onprem.json backup-onprem.json
+docker compose stop app
+sudo sqlite3 data/onprem.db ".backup 'backup-onprem.db'"
+sudo cp data/onprem.json backup-onprem.json
+docker compose start app
 ```
 
 **복구.**
@@ -321,7 +323,7 @@ docker compose up -d tls
 | "세션이 만료됐습니다. 페이지를 새로고침해 주세요." | 30분 동안 사용하지 않아 세션이 끝났습니다. 새로고침 후 다시 로그인합니다. 올려 둔 PDF도 지워지므로 다시 올립니다. |
 | 로그인을 포함한 모든 동작이 "허용되지 않은 요청입니다." | Origin 불일치입니다. 접속 주소의 호스트 이름이 `data/onprem.json`의 `hostname`과 다르거나, IP나 다른 이름으로 접속했거나, 포트를 붙였습니다. `.env`의 `TRID_HOSTNAME`, `hostname`, 인증서 SAN, 접속 주소를 모두 같은 이름으로 맞추고 `docker compose restart app` 하십시오. |
 | "다른 질문을 처리 중입니다. 잠시 후 다시 시도해 주세요." | 한 번에 한 건만 처리합니다. 잠시 뒤 다시 시도합니다. 자주 나오면 2절의 사양을 점검하십시오. |
-| "요청이 많습니다. 1분 뒤 다시 시도해 주세요." | 사용자당 분당 20회 제한입니다. |
+| "요청이 많습니다. 1분 뒤 다시 시도해 주세요." | 세션(로그인)당 분당 20회 제한입니다. |
 | "현재 접속 인원이 많습니다." | 로그인 세션이 32개 찼습니다. 유휴 세션은 30분 뒤 정리됩니다. |
 | PDF를 읽지 못함 | 화면에 사유가 표시됩니다. 스캔·이미지 PDF, 2MiB 초과, 20쪽 초과, 추출 글자 50,000자 초과, 암호 걸린 PDF는 읽지 못합니다. |
 | `tls`가 시작하지 않고 인증서 오류 | `certs/cert.pem`, `certs/key.pem` 존재와 키 권한(root 소유 모드 600)을 확인합니다(3-5절). `docker compose logs tls`. |

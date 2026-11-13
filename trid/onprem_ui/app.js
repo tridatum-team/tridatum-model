@@ -4,7 +4,9 @@ const el = id => document.getElementById(id);
 const meta = name => document.querySelector(`meta[name="${name}"]`)?.content || '';
 const token = meta('csrf-token');
 const MAX_QUESTION = 2000;
-const MAX_UPLOAD = 2 * 1024 * 1024;
+// Upload limit comes from the server setting (meta, digits only); 2 MiB if absent or invalid.
+const MAX_UPLOAD = /^\d{1,12}$/.test(meta('trid-max-bytes')) && Number(meta('trid-max-bytes')) > 0 ? Number(meta('trid-max-bytes')) : 2 * 1024 * 1024;
+const MAX_UPLOAD_LABEL = MAX_UPLOAD % 1048576 === 0 ? `${MAX_UPLOAD / 1048576}MB` : `${Math.round(MAX_UPLOAD / 1024)}KB`;
 let documentId = null, pages = [], busy = false;
 
 function node(tag, cls, text) {
@@ -162,7 +164,7 @@ async function run(statusId, action) {
 function load() {
   const file = el('file').files[0];
   if (!file) { setMessage('doc-status', 'PDF 파일을 먼저 선택해 주세요.', true); return; }
-  if (file.size > MAX_UPLOAD) { setMessage('doc-status', 'PDF는 2MB 이하로 넣어 주세요.', true); return; }
+  if (file.size > MAX_UPLOAD) { setMessage('doc-status', `PDF는 ${MAX_UPLOAD_LABEL} 이하로 넣어 주세요.`, true); return; }
   setMessage('doc-status', '문서를 읽는 중입니다.');
   void run('doc-status', async () => {
     const data = await api('/api/load', file, {'Content-Type': 'application/pdf', 'X-File-Name': encodeURIComponent(file.name)});

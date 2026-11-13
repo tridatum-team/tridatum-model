@@ -167,7 +167,9 @@ def run(args, password: str) -> int:
         'questions': rows,
         'summary': {'count': len(rows), 'median_seconds': round(statistics.median(seconds), 2) if seconds else None,
                     'max_seconds': max(seconds) if seconds else None,
-                    'errors': sum(1 for r in rows if not r['status'] or r['status'].startswith(('http_', 'connection')))},
+                    'errors': sum(1 for r in rows if not r['status'] or r['status'] == 'model_failure'
+                                      or r['status'].startswith(('http_', 'connection'))),
+                    'status_counts': {s: [r['status'] for r in rows].count(s) for s in sorted({r['status'] for r in rows})}},
     }
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'{len(rows)}개 질문 완료. 처리 시간 중앙값 {report["summary"]["median_seconds"]}초, '

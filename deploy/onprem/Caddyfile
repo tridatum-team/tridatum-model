@@ -11,8 +11,9 @@
 https://{$TRID_HOSTNAME} {
 	tls /certs/cert.pem /certs/key.pem
 
+	# Default is max_size 3MB; raise via TRID_MAX_BODY in .env together with pdf.max_bytes.
 	request_body {
-		max_size 3MB
+		max_size {$TRID_MAX_BODY:3MB}
 	}
 
 	reverse_proxy app:8080 {
