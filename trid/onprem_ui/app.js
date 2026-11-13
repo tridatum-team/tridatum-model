@@ -64,6 +64,8 @@ function setDocument(data) {
   el('doc-pages').replaceChildren();
   if (!data) return;
   el('doc-summary').textContent = `추출 문서 보기 · ${data.name} (${pages.length}쪽)`;
+  // Wide screens show the document beside the answer, so open the extracted text for checking quotes.
+  el('doc-view').open = window.matchMedia('(min-width: 1024px)').matches;
   pages.forEach((text, i) => el('doc-pages').append(block(`${i + 1}쪽`, text)));
 }
 function block(label, text) {

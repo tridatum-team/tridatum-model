@@ -36,6 +36,8 @@ STATIC = {
     '/login.js': 'text/javascript; charset=utf-8',
     '/admin.js': 'text/javascript; charset=utf-8',
     '/common.css': 'text/css; charset=utf-8',
+    # Pretendard (SIL OFL 1.1, trid/onprem_ui/fonts/Pretendard-OFL.txt), served from this origin: no CDN on-prem.
+    '/fonts/PretendardVariable.woff2': 'font/woff2',
 }
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; "
        "object-src 'none'; base-uri 'none'; form-action 'self'")
@@ -88,6 +90,23 @@ def _default_answer(config):
     return answer
 
 
+def model_card_html() -> str:
+    """The model card as an escaped definition list (fixed text from model_card.py, no user data)."""
+    def items(text: str, sep: str) -> str:
+        parts = [p.strip() for p in text.split(sep) if p.strip()]
+        return '<ul>' + ''.join(f'<li>{html.escape(p)}</li>' for p in parts) + '</ul>'
+    rows = [
+        ('모델', html.escape(MODEL_CARD['label'])),
+        ('상태', f"<strong>{html.escape(MODEL_CARD['status'])}</strong>"),
+        ('구성', items(MODEL_CARD['version'], ' · ')),
+        ('기반 모델', html.escape(MODEL_CARD['base_model'])),
+        ('라이선스', html.escape(MODEL_CARD['license'])),
+        ('성능 측정', html.escape(MODEL_CARD['evaluation'])),
+        ('한계', items(MODEL_CARD['limits'].replace('니다. ', '니다.\n'), '\n')),
+    ]
+    return '<dl>' + ''.join(f'<div><dt>{k}</dt><dd>{v}</dd></div>' for k, v in rows) + '</dl>'
+
+
 def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = False,
                 host: str | None = None):
     answer = answer or _default_answer(config)
@@ -102,10 +121,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
         return (UI_DIR / name).read_text(encoding='utf-8')
 
     status_text = html.escape(MODEL_CARD['status'])
-    card_text = html.escape(
-        f"{MODEL_CARD['label']} · {MODEL_CARD['version']} · {MODEL_CARD['status']}\n"
-        f"기반: {MODEL_CARD['base_model']} · 라이선스: {MODEL_CARD['license']}\n"
-        f"실측: {MODEL_CARD['evaluation']}\n한계: {MODEL_CARD['limits']}")
+    card_text = model_card_html()
 
     class Handler(BaseHTTPRequestHandler):
         server_version = 'trid'
@@ -119,11 +135,12 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
             pass
 
         # -- helpers ---------------------------------------------------------
-        def respond(self, status, value, mime='application/json; charset=utf-8', cookie=None, clear_cookie=False, extra=None):
+        def respond(self, status, value, mime='application/json; charset=utf-8', cookie=None, clear_cookie=False, extra=None,
+                    cache='no-store'):
             body = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False).encode()
             self.send_response(status)
             for key, val in {
-                'Content-Type': mime, 'Content-Length': str(len(body)), 'Cache-Control': 'no-store',
+                'Content-Type': mime, 'Content-Length': str(len(body)), 'Cache-Control': cache,
                 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
                 'Referrer-Policy': 'no-referrer', 'Connection': 'close',
                 'Content-Security-Policy': CSP,
@@ -204,7 +221,9 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                     data = (UI_DIR / path[1:]).read_bytes()
                 except OSError:
                     self.respond(404, {'error': '없는 페이지입니다.'}); return
-                self.respond(200, data, STATIC[path]); return
+                # The 2 MB font never changes between releases' pages; let the browser keep it for a day.
+                cache = 'private, max-age=86400' if path.endswith('.woff2') else 'no-store'
+                self.respond(200, data, STATIC[path], cache=cache); return
             if path == '/admin':
                 self.admin_page(); return
             if path == '/api/admin/events.csv':

@@ -99,6 +99,29 @@ class ServedPagesTests(unittest.TestCase):
         self.assertEqual(resp.status, 200)
         self.assertIn('/admin.js', self.assets(c, data.decode()))
 
+    def test_font_is_served_from_this_origin_and_cached(self):
+        css = (UI / 'common.css').read_text(encoding='utf-8')
+        self.assertIn('url("/fonts/PretendardVariable.woff2")', css)
+        self.assertTrue((UI / 'fonts' / 'Pretendard-OFL.txt').is_file())
+        c = T.Client(self.server)
+        resp, data = c.request('GET', '/fonts/PretendardVariable.woff2')
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.getheader('Content-Type'), 'font/woff2')
+        self.assertEqual(resp.getheader('Cache-Control'), 'private, max-age=86400')
+        self.assertEqual(data[:4], b'wOF2')
+        resp, _ = c.request('GET', '/app.js')
+        self.assertEqual(resp.getheader('Cache-Control'), 'no-store')
+
+    def test_model_card_is_a_definition_list(self):
+        c = T.Client(self.server)
+        c.login('alice')
+        _, data = c.request('GET', '/')
+        card = data.decode().split('<div class="model-card">', 1)[1].split('</div></dl>', 1)[0]
+        for term in ('모델', '상태', '구성', '기반 모델', '라이선스', '성능 측정', '한계'):
+            self.assertIn(f'<dt>{term}</dt>', card)
+        self.assertIn(f'<strong>{T.STATUS_TEXT}</strong>', card)
+        self.assertIn('<li>이미지·스캔 PDF는 읽지 못합니다.</li>', card)
+
 
 if __name__ == '__main__':
     unittest.main()
