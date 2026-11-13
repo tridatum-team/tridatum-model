@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRID 로그인</title>
+<link rel="stylesheet" href="/common.css">
+</head>
+<body>
+<main>
+<h1>TRID 문서 확인</h1>
+<p>MODEL_STATUS_PLACEHOLDER</p>
+<form id="login" method="post" action="/api/login">
+<label>아이디 <input name="username" autocomplete="username" required></label>
+<label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label>
+<button type="submit">로그인</button>
+</form>
+<p id="message" role="alert"></p>
+</main>
+<script src="/login.js"></script>
+</body>
+</html>
