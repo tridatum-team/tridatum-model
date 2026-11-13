@@ -110,6 +110,15 @@ class SessionRegistry:
             if entry is not None:
                 self._entries[new] = entry
 
+    def attach(self, key, entry: Entry, document, document_id: str) -> bool:
+        """Store a document on `entry` only while `key` still maps to that same entry."""
+        with self._lock:
+            if self.get(key) is not entry:
+                return False
+            entry.document = document
+            entry.document_id = document_id
+            return True
+
     def drop(self, key) -> None:
         with self._lock:
             if isinstance(key, str):
