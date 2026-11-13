@@ -8,6 +8,7 @@ trid.onprem.server.
 from __future__ import annotations
 
 import ipaddress
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
@@ -15,7 +16,7 @@ from django.contrib.sessions.models import Session
 from django.utils import timezone
 
 from onprem_web import runtime
-from onprem_web.accounts import services
+from onprem_web.accounts import services, sessions
 from onprem_web.audit.services import log
 from onprem_web.web import json_response
 from trid.onprem.server import MUST_CHANGE
@@ -55,26 +56,10 @@ def login_required_response():
     return response
 
 
-def delete_db_sessions(keys) -> None:
-    keys = list(keys)
-    if keys:
-        Session.objects.filter(session_key__in=keys).delete()
-
-
-def delete_user_db_sessions(user_pk, keep: str | None = None) -> None:
-    """Delete every stored session of this user except `keep` (sessions are few: max_sessions)."""
-    want = str(user_pk)
-    doomed = []
-    for row in Session.objects.filter(expire_date__gt=timezone.now()):
-        if row.session_key != keep and row.get_decoded().get('_auth_user_id') == want:
-            doomed.append(row.session_key)
-    delete_db_sessions(doomed)
-
-
 def prune(registry) -> None:
     """Expire idle registry entries and their DB rows, so a pruned login cannot come back as a 'restart'."""
     expired = registry.prune()
-    delete_db_sessions(key for key, _ in expired)
+    sessions.delete_db_sessions(key for key, _ in expired)
     for _, username in expired:
         log('session_expired', username, None, 'expired')
 
@@ -96,7 +81,9 @@ class TridSessionMiddleware:
         if public:
             return self.get_response(request)
 
-        registry = runtime.get().registry
+        rt = runtime.get()
+        registry = rt.registry
+        prune(registry)  # as the old server's auth.prune() on every request: idle documents go promptly
         request.trid_ip = client_ip(request)
         request.trid_entry = None
         key = request.session.session_key  # read before request.user: a revoked session is flushed on load
@@ -117,6 +104,9 @@ class TridSessionMiddleware:
                 log('session_expired', user.username, None, 'expired')
                 self._end(request, key)
                 return login_required_response() if is_api(path) else self.get_response(request)
+            # Keep the DB row's expiry on the idle window, so a restart cannot bring back an idle login.
+            Session.objects.filter(session_key=key).update(
+                expire_date=timezone.now() + timedelta(seconds=rt.config.idle_seconds))
         else:
             entry = registry.get(key)
             if entry is not None:

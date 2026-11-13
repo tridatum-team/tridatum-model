@@ -10,6 +10,7 @@ from __future__ import annotations
 import secrets
 import threading
 import time
+from typing import Callable
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import IntegrityError, transaction
@@ -20,6 +21,7 @@ from trid.onprem.passwords import check_new_password
 from trid.onprem.store import ROLES, normalize_username
 
 from .models import User
+from .sessions import end_user_sessions
 
 MAX_FAILURES = 5
 LOCK_SECONDS = 900
@@ -27,6 +29,8 @@ LOCK_SECONDS = 900
 _clock = time.time  # wall time for locked_until; tests patch this or pass now=
 _acct_lock = threading.RLock()  # serializes account mutations (Auth._acct_lock), held across scrypt
 _dummy: list[str] = []
+
+BUSY = 'busy'  # attempt_login result: credentials fine, but no session slot (HTTP 503)
 
 _NOT_ADMIN = '관리자 권한이 필요합니다.'
 _BAD_SESSION = '세션이 유효하지 않습니다.'
@@ -116,8 +120,13 @@ def admin_create(actor, username, password, role, ip) -> User:
 
 # -- login ---------------------------------------------------------------------
 
-def attempt_login(username: str, password: str, ip: str | None, now: float | None = None) -> User | None:
-    """Return the user on success; None for unknown, locked, disabled or wrong password."""
+def attempt_login(username: str, password: str, ip: str | None, now: float | None = None,
+                  has_capacity: Callable[[], bool] | None = None) -> User | str | None:
+    """Return the user on success; None for unknown, locked, disabled or wrong password.
+
+    `has_capacity` runs after the password is verified (as in Auth.login); if it says no,
+    the attempt is logged as login_failed/busy and BUSY is returned.
+    """
     if not isinstance(password, str) or len(password) > _MAX_PASSWORD_CHARS:
         password = ''
     with _acct_lock:
@@ -142,6 +151,9 @@ def attempt_login(username: str, password: str, ip: str | None, now: float | Non
             return None
         if user.failed:
             _save(user, failed=0)
+        if has_capacity is not None and not has_capacity():
+            log('login_failed', user.username, ip, 'busy')
+            return BUSY
         log('login_ok', user.username, ip, 'ok')
         return user
 
@@ -195,11 +207,14 @@ def admin_update(actor, target: str, *, role=None, disabled=None, reset_password
                 if not disabled:
                     fields.update(failed=0, locked_until=0.0)
                 _save(user, **fields)
+                if disabled:
+                    end_user_sessions(name)
                 log('admin_update_user', admin.username, ip, 'ok', target=name,
                     action='disable' if disabled else 'enable')
             if reset_password is not None:
                 _save(user, password=make_password(reset_password), must_change=True,
                       password_version=user.password_version + 1, failed=0, locked_until=0.0)
+                end_user_sessions(name)
                 log('admin_reset_password', admin.username, ip, 'ok', target=name, action='reset')
             if unlock:
                 _save(user, failed=0, locked_until=0.0)

@@ -68,6 +68,11 @@ class SessionRegistry:
             self._entries[key] = Entry(username=username, touched=self._clock())
             return True
 
+    def has_room(self, key: str | None = None) -> bool:
+        """True if `key` already has an entry or another one fits (call prune() first)."""
+        with self._lock:
+            return key in self._entries or len(self._entries) < self._max
+
     def get(self, key) -> Entry | None:
         with self._lock:
             return self._entries.get(key) if isinstance(key, str) else None

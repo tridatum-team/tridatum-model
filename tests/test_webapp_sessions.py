@@ -1,11 +1,13 @@
 import json
 import re
 import unittest
+from datetime import timedelta
 
 import webapp_support as S  # noqa: F401  (boots Django and migrates)
 
 from django.contrib.sessions.models import Session
 from django.test import TestCase
+from django.utils import timezone
 
 from onprem_web.accounts import services
 from onprem_web.audit.models import Event
@@ -147,6 +149,7 @@ class SessionTests(TestCase):
         self.assertNotIn('__Host-trid', b.c.cookies)
         self.assertEqual(Session.objects.count(), 32)
         self.assertEqual(events('login_failed'), [('alice', 'busy')])
+        self.assertEqual(len(events('login_ok')), 32)
         # idle sessions are pruned to make room, and the pruned ones cannot come back
         self.clock.t += 1800
         self.assertEqual(Browser().login().status_code, 200)
@@ -159,6 +162,48 @@ class SessionTests(TestCase):
         S.make_runtime(clock=self.clock)  # fresh registry, same DB: the process restarted
         self.assertEqual(b.post('/api/password', {}).status_code, 400)
         self.assertEqual(S.runtime.get().registry.keys(), {b.key})
+
+    def test_full_registry_login_audit_is_single_busy_row(self):
+        for _ in range(32):
+            self.logged_in()
+        before = Event.objects.count()
+        self.assertEqual(Browser().login('bob').status_code, 503)
+        rows = [(e.username, e.event, e.result, json.loads(e.detail))
+                for e in Event.objects.order_by('id')[before:]]
+        self.assertEqual(rows, [('bob', 'login_failed', 'busy', {})])  # as Auth.login: no login_ok first
+
+    def test_idle_db_session_not_readmitted_after_restart(self):
+        stale, fresh = self.logged_in(), self.logged_in('bob')
+        row = Session.objects.get(session_key=fresh.key)
+        self.assertLessEqual(row.expire_date, timezone.now() + timedelta(seconds=1800))
+        Session.objects.filter(session_key=stale.key).update(
+            expire_date=timezone.now() - timedelta(seconds=1))  # idle past the window
+        S.make_runtime(clock=self.clock)  # restart: empty registry
+        r = stale.post('/api/password', {})
+        self.assertEqual((r.status_code, r.json()), (401, {'error': '로그인이 필요합니다.'}))
+        self.assertEqual(fresh.post('/api/password', {}).status_code, 400)
+        self.assertEqual(S.runtime.get().registry.keys(), {fresh.key})
+
+    def test_activity_renews_db_expiry(self):
+        b = self.logged_in()
+        Session.objects.filter(session_key=b.key).update(expire_date=timezone.now() + timedelta(seconds=5))
+        self.assertEqual(b.post('/api/password', {}).status_code, 400)
+        self.assertGreater(Session.objects.get(session_key=b.key).expire_date,
+                           timezone.now() + timedelta(seconds=1700))
+
+    def test_idle_entry_pruned_on_other_users_request(self):
+        a = self.logged_in('alice')
+        key = a.key
+        entry = self.rt.registry.get(key)
+        entry.document, entry.document_id = object(), 'doc-a'
+        self.clock.t += 1000
+        b = self.logged_in('bob')
+        self.clock.t += 800  # alice idle 1800 s, bob 800 s
+        self.assertEqual(b.post('/api/password', {}).status_code, 400)
+        self.assertNotIn(key, self.rt.registry.keys())
+        self.assertEqual((entry.document, entry.document_id), (None, None))
+        self.assertFalse(Session.objects.filter(session_key=key).exists())
+        self.assertEqual(events('session_expired'), [('alice', 'expired')])
 
     def test_per_minute_20_returns_429(self):
         b = self.logged_in()
@@ -209,6 +254,8 @@ class SessionTests(TestCase):
         mine.document = theirs.document = object()
         r = b.post('/api/password', {'current': PW, 'new': NEW_PW})
         self.assertEqual((r.status_code, r.json()), (200, {'ok': True}))
+        self.assertEqual(list(r.cookies), ['__Host-trid'])
+        self.assertEqual(len(r.cookies.output().splitlines()), 1)
         self.assertNotEqual(b.key, old_key)
         self.assertIs(self.rt.registry.get(b.key), mine)
         self.assertIsNotNone(mine.document)
@@ -225,12 +272,39 @@ class SessionTests(TestCase):
         root = services.create_user('root', PW, 'admin', must_change=False)
         b = self.logged_in('bob')
         key = b.key
+        entry = self.rt.registry.get(key)
+        entry.document = object()
         services.admin_update(root, 'bob', disabled=True, ip=None)
+        self.assertNotIn(key, self.rt.registry.keys())  # immediately, as Auth.admin_update
+        self.assertIsNone(entry.document)
+        self.assertFalse(Session.objects.filter(session_key=key).exists())
         r = b.post('/api/password', {})
         self.assertEqual((r.status_code, r.json()), (401, {'error': '로그인이 필요합니다.'}))
         self.assertNotIn(key, self.rt.registry.keys())
-        self.assertEqual(events('session_expired'), [('bob', 'revoked')])
         self.assertEqual(Browser().login('bob').status_code, 401)
+
+    def test_admin_reenable_before_next_request_still_ends_session(self):
+        root = services.create_user('root', PW, 'admin', must_change=False)
+        b, alice = self.logged_in('bob'), self.logged_in('alice')
+        entry = self.rt.registry.get(b.key)
+        entry.document = object()
+        services.admin_update(root, 'bob', disabled=True, ip=None)
+        services.admin_update(root, 'bob', disabled=False, ip=None)
+        r = b.post('/api/password', {})
+        self.assertEqual((r.status_code, r.json()), (401, {'error': '로그인이 필요합니다.'}))
+        self.assertIsNone(entry.document)
+        self.assertEqual(self.rt.registry.keys(), {alice.key})
+        self.assertEqual(alice.post('/api/password', {}).status_code, 400)
+
+    def test_admin_reset_ends_sessions_immediately(self):
+        root = services.create_user('root', PW, 'admin', must_change=False)
+        b = self.logged_in('bob')
+        entry = self.rt.registry.get(b.key)
+        entry.document = object()
+        services.admin_update(root, 'bob', reset_password='temporary pass 3', ip=None)
+        self.assertIsNone(entry.document)
+        self.assertEqual(self.rt.registry.keys(), set())
+        self.assertEqual(b.post('/api/password', {}).status_code, 401)
 
     def test_session_store_holds_no_content(self):
         services.create_user('carol', PW, 'user', must_change=True)

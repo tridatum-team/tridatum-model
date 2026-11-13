@@ -17,6 +17,7 @@ from onprem_web import runtime
 from onprem_web.accounts import middleware as mw
 from onprem_web.accounts import services
 from onprem_web.accounts.models import User
+from onprem_web.accounts.sessions import end_user_sessions
 from onprem_web.audit.services import log
 from onprem_web.web import json_response
 from trid.onprem.server import BAD_LOGIN
@@ -47,17 +48,20 @@ def api_login(request):
             or not isinstance(body.get('password'), str):
         return json_response(400, {'error': '아이디와 비밀번호를 입력해 주세요.'})
     ip = request.trid_ip
-    user = services.attempt_login(body['username'], body['password'], ip)
-    if user is None:
-        return json_response(401, {'error': BAD_LOGIN})
     registry = runtime.get().registry
     old_key = request.session.session_key
+    user = services.attempt_login(body['username'], body['password'], ip,
+                                  has_capacity=lambda: registry.has_room(old_key))
+    if user is services.BUSY:
+        return json_response(503, {'error': BUSY})
+    if user is None:
+        return json_response(401, {'error': BAD_LOGIN})
     auth.login(request, user, backend=BACKEND)
     request.session['pv'] = user.password_version
     key = request.session.session_key
     if old_key and old_key != key:
         registry.drop(old_key)
-    if not mw.admit(registry, key, user.username):
+    if not mw.admit(registry, key, user.username):  # lost a race for the last slot
         request.session.flush()
         request.META['CSRF_COOKIE_NEEDS_UPDATE'] = False  # else the rotated token re-creates a session row
         log('login_failed', user.username, ip, 'busy')
@@ -94,16 +98,14 @@ def api_password(request):
         locked_until = User.objects.filter(pk=user.pk).values_list('locked_until', flat=True).first()
         if locked_until is not None and locked_until > services._clock():
             # As in Auth.change_password: a lock from wrong current passwords ends all the user's sessions.
-            registry.drop_user(user.username)
-            mw.delete_user_db_sessions(user.pk)
+            end_user_sessions(user.username)
             request.session.flush()
         return json_response(400, {'error': str(e)})
     auth.update_session_auth_hash(request, user)  # cycles the session key
     request.session['pv'] = user.password_version
     key = request.session.session_key
     registry.rekey(old_key, key)
-    registry.drop_user(user.username, keep=key)
-    mw.delete_user_db_sessions(user.pk, keep=key)
+    end_user_sessions(user.username, keep=key)
     return json_response(200, {'ok': True})
 
 

@@ -91,6 +91,7 @@ AUTH_PASSWORD_VALIDATORS = []  # rules live in trid.onprem.passwords.check_new_p
 # Sessions and CSRF: the token lives in the session and travels in X-Trid-Token.
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_AGE = TRID_CONFIG.idle_seconds  # DB row lifetime; the middleware renews it on activity
 SESSION_COOKIE_NAME = 'trid-dev' if TRID_DEV else '__Host-trid'
 SESSION_COOKIE_SECURE = not TRID_DEV
 SESSION_COOKIE_HTTPONLY = True
