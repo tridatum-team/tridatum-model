@@ -318,6 +318,41 @@ class ServerTests(unittest.TestCase):
                  for e in self.events('ask')]
         self.assertEqual(sorted(k for k in kinds if k), ['bad_request', 'context_overflow'])
 
+    def test_client_disconnect_during_failing_ask_prints_no_traceback(self):
+        c = self.client()
+        document_id = c.upload()[1]['document_id']
+        started, release = threading.Event(), threading.Event()
+
+        def answer(document, question):
+            started.set()
+            release.wait(5)
+            raise RuntimeError(SECRET_QUESTION)
+
+        server = make_server(self.config, self.store, self.auth, object(), answer=answer)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        body = json.dumps({'question': SECRET_QUESTION, 'document_id': document_id}, ensure_ascii=False).encode()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            import socket
+            import struct
+            sock = socket.create_connection(('127.0.0.1', server.server_address[1]), timeout=10)
+            head = '\r\n'.join([
+                'POST /api/ask HTTP/1.1', 'Host: x', f'Origin: {ORIGIN}', f'Cookie: __Host-trid={c.sid}',
+                f'X-Trid-Token: {c.csrf}', f'Content-Length: {len(body)}', '', '']).encode()
+            sock.sendall(head + body)
+            self.assertTrue(started.wait(5))
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+            sock.close()
+            release.set()
+            deadline = time.monotonic() + 5
+            while server.generation_lock.locked() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            time.sleep(0.3)
+        self.assertNotIn('qzx', err.getvalue())
+        self.assertNotIn('Traceback', err.getvalue())
+
     def test_generation_lock_busy_returns_503_after_lock_wait(self):
         c = self.client()
         document_id = c.upload()[1]['document_id']

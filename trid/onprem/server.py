@@ -51,6 +51,10 @@ class BoundedServer(ThreadingHTTPServer):
         self.slots = threading.BoundedSemaphore(slots)
         super().__init__(*args)
 
+    def handle_error(self, request, client_address):
+        # Never print a traceback: its chained exceptions can carry questions or file names.
+        print(sys.exc_info()[0].__name__, file=sys.stderr)
+
     def process_request(self, request, address):
         if not self.slots.acquire(False):
             self.shutdown_request(request)
@@ -175,7 +179,10 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 self.get()
             except Exception as e:
                 print(type(e).__name__, file=sys.stderr)
-                self.respond(500, {'error': GENERIC_ERROR})
+                try:
+                    self.respond(500, {'error': GENERIC_ERROR})
+                except OSError:
+                    pass
 
         def get(self):
             auth.prune()
@@ -207,7 +214,10 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 self.post()
             except Exception as e:
                 print(type(e).__name__, file=sys.stderr)
-                self.respond(500, {'error': GENERIC_ERROR})
+                try:
+                    self.respond(500, {'error': GENERIC_ERROR})
+                except OSError:
+                    pass
 
         def post(self):
             auth.prune()
