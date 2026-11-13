@@ -84,6 +84,8 @@ class ServedPagesTests(unittest.TestCase):
         self.assertEqual(resp.status, 200)
         self.assertIn('질문마다 완전한 문장으로', page)
         self.assertIn('<meta name="username" content="alice">', page)
+        before_details = page.split('<details', 1)[0]
+        self.assertIn(T.STATUS_TEXT, before_details)
         self.assertIn('/app.js', self.assets(c, page))
 
     def test_admin_page_and_scripts(self):
