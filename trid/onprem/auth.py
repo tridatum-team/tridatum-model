@@ -201,6 +201,24 @@ class Auth:
             self._drop_user_sessions(user.username, keep=session.sid)
             self._store.log("password_changed", user.username, ip, "ok")
 
+    def now(self) -> float:
+        return self._wall()
+
+    def admin_unlock(self, actor: Session, target: str, ip: str | None = None) -> None:
+        """Clear a failure lock without touching the password."""
+        with self._acct_lock:
+            with self._lock:
+                live = self._sessions.get(actor.sid) is actor
+            admin = self._store.get_user(actor.username) if live else None
+            if admin is None or admin.disabled or admin.role != "admin":
+                raise PermissionError("관리자 권한이 필요합니다.")
+            name = normalize_username(target)
+            if self._store.get_user(name) is None:
+                raise ValueError("없는 계정입니다.")
+            self._store.update_user(name, failed=0, locked_until=0.0)
+            self._store.log("admin_update_user", admin.username, ip, "ok",
+                            target=name, action="unlock")
+
     def admin_update(self, actor: Session, target: str, *, role=None,
                      disabled=None, reset_password: str | None = None,
                      ip: str | None = None) -> None:

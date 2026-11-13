@@ -19,10 +19,11 @@ import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from trid.document_case import CONTEXT_OVERFLOW, answer_document_case, fit_own_passages
 from trid.llama_client import complete, count_prompt_tokens
+from trid.onprem.admin import POST_ROUTES as ADMIN_ROUTES, AdminApi
 from trid.onprem.model_card import MODEL_CARD
 from trid.pdf_documents import DocumentError
 from trid.pdf_isolated import parse_pdf
@@ -41,6 +42,8 @@ BAD_LOGIN = '아이디 또는 비밀번호가 올바르지 않습니다.'
 MODEL_DOWN = '모델 서버에 연결할 수 없습니다. 관리자에게 문의해 주세요.'
 GENERIC_ERROR = '처리 중 오류가 발생했습니다.'
 MUST_CHANGE = '비밀번호를 먼저 변경해 주세요.'
+ADMIN_ONLY = '관리자 권한이 필요합니다.'
+CSRF_FAIL = '세션이 만료됐습니다. 페이지를 새로고침해 주세요.'
 _STATUS_RE = re.compile(r'[A-Za-z0-9._:-]{1,128}')
 
 
@@ -89,6 +92,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
     gen_lock = threading.Lock()
     rate_lock = threading.Lock()
     origin_holder = {'value': 'https://' + config.hostname}
+    admin_api = AdminApi(store, auth)
 
     def page(name):
         return (UI_DIR / name).read_text(encoding='utf-8')
@@ -111,7 +115,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
             pass
 
         # -- helpers ---------------------------------------------------------
-        def respond(self, status, value, mime='application/json; charset=utf-8', cookie=None, clear_cookie=False):
+        def respond(self, status, value, mime='application/json; charset=utf-8', cookie=None, clear_cookie=False, extra=None):
             body = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False).encode()
             self.send_response(status)
             for key, val in {
@@ -120,6 +124,8 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 'Referrer-Policy': 'no-referrer', 'Connection': 'close',
                 'Content-Security-Policy': CSP,
             }.items():
+                self.send_header(key, val)
+            for key, val in (extra or {}).items():
                 self.send_header(key, val)
             attrs = '; Path=/; HttpOnly; SameSite=Strict' + ('' if insecure_dev else '; Secure')
             if cookie:
@@ -195,6 +201,10 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 except OSError:
                     self.respond(404, {'error': '없는 페이지입니다.'}); return
                 self.respond(200, data, STATIC[path]); return
+            if path == '/admin':
+                self.admin_page(); return
+            if path == '/api/admin/events.csv':
+                self.admin_csv(); return
             if path != '/':
                 self.respond(404, {'error': '없는 페이지입니다.'}); return
             session = auth.session(self.sid())
@@ -207,6 +217,46 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                         .replace('ROLE_PLACEHOLDER', html.escape(session.role, quote=True))
                         .replace('MODEL_CARD_PLACEHOLDER', card_text))
             self.respond(200, text.encode(), 'text/html; charset=utf-8')
+
+        def admin_page(self):
+            session = auth.session(self.sid())
+            if session is None:
+                self.respond(200, page('login.html').replace('MODEL_STATUS_PLACEHOLDER', status_text).encode(),
+                             'text/html; charset=utf-8'); return
+            if session.role != 'admin':
+                self.respond(403, {'error': ADMIN_ONLY}); return
+            if session.must_change:
+                self.respond(403, {'error': MUST_CHANGE, 'must_change': True}); return
+            text = page('admin.html').replace('TOKEN_PLACEHOLDER', html.escape(session.csrf, quote=True))
+            self.respond(200, text.encode(), 'text/html; charset=utf-8')
+
+        def admin_csv(self):
+            session = auth.session(self.sid())
+            if session is None:
+                self.respond(401, {'error': '로그인이 필요합니다.'}, clear_cookie=True); return
+            query = urlsplit(self.path).query
+            token = parse_qs(query).get('token', [''])[-1]
+            if not token.isascii() or not hmac.compare_digest(token, session.csrf):
+                self.respond(403, {'error': CSRF_FAIL}); return
+            if session.role != 'admin':
+                self.respond(403, {'error': ADMIN_ONLY}); return
+            if session.must_change:
+                self.respond(403, {'error': MUST_CHANGE, 'must_change': True}); return
+            if not self.rate_ok(session):
+                return
+            status, value, extra = admin_api.csv(session, query, self.client_ip())
+            if status != 200:
+                self.respond(status, value); return
+            self.respond(200, value, 'text/csv; charset=utf-8', extra=extra)
+
+        def rate_ok(self, session):
+            with rate_lock:
+                now = time.monotonic()
+                session.calls = [t for t in session.calls if now - t < 60]
+                if len(session.calls) >= config.per_minute:
+                    self.respond(429, {'error': '요청이 많습니다. 1분 뒤 다시 시도해 주세요.'}); return False
+                session.calls.append(now)
+            return True
 
         # -- POST ------------------------------------------------------------
         def do_POST(self):
@@ -227,24 +277,22 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
             ip = self.client_ip()
             if path == '/api/login':
                 self.login(ip); return
-            routes = {'/api/logout', '/api/password', '/api/load', '/api/ask', '/api/clear'}
+            routes = {'/api/logout', '/api/password', '/api/load', '/api/ask', '/api/clear'} | ADMIN_ROUTES
             sid = self.sid()
             session = auth.session(sid)
             if session is None:
                 self.respond(401, {'error': '로그인이 필요합니다.'}, clear_cookie=True); return
             token = self.headers.get('X-Trid-Token', '')
             if not token.isascii() or not hmac.compare_digest(token, session.csrf):
-                self.respond(403, {'error': '세션이 만료됐습니다. 페이지를 새로고침해 주세요.'}); return
+                self.respond(403, {'error': CSRF_FAIL}); return
             if session.must_change and path not in ('/api/password', '/api/logout'):
                 self.respond(403, {'error': MUST_CHANGE, 'must_change': True}); return
             if path not in routes:
                 self.respond(404, {'error': '없는 페이지입니다.'}); return
-            with rate_lock:
-                now = time.monotonic()
-                session.calls = [t for t in session.calls if now - t < 60]
-                if len(session.calls) >= config.per_minute:
-                    self.respond(429, {'error': '요청이 많습니다. 1분 뒤 다시 시도해 주세요.'}); return
-                session.calls.append(now)
+            if path in ADMIN_ROUTES and session.role != 'admin':
+                self.respond(403, {'error': ADMIN_ONLY}); return
+            if not self.rate_ok(session):
+                return
             if path == '/api/logout':
                 if self.read_body(SMALL_BODY) is None:
                     return
@@ -253,6 +301,12 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
             body = self.read_body(config.pdf.max_bytes if path == '/api/load' else SMALL_BODY)
             if body is None:
                 return
+            if path in ADMIN_ROUTES:
+                request = self.json_body(body)
+                if request is None:
+                    self.respond(400, {'error': '요청 형식이 올바르지 않습니다.'}); return
+                status, value = admin_api.post(path, session, request, ip)
+                self.respond(status, value); return
             if path == '/api/clear':
                 session.document = None
                 session.document_id = None
