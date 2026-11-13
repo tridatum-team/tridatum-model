@@ -220,7 +220,7 @@ docker compose exec app python -I -m trid.onprem create-admin --config /data/onp
 
 | 이벤트 | 시점 |
 | --- | --- |
-| `login_ok`, `login_failed`(비밀번호 오류, 잠금 계정이면 `error=disabled`), `login_locked`, `logout`, `session_expired` | 로그인, 실패, 잠김, 로그아웃, 세션 만료 |
+| `login_ok`, `login_failed`(비밀번호 오류. 관리자가 비활성화한 계정이면 `error=disabled`), `login_locked`, `logout`, `session_expired` | 로그인, 실패, 잠김, 로그아웃, 세션 만료 |
 | `password_changed` | 비밀번호 변경 |
 | `pdf_upload` | PDF 올리기. 부가 항목: PDF 파일 전체의 `sha256`, `pages`(쪽 수), `status` |
 | `ask` | 질문. 부가 항목: 처리 시간 `seconds`, 결과 `status`(`quoted` 원문 일치 인용 있음, `answer` 원문 위치 일치, `unverified` 인용 없이 해설만, `review` 검증 보류, `not_found` 근거 못 찾음, `clarify` 되묻기, `model_failure` 모델이 질문·지시문을 되풀이하는 등 응답 실패), 오류일 때 `error` 코드(`busy`, `context_overflow`, `bad_request`, `model_unavailable`) |

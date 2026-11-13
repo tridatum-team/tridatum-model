@@ -20,7 +20,7 @@ def load_module():
     return module
 
 
-def start_fake(login_status='ok', fail_question=None):
+def start_fake(login_status='ok', fail_question=None, model_failure_question=None):
     state = {'calls': [], 'asked': 0}
     base_holder = {}
 
@@ -66,6 +66,8 @@ def start_fake(login_status='ok', fail_question=None):
                 n = state['asked'] = state['asked'] + 1
                 if fail_question == n:
                     self.send(502, {'error': '모델 서버에 연결할 수 없습니다. 관리자에게 문의해 주세요.'}); return
+                if model_failure_question == n:
+                    self.send(200, {'status': 'model_failure', 'answer': SECRET_ANSWER, 'candidates': []}); return
                 cands = [{'page': 2, 'text': 't', 'prediction': {'source_character_span': [0, 1]}},
                          {'page': 3, 'text': 't', 'prediction': {'source_character_span': [0, 0]}}]
                 self.send(200, {'status': 'quoted', 'answer': SECRET_ANSWER, 'candidates': cands,
@@ -151,6 +153,14 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(report['questions'][0]['status'], 'http_502')
         self.assertEqual(report['questions'][1]['status'], 'quoted')
         self.assertEqual(state['calls'][-1], ('POST', '/api/logout'))
+
+    def test_model_failure_counts_as_error(self):
+        base, _ = self.start(model_failure_question=2)
+        self.assertEqual(self.run_check(base), 1)
+        report = json.loads(self.out.read_text(encoding='utf-8'))
+        self.assertEqual(report['questions'][1]['status'], 'model_failure')
+        self.assertEqual(report['summary']['errors'], 1)
+        self.assertEqual(report['summary']['status_counts'], {'model_failure': 1, 'quoted': 1})
 
     def test_password_is_not_a_command_line_option(self):
         text = (DEPLOY / 'release_check.py').read_text(encoding='utf-8')

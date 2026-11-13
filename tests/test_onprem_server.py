@@ -379,17 +379,17 @@ class ServerTests(unittest.TestCase):
         c = self.client()
         big = b'x' * (self.config.pdf.max_bytes + 1)
 
-        def rejected(client, path, body):
-            # The server answers 413 from the headers and closes without reading the body, so a client
-            # still sending a large body can get a connection reset before it reads the response.
-            try:
-                return client.request('POST', path, body)[0].status == 413
-            except (ConnectionError, http.client.RemoteDisconnected):
-                return True
-
-        self.assertTrue(rejected(c, '/api/load', big))
-        self.assertTrue(rejected(c, '/api/ask', b'x' * (16 * 1024 + 1)))
-        self.assertTrue(rejected(Client(self.server), '/api/login', b'x' * (16 * 1024 + 1)))
+        # The 2 MiB body may be reset by the server's close before the client reads the response.
+        try:
+            self.assertEqual(c.request('POST', '/api/load', big)[0].status, 413)
+        except (ConnectionError, http.client.RemoteDisconnected):
+            pass
+        # Small oversize bodies must give a real 413.
+        self.assertEqual(c.request('POST', '/api/ask', b'x' * (16 * 1024 + 1))[0].status, 413)
+        self.assertEqual(Client(self.server).request(
+            'POST', '/api/login', b'x' * (16 * 1024 + 1))[0].status, 413)
+        # The server still serves afterwards.
+        self.assertEqual(Client(self.server).request('GET', '/')[0].status, 200)
 
     def test_content_length_required_and_chunked_rejected(self):
         c = self.client()
