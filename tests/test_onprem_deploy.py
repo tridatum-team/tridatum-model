@@ -143,7 +143,7 @@ class CaddyTests(unittest.TestCase):
         for expected in ('admin off', 'auto_https off', '{$TRID_HOSTNAME}',
                          '/certs/cert.pem /certs/key.pem', 'reverse_proxy app:8080',
                          'header_up X-Real-IP {remote_host}', 'header_up -X-Forwarded-For',
-                         'max_size 3MB', 'ocsp_stapling off', 'protocols h1 h2'):
+                         'max_size {$TRID_MAX_BODY:3MB}', 'ocsp_stapling off', 'protocols h1 h2'):
             self.assertIn(expected, text)
 
 
