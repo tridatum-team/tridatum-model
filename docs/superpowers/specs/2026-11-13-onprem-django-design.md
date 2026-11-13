@@ -140,7 +140,7 @@
 ### 3-2. 기존 판과 다를 수 있는 보안 세부 *(내 판단)*
 - 기준은 **기존 판의 동작**이다. Django 기본값과 다르면 기존 판에 맞춘다.
 - `__Host-trid` 쿠키는 `Path=/`이고 `Domain`이 없어야 한다.
-- CSRF는 Django CSRF 미들웨어를 쓴다. 토큰은 페이지의 meta 태그로 내려 주고, htmx·JSON 요청은 `X-CSRFToken` 헤더로 보낸다. CSRF 쿠키도 Secure, SameSite=Strict다. Origin 검사는 기존 판처럼 운영 `https://<hostname>`, 개발 `http://127.0.0.1:<port>`와 정확히 같아야 한다.
+- CSRF는 Django CSRF 미들웨어를 쓰되 기존 판과 같은 모양으로 맞춘다. 토큰은 세션에 두고(`CSRF_USE_SESSIONS`, 별도 CSRF 쿠키 없음), 페이지의 `<meta name="csrf-token">`으로 내려 주며, htmx·JSON 요청은 기존 판과 같은 `X-Trid-Token` 헤더로 보낸다(`CSRF_HEADER_NAME`). 배포 전 점검 스크립트가 쿠키 하나와 이 헤더만 쓰기 때문이다. Origin 검사는 기존 판처럼 운영 `https://<hostname>`, 개발 `http://127.0.0.1:<port>`와 정확히 같아야 한다.
 - 세션이 끝나면(로그아웃, 30분 경과, 관리자 비활성화·초기화, 비밀번호 변경, 세션 상한 정리) 그 세션 키의 메모리 문서도 함께 지운다. DB 세션이 지워졌는데 메모리 문서만 남는 일이 없게, 메모리 저장소도 주기적으로 정리한다. DB에는 남았는데 메모리 문서가 없는 경우(앱 재시작)는 "문서를 다시 올려 주세요"로 처리한다.
 
 ### 3-3. JSON API *(내 판단)*
