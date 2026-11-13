@@ -19,7 +19,7 @@ from trid.onprem.passwords import check_new_password, hash_password
 EVENTS = frozenset({
     "login_ok", "login_failed", "login_locked", "logout", "session_expired",
     "password_changed", "pdf_upload", "ask", "clear", "admin_create_user",
-    "admin_update_user", "admin_reset_password", "admin_export",
+    "admin_update_user", "admin_reset_password", "admin_export", "retention_purge",
 })
 DETAIL_KEYS = frozenset({
     "sha256", "pages", "seconds", "status", "error", "target", "action", "count",

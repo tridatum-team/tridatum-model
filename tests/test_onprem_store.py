@@ -96,6 +96,10 @@ class StoreTests(unittest.TestCase):
         for needle in ("비밀질문XYZ", "비밀파일", "question", "filename"):
             self.assertNotIn(needle.encode("utf-8"), data)
 
+    def test_retention_purge_event_is_allowed(self):
+        self.store.log("retention_purge", None, None, "ok", count=3)
+        self.assertEqual(self.store.query_events()[0]["detail"], {"count": 3})
+
     def test_purge_before_removes_only_older_events(self):
         for t in (100.0, 200.0, 300.0):
             self.clock.t = t

@@ -414,8 +414,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
             self.respond(200, {k: v for k, v in result.items() if k not in ('checked', 'raw_output')})
 
     if host is None:
-        # Behind the TLS proxy the container listens on all interfaces; tests and dev stay on loopback.
-        host = '127.0.0.1' if insecure_dev or config.port == 0 else '0.0.0.0'
+        host = '127.0.0.1'  # the serve command passes 0.0.0.0 explicitly inside the container
     server = BoundedServer((host, config.port), Handler, slots=config.slots)
     server.generation_lock = gen_lock
     if insecure_dev:
