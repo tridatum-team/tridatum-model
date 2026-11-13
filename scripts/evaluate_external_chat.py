@@ -19,7 +19,6 @@ import math
 import re
 import sys
 import time
-import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -27,6 +26,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from evaluate_rag_eval import normalized, score
+from trid.llama_client import QWEN3_NO_THINK, request, complete  # re-exported for other scripts
 from trid.prompts import rag_passages
 from trid.span_scoring import candidates
 
@@ -154,38 +154,6 @@ def summarize(rows, results):
         entry['strict_product_wilson95'] = wilson(value['strict_product'], value['total'])
         summary[key] = entry
     return summary
-
-
-def request(base, endpoint, payload=None):
-    data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode()
-    req = urllib.request.Request(base+endpoint, data=data, headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=180) as response:
-        return json.load(response)
-
-
-def complete(base, messages, family, max_tokens, context, grammar=None):
-    """Render with the model's native template, then greedy-complete; returns result fields."""
-    prompt = request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}})['prompt']
-    result = dict(rendered_prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest())
-    # Qwen3's native no-thinking generation prefix must actually be rendered.
-    if family == 'qwen3' and not prompt.endswith(QWEN3_NO_THINK):
-        raise ValueError('Native Qwen3 no-thinking prefix was not rendered')
-    tokens = request(base, '/tokenize', {'content': prompt, 'add_special': True, 'parse_special': True})['tokens']
-    result['prompt_tokens'] = len(tokens)
-    if len(tokens) + max_tokens > context:
-        result['skipped_context'] = True
-        return result
-    payload = dict(prompt=tokens, n_predict=max_tokens, temperature=0, seed=42, samplers=['temperature'],
-                   repeat_penalty=1, cache_prompt=False, return_tokens=True)
-    if grammar is not None:
-        payload['grammar'] = grammar
-        result['grammar_sha256'] = hashlib.sha256(grammar.encode()).hexdigest()
-    completion = request(base, '/completion', payload)
-    result.update(generated=completion['content'].strip(),
-        output_tokens=len(completion['tokens']), finish_reason=completion['stop_type'],
-        truncated_output=completion['stop_type']=='limit',
-        context_truncated=completion['truncated'], timings=completion['timings'])
-    return result
 
 
 def freeform(base, family, context, path, output, model_hash):
