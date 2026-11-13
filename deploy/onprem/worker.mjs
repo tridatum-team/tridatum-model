@@ -1,6 +1,6 @@
 const GET_PATHS = new Set([
   '/', '/healthz', '/app.js', '/login.js', '/admin.js', '/common.css',
-  '/admin', '/api/admin/events.csv',
+  '/admin', '/api/admin/events.csv', '/fonts/PretendardVariable.woff2',
 ]);
 const POST_PATHS = new Set([
   '/api/login', '/api/logout', '/api/password', '/api/load', '/api/ask', '/api/clear',
@@ -65,7 +65,9 @@ export default {
       if (upstream.status >= 500 && !upstream.headers.get('content-type')?.includes('application/json'))
         throw new Error('On-prem origin unavailable');
       const response = new Response(upstream.body, upstream);
-      response.headers.set('Cache-Control', PRIVATE_HEADERS['Cache-Control']);
+      const cacheableFont = url.pathname === '/fonts/PretendardVariable.woff2' &&
+        upstream.status === 200 && upstream.headers.get('Content-Type') === 'font/woff2';
+      response.headers.set('Cache-Control', cacheableFont ? 'private, max-age=86400' : PRIVATE_HEADERS['Cache-Control']);
       response.headers.set('Strict-Transport-Security', PRIVATE_HEADERS['Strict-Transport-Security']);
       return response;
     } catch (failure) {

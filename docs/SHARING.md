@@ -12,30 +12,43 @@ PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전
 
 ```text
 https://test.tridatum.co
-  → Worker trid-model-test (66d5bd19-d46d-4a1e-a134-ce565c98daee)
+  → Worker trid-model-test (6557e165-9101-401b-8757-91bdcd349bb1)
   → named tunnel trid-test-origin.eommydocs.com
   → Caddy 127.0.0.1:51875 (호스트·프록시 비밀키 인증)
   → secure onprem app 127.0.0.1:51874
   → 기존 Qwen llama-server 127.0.0.1:51912
 ```
 
-- 맥미니 기준 폴더: `/Users/eomgyuhyeon/Services/trid-onprem`. 앱 기준 소스는 `d32549d`이며 네이티브 바인딩·배포 어댑터를 적용한 `releases/d32549d-native`를 사용합니다. `venv/`와 `data/onprem.json`, `data/onprem.db`는 기준 폴더에 있습니다.
-- 배포 소스: `deploy/onprem/Caddyfile.test`, `deploy/onprem/start-test-gateway.sh`, `deploy/onprem/wrangler.test.json`, `deploy/onprem/requirements-macos-arm64.txt`. Python 3.12 venv에 해시 고정 macOS arm64 의존성과 앱 wheel(`--no-deps`)을 설치합니다. 앱은 `--bind 127.0.0.1`을 사용하고 **`--insecure-dev`를 사용하지 않습니다.** [네이티브 실행 안내](ONPREM.md#3-6-시작)
-- 새 launchd 작업은 `co.tridatum.trid.onprem`(앱), `co.tridatum.trid.onprem.gateway`(Caddy)입니다. 기존 `co.tridatum.trid.site.tunnel`과 기존 site·모델은 보존했습니다. **`co.tridatum.trid.site` supervisor를 중지하지 마십시오. 현재 앱도 사용하는 llama-server를 소유합니다.**
+- 맥미니 기준 폴더: `/Users/eomgyuhyeon/Services/trid-onprem`. 현재 앱은 `6bb85bd` UI 증분 릴리스인 `releases/6bb85bd-native`이며, 실행 Python은 `/Users/eomgyuhyeon/Services/trid-onprem/releases/6bb85bd-native/venv/bin/python`입니다. 기준 폴더의 `data/onprem.json`, `data/onprem.db`와 기존 계정·자격 증명을 그대로 사용합니다. 이전 PDF 앱의 wheel 설치 환경인 기준 폴더의 `venv/`는 롤백용으로 보존합니다.
+- 배포 소스: `deploy/onprem/Caddyfile.test`, `deploy/onprem/start-test-gateway.sh`, `deploy/onprem/wrangler.test.json`, `deploy/onprem/requirements-macos-arm64.txt`. Python 3.12 릴리스 전용 venv에 해시 고정 macOS arm64 의존성과 앱 wheel(`--no-deps`)을 설치합니다. 현재 패키지는 Pretendard 폰트와 라이선스를 포함합니다. 앱은 `--bind 127.0.0.1`을 사용하고 **`--insecure-dev`를 사용하지 않습니다.** [네이티브 실행 안내](ONPREM.md#3-6-시작)
+- launchd 작업은 `co.tridatum.trid.onprem`(앱), `co.tridatum.trid.onprem.gateway`(Caddy)입니다. 이번 UI 릴리스에서 Caddy·터널·모델 구성은 변경하지 않았습니다. 기존 `co.tridatum.trid.site.tunnel`과 기존 site·모델은 보존했습니다. **`co.tridatum.trid.site` supervisor를 중지하지 마십시오. 현재 앱도 사용하는 llama-server를 소유합니다.**
 - 프록시 비밀키는 기존 `/Users/eomgyuhyeon/Services/trid-site/.runtime/proxy-secret`에서 공급합니다. 값·관리자 비밀번호·자격 증명은 문서나 저장소에 게시하지 않습니다.
 - Worker가 신뢰 가능한 클라이언트 IP로 설정한 `X-Trid-Client-IP`만 Caddy의 호스트·비밀키 인증을 통과한 뒤 `X-Real-IP`로 앱에 전달합니다. 임의 클라이언트 헤더를 그대로 신뢰하지 않습니다.
+- Worker는 정확한 폰트 경로 `/fonts/PretendardVariable.woff2`만 허용합니다. 해당 폰트는 `Content-Type: font/woff2`, `Cache-Control: private, max-age=86400`으로 제공하며, 모든 페이지·API는 `Cache-Control: no-store`를 유지합니다.
 - 맥미니 전원·인터넷·GUI 로그인 세션이 필요하며 소규모 시험용으로 가용성을 보장하지 않습니다. 네이티브 앱에는 Compose식 앱 전체 하드 메모리 상한이 없습니다.
 
 ### 확인 범위와 수락 경계
 
-- 공개 HTTPS에서 로그인, 관리자 화면, PDF 업로드 후 질문, CSV 내보내기 동작을 확인했습니다. 공개 health는 HTTP200, 인증 없는 직접 원점 접근은 HTTP403이었으며, IP 전달 수정 뒤 이용 기록의 클라이언트 IP가 올바른 것을 확인했습니다.
-- 코어 단위 테스트83개 + 업로드 테스트5개, Worker 테스트15개를 통과했습니다.
+- 최초 PDF 앱 배포에서는 공개 HTTPS 로그인, 관리자 화면, PDF 업로드 후 질문, CSV 내보내기를 확인했습니다. 인증 없는 직접 원점 접근은 HTTP403이었으며, IP 전달 수정 뒤 이용 기록의 클라이언트 IP가 올바른 것을 확인했습니다.
+- 이번 UI 증분 릴리스에서는 기존 관리자 로그인·PDF 업로드·질문 동작과 공개 health HTTP200을 확인했습니다. 설치된 폰트의 HTTP200, MIME·캐시 헤더와 크기2,057,688바이트를 확인했습니다. 실제 Chrome에서도 Pretendard Variable 로드·폰트 리소스 디코딩(2,057,688바이트)을 확인했습니다. 데스크톱 화면은 2열과 문서 자동 펼침, 모바일 너비390px에서는 패널 세로 배치·가로 넘침 없음·업로드 문서 접힘을 확인했습니다. 실제 질문 응답 렌더링과 모델 정보 카드의 정의 항목 표시도 확인했습니다.
+- 이번 릴리스의 Python CLI·서버 대상 테스트37개와 Worker 테스트16개를 통과했습니다. 최초 PDF 앱 배포의 코어 단위 테스트83개 + 업로드 테스트5개, Worker 테스트15개 통과 기록과는 구분합니다.
 - 실제 질문 응답 예시는 **검증되지 않은 답변**이었으며, 연결·기능 확인을 답변 품질 합격으로 취급하지 않습니다. 원본 모델의 품질 기준 미달 표시는 유지합니다.
 - 이는 **인터넷 공개 macOS 네이티브 배포**의 확인입니다. 오프라인 tar 납품, Linux Compose 설치·수락, 전체 앱 메모리 격리 또는 기관 보안 적합성 검증을 완료했다는 뜻이 아닙니다.
 
-### 이전 공개 데모로 롤백
+### 이전 PDF 앱으로 롤백
 
-기존 site와 모델을 보존한 상태에서 **터널과 Worker를 함께** 되돌립니다. 아래는 운영자가 필요할 때 수행할 복구 절차이며, 현재 배포에서 실행할 정지 명령이 아닙니다.
+이번 UI 릴리스 직전의 PDF 앱으로 되돌릴 때는 아래 절차를 사용합니다. 기준 폴더는 `/Users/eomgyuhyeon/Services/trid-onprem`입니다. Caddy·터널·모델은 바꾸거나 중지하지 않습니다.
+
+1. 기준 폴더의 `rollback/6bb85bd-before.plist`를 `/Users/eomgyuhyeon/Library/LaunchAgents/co.tridatum.trid.onprem.plist`로 복원합니다. 이전 앱은 기준 폴더에 보존한 `venv/`의 wheel 설치 환경을 사용합니다.
+2. `launchctl bootout gui/501/co.tridatum.trid.onprem`으로 현재 앱을 내립니다. `launchctl print gui/501/co.tridatum.trid.onprem`에서 작업이 완전히 등록 해제된 것을 확인한 **뒤에만** `launchctl bootstrap gui/501 /Users/eomgyuhyeon/Library/LaunchAgents/co.tridatum.trid.onprem.plist`로 복원한 앱을 올립니다.
+3. PDF 앱용 Worker 설정으로 `wrangler versions deploy 66d5bd19-d46d-4a1e-a134-ce565c98daee@100% --yes --config deploy/onprem/wrangler.test.json`을 실행합니다.
+4. 공개 health·로그인·PDF 업로드·질문 동작을 확인합니다. 앱 재시작으로 메모리의 세션과 PDF가 사라지므로 다시 로그인하고 PDF를 다시 올려야 합니다. 계정·이용 기록은 보존됩니다.
+
+배포 전 SQLite 온라인 백업은 기준 폴더의 `rollback/6bb85bd-before.db`입니다. 이번 릴리스에는 스키마 마이그레이션이 없으므로 **일반적인 앱 롤백에서는 현재 `data/onprem.db`를 그대로 유지**합니다. 백업으로 덮어써 배포 이후의 계정·이용 기록을 잃지 마십시오.
+
+### 이전 그래프 공개 데모로 롤백 (최초 PDF 전환의 복구 이력)
+
+아래는 UI 릴리스 직전 PDF 앱이 아니라, **최초 PDF 전환 이전의 그래프 데모**로 복구하는 절차입니다. 기존 site와 모델을 보존한 상태에서 **터널과 Worker를 함께** 되돌립니다. 운영자가 필요할 때 수행할 복구 절차이며, 현재 배포에서 실행할 정지 명령이 아닙니다.
 
 1. 맥미니에서 `/Users/eomgyuhyeon/Services/trid-onprem/rollback/tunnel-config.json`을 `/Users/eomgyuhyeon/Services/trid-site/tunnel/config.json`으로 복원합니다.
 2. `launchctl kickstart -k gui/501/co.tridatum.trid.site.tunnel`로 기존 터널 작업을 다시 시작합니다.

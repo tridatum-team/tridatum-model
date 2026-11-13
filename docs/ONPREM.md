@@ -171,10 +171,12 @@ python -m trid.onprem serve --config /path/to/onprem.json --bind 127.0.0.1
 
 **현재 공개 시험 배포의 네이티브 설치·실행 (macOS arm64, Python 3.12):**
 
-- 운영 기준 폴더는 `/Users/eomgyuhyeon/Services/trid-onprem`이고, 앱 릴리스는 `releases/d32549d-native`입니다. 같은 기준 폴더의 `venv/`, `data/onprem.json`, `data/onprem.db`를 사용합니다.
-- Python 3.12로 전용 venv를 만들고, 릴리스의 `deploy/onprem/requirements-macos-arm64.txt`를 `venv/bin/python -m pip install --require-hashes -r <해당 파일>`로 설치합니다. 앱은 빌드한 wheel을 `venv/bin/python -m pip install --no-deps <앱 wheel>`로 설치합니다. 해시 고정 패키지 설치와 wheel 설치를 분리하며, 일반 개발용 의존성 전체를 설치하지 않습니다.
-- 앱은 `venv/bin/python -I -m trid.onprem serve --config /Users/eomgyuhyeon/Services/trid-onprem/data/onprem.json --bind 127.0.0.1`로 운영 모드를 유지합니다. 설정의 앱 포트는 `51874`, 모델은 기존 Qwen llama-server의 루프백 `51912`입니다. `--insecure-dev`를 사용하지 않습니다.
-- 새 launchd 작업 `co.tridatum.trid.onprem`과 `co.tridatum.trid.onprem.gateway`가 앱과 Caddy를 담당합니다. Caddy는 루프백 `51875`에서 호스트·프록시 비밀키를 확인한 요청만 앱으로 보냅니다. Worker가 지정한 `X-Trid-Client-IP`는 이 인증을 통과한 뒤에만 `X-Real-IP`가 됩니다.
+- 운영 기준 폴더는 `/Users/eomgyuhyeon/Services/trid-onprem`이고, 현재 앱은 `6bb85bd` UI 증분 릴리스인 `releases/6bb85bd-native`입니다. 실행 Python은 `/Users/eomgyuhyeon/Services/trid-onprem/releases/6bb85bd-native/venv/bin/python`입니다. 기존 기준 폴더의 `data/onprem.json`, `data/onprem.db`와 계정·자격 증명을 그대로 사용하며, 기준 폴더의 이전 `venv/`는 롤백용으로 보존합니다.
+- Python 3.12로 릴리스 전용 venv를 만들고, 릴리스의 `deploy/onprem/requirements-macos-arm64.txt`를 `<릴리스 venv>/bin/python -m pip install --require-hashes -r <해당 파일>`로 설치합니다. 앱은 빌드한 wheel을 `<릴리스 venv>/bin/python -m pip install --no-deps <앱 wheel>`로 설치합니다. 해시 고정 패키지 설치와 wheel 설치를 분리하며, 일반 개발용 의존성 전체를 설치하지 않습니다. 현재 패키지는 Pretendard 폰트와 라이선스를 포함합니다.
+- 앱은 `/Users/eomgyuhyeon/Services/trid-onprem/releases/6bb85bd-native/venv/bin/python -I -m trid.onprem serve --config /Users/eomgyuhyeon/Services/trid-onprem/data/onprem.json --bind 127.0.0.1`로 운영 모드를 유지합니다. 설정의 앱 포트는 `51874`, 모델은 기존 Qwen llama-server의 루프백 `51912`입니다. `--insecure-dev`를 사용하지 않습니다.
+- launchd 작업 `co.tridatum.trid.onprem`과 `co.tridatum.trid.onprem.gateway`가 앱과 Caddy를 담당합니다. Caddy는 루프백 `51875`에서 호스트·프록시 비밀키를 확인한 요청만 앱으로 보냅니다. Worker가 지정한 `X-Trid-Client-IP`는 이 인증을 통과한 뒤에만 `X-Real-IP`가 됩니다. 이번 UI 릴리스에서 Caddy·터널·모델 구성은 바꾸지 않았습니다.
+- 현재 Worker는 `6557e165-9101-401b-8757-91bdcd349bb1`입니다. 폰트는 정확한 경로 `/fonts/PretendardVariable.woff2`만 허용하며 `Content-Type: font/woff2`, `Cache-Control: private, max-age=86400`으로 제공합니다. 모든 페이지·API는 `Cache-Control: no-store`를 유지합니다.
+- 앱 재시작·롤백 시 메모리의 로그인 세션과 PDF가 사라지므로 다시 로그인하고 PDF를 다시 올려야 합니다. SQLite의 계정·이용 기록은 보존됩니다. 이전 PDF 앱과 그 이전 그래프 데모의 복구 절차는 [공개 배포 롤백 안내](SHARING.md#이전-pdf-앱으로-롤백)를 참조하십시오.
 - 네이티브 앱에는 Compose의 `mem_limit: 1g`와 같은 **앱 전체 하드 메모리 상한이 없습니다.** PDF 처리 제한이나 기존 모델 감독을 앱 전체 메모리 격리로 해석하지 마십시오.
 - 공개 시험 배포의 관리·purge 명령도 위 venv의 Python과 호스트 설정 경로를 사용합니다. 아래 `docker compose` 명령은 Linux 구성용이며 네이티브 배포에 그대로 실행하지 않습니다. 기존 `co.tridatum.trid.site` supervisor는 공유 llama-server를 소유하므로 **중지하지 마십시오.**
 

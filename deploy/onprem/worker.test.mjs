@@ -9,7 +9,7 @@ const env = {
   DEMO_RATE_LIMIT: {limit: async () => ({success: true})},
 };
 const site = `https://${env.PUBLIC_HOST}`;
-const getPaths = ['/', '/healthz', '/app.js', '/login.js', '/admin.js', '/common.css', '/admin', '/api/admin/events.csv'];
+const getPaths = ['/', '/healthz', '/app.js', '/login.js', '/admin.js', '/common.css', '/admin', '/api/admin/events.csv', '/fonts/PretendardVariable.woff2'];
 const postPaths = [
   '/api/login', '/api/logout', '/api/password', '/api/load', '/api/ask', '/api/clear',
   '/api/admin/users/list', '/api/admin/users/create', '/api/admin/users/update', '/api/admin/events',
@@ -192,6 +192,24 @@ test('preserves CSV authentication and filters exactly, plus download and browse
   for (const [name, value] of Object.entries(responseHeaders)) assert.equal(response.headers.get(name), value);
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new TextEncoder().encode(csv));
   assertPrivate(response);
+});
+
+test('caches only successful font responses, never pages or font errors', async t => {
+  const cases = [
+    ['/fonts/PretendardVariable.woff2', 200, 'font/woff2', 'private, max-age=86400'],
+    ['/fonts/PretendardVariable.woff2', 404, 'font/woff2', 'no-store'],
+    ['/fonts/PretendardVariable.woff2', 200, 'text/html', 'no-store'],
+    ['/', 200, 'text/html', 'no-store'],
+    ['/admin', 200, 'text/html', 'no-store'],
+  ];
+  const upstream = t.mock.method(globalThis, 'fetch');
+  for (const [path, status, mime, expected] of cases) {
+    upstream.mock.mockImplementation(async () => new Response('body', {
+      status, headers: {'Content-Type': mime, 'Cache-Control': 'public, max-age=31536000'},
+    }));
+    const response = await worker.fetch(new Request(`${site}${path}`), env);
+    assert.equal(response.headers.get('Cache-Control'), expected, `${path} ${status} ${mime}`);
+  }
 });
 
 test('preserves login, logout and expired-session Set-Cookie responses and application errors', async t => {
