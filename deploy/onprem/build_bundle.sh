@@ -24,21 +24,25 @@ mkdir -p "$OUT/certs" "$OUT/data"
 
 # Wheels for the app image (the image build itself installs with --no-index).
 rm -rf deploy/onprem/wheels
-python3 -m pip download --only-binary=:all: --platform manylinux2014_x86_64 \
-  --python-version 3.12 --implementation cp --abi cp312 \
-  -d deploy/onprem/wheels tokenizers==0.23.3 pypdf==6.21.2
+python3 -m pip download --no-deps --require-hashes --only-binary=:all: \
+  --platform manylinux2014_x86_64 --python-version 3.12 --implementation cp --abi cp312 \
+  -d deploy/onprem/wheels -r deploy/onprem/requirements-app.txt
+
+BASES="python:3.12.8-slim-bookworm debian:12.8-slim $CADDY_IMAGE"
+for base in $BASES; do docker pull "$base"; done
 
 docker build -f deploy/onprem/Dockerfile.app -t trid-onprem-app:latest .
 docker build -f deploy/onprem/Dockerfile.llm -t trid-onprem-llm:latest .
-docker pull "$CADDY_IMAGE"
-
 docker save -o "$OUT/$NAME.tar" trid-onprem-app:latest trid-onprem-llm:latest "$CADDY_IMAGE"
 
 {
   for img in trid-onprem-app:latest trid-onprem-llm:latest "$CADDY_IMAGE"; do
     echo "$img digests=$(docker image inspect --format '{{json .RepoDigests}}' "$img") id=$(docker image inspect --format '{{.Id}}' "$img")"
   done
-  echo "llama.cpp commit 8ca4060"
+  for base in $BASES; do
+    echo "base $base digests=$(docker image inspect --format '{{json .RepoDigests}}' "$base")"
+  done
+  echo "llama.cpp commit 8ca4060b7e30e76baaa5670ee1ec1b760b7f8552"
   echo "model sha256 $MODEL_SHA"
   echo "tokenizer sha256 $TOK_SHA"
 } > "$OUT/IMAGES.txt"

@@ -2,6 +2,10 @@
 	admin off
 	auto_https off
 	skip_install_trust
+	ocsp_stapling off
+	servers {
+		protocols h1 h2
+	}
 }
 
 https://{$TRID_HOSTNAME} {

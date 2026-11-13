@@ -9,8 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TOKENIZERS_PARALLELISM=false
 
 COPY deploy/onprem/wheels /tmp/wheels
-RUN pip install --no-index --find-links /tmp/wheels tokenizers==0.23.3 pypdf==6.21.2 \
-    && rm -rf /tmp/wheels
+COPY deploy/onprem/requirements-app.txt /tmp/requirements-app.txt
+RUN pip install --no-index --no-deps --require-hashes --find-links /tmp/wheels -r /tmp/requirements-app.txt \
+    && rm -rf /tmp/wheels /tmp/requirements-app.txt
 
 # The PDF worker runs as `python -I -m trid.pdf_extract_worker`, so the trimmed
 # package must live in site-packages, not only in the working directory.
@@ -24,7 +25,7 @@ RUN set -eu; \
     cp -r /tmp/trid_src/trid "$site/trid"; \
     rm -rf /tmp/trid_src; \
     find "$site/trid" -name '__pycache__' -type d -prune -exec rm -rf {} +; \
-    python -I -c "import trid.pdf_extract_worker, trid.onprem.server"; \
+    python -I -c "import trid.pdf_extract_worker, trid.onprem.server, trid.onprem.__main__"; \
     if python -I -c "import torch" 2>/dev/null; then echo "torch must not be installed" >&2; exit 1; fi; \
     if python -I -c "import numpy" 2>/dev/null; then echo "numpy must not be installed" >&2; exit 1; fi
 
@@ -34,7 +35,7 @@ RUN echo "73551e65acfa80834c235602900f31dc353ce230bfb69939ffdf44ca26ebc58d  /opt
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin trid \
     && mkdir /data && chown 10001:10001 /data
 USER 10001:10001
-WORKDIR /data
+WORKDIR /
 VOLUME /data
 EXPOSE 8080
-CMD ["python", "-m", "trid.onprem", "serve", "--config", "/data/onprem.json"]
+CMD ["python", "-I", "-m", "trid.onprem", "serve", "--config", "/data/onprem.json"]

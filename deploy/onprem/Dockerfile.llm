@@ -8,8 +8,9 @@ RUN apt-get update \
 WORKDIR /src
 RUN git init . \
     && git remote add origin https://github.com/ggml-org/llama.cpp.git \
-    && git fetch --depth 1 origin 8ca4060 \
-    && git checkout FETCH_HEAD
+    && git fetch --depth 1 origin 8ca4060b7e30e76baaa5670ee1ec1b760b7f8552 \
+    && git checkout FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "8ca4060b7e30e76baaa5670ee1ec1b760b7f8552"
 RUN cmake -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF \

@@ -73,7 +73,8 @@ class DockerfileTests(unittest.TestCase):
         for flag in ('-DGGML_NATIVE=OFF', '-DGGML_AVX2=ON', '-DGGML_CUDA=OFF',
                      '-DGGML_METAL=OFF', '-DLLAMA_CURL=OFF'):
             self.assertIn(flag, text)
-        self.assertIn('8ca4060', text)
+        self.assertIn('8ca4060b7e30e76baaa5670ee1ec1b760b7f8552', text)
+        self.assertIn('git rev-parse HEAD', text)
         self.assertIn('--no-webui', text)
         self.assertIn('-c 4096', text)
 
@@ -86,9 +87,12 @@ class DockerfileTests(unittest.TestCase):
         text = read('Dockerfile.app')
         self.assertIn(TOK_SHA, text)
         self.assertIn('/opt/trid/tokenizer.json', text)
-        self.assertIn('python -I -c "import trid.pdf_extract_worker, trid.onprem.server"', text)
+        self.assertIn('python -I -c "import trid.pdf_extract_worker, trid.onprem.server, trid.onprem.__main__"', text)
         self.assertIn('python -I -c "import torch"', text)
-        self.assertIn('--no-index', text)
+        self.assertIn('--no-index --no-deps --require-hashes', text)
+        self.assertIn('"python", "-I", "-m", "trid.onprem"', text)
+        self.assertIn('trid.onprem.__main__', text)
+        self.assertNotIn('WORKDIR /data', text)
         self.assertRegex(text, r'(?m)^FROM python:3\.12\.\d+-slim-bookworm$')
         self.assertRegex(text, r'(?m)^USER 10001')
         self.assertIn('"serve", "--config", "/data/onprem.json"', text)
@@ -125,13 +129,21 @@ class DockerfileTests(unittest.TestCase):
                     self.assertIn(node.module, copied_modules, f'{path.name}: {node.module}')
 
 
+class RequirementsTests(unittest.TestCase):
+    def test_app_requirements_two_pins_with_hashes(self):
+        lines = [l for l in read('requirements-app.txt').splitlines() if l.strip() and not l.startswith('#')]
+        self.assertEqual(len(lines), 2)
+        pins = sorted(re.match(r'^(\S+==\S+) --hash=sha256:[0-9a-f]{64}$', l).group(1) for l in lines)
+        self.assertEqual(pins, ['pypdf==6.21.2', 'tokenizers==0.23.3'])
+
+
 class CaddyTests(unittest.TestCase):
     def test_caddyfile_settings(self):
         text = read('Caddyfile')
         for expected in ('admin off', 'auto_https off', '{$TRID_HOSTNAME}',
                          '/certs/cert.pem /certs/key.pem', 'reverse_proxy app:8080',
                          'header_up X-Real-IP {remote_host}', 'header_up -X-Forwarded-For',
-                         'max_size 3MB'):
+                         'max_size 3MB', 'ocsp_stapling off', 'protocols h1 h2'):
             self.assertIn(expected, text)
 
 
@@ -144,7 +156,7 @@ class BundleTests(unittest.TestCase):
     def test_build_bundle_and_licenses(self):
         script = read('build_bundle.sh')
         for expected in (MODEL_SHA, TOK_SHA, 'docker save', 'SHA256SUMS', 'IMAGES.txt',
-                         'RepoDigests', 'make_self_signed.sh', 'onprem.example.json'):
+                         'RepoDigests', 'docker pull', 'base $base', '--no-deps --require-hashes', 'make_self_signed.sh', 'onprem.example.json'):
             self.assertIn(expected, script)
         licenses = read('LICENSES.md')
         for name in ('Qwen3', 'llama.cpp', 'Caddy', 'tokenizers', 'pypdf', 'PSF'):
@@ -153,6 +165,8 @@ class BundleTests(unittest.TestCase):
     def test_self_signed_script(self):
         text = read('make_self_signed.sh')
         self.assertIn('-days 825', text)
+        self.assertIn('chmod 600', text)
+        self.assertNotIn('chmod 644', text)
         self.assertIn('subjectAltName', text)
 
 

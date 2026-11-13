@@ -1,0 +1,3 @@
+# Exactly these two wheels, no dependencies (hashes from uv.lock).
+tokenizers==0.23.3 --hash=sha256:376851d22bcf9d650a5c3090bb83e6cf9e895fbf0595369fa4cd43c1f69b5f87
+pypdf==6.21.2 --hash=sha256:1d44d1a3a200f25062adff0085b02040e4646431ac2ccac22e42679e91466084
