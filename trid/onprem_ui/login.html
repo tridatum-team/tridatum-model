@@ -9,13 +9,15 @@
 <body>
 <main>
 <h1>TRID 문서 확인</h1>
-<p>MODEL_STATUS_PLACEHOLDER</p>
-<form id="login" method="post" action="/api/login">
-<label>아이디 <input name="username" autocomplete="username" required></label>
-<label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label>
-<button type="submit">로그인</button>
+<p class="notice">MODEL_STATUS_PLACEHOLDER</p>
+<form id="login" class="card plain" method="post" action="/api/login">
+<label for="username">아이디</label>
+<input id="username" name="username" type="text" autocomplete="username" required>
+<label for="password">비밀번호</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required>
+<div class="row end"><button id="submit" class="btn primary" type="submit">로그인</button></div>
 </form>
-<p id="message" role="alert"></p>
+<p id="message" class="msg" role="alert"></p>
 </main>
 <script src="/login.js"></script>
 </body>

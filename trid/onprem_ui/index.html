@@ -6,16 +6,63 @@
 <meta name="csrf-token" content="TOKEN_PLACEHOLDER">
 <meta name="must-change" content="MUST_CHANGE_PLACEHOLDER">
 <meta name="role" content="ROLE_PLACEHOLDER">
+<meta name="username" content="USERNAME_PLACEHOLDER">
 <title>TRID 문서 확인</title>
 <link rel="stylesheet" href="/common.css">
 </head>
 <body>
-<main>
+<header class="topbar">
 <h1>TRID 문서 확인</h1>
-<section id="model-card">
+<span id="who" class="who"></span>
+<a id="admin-link" class="btn small" href="/admin" hidden>관리자 화면</a>
+<button id="logout" class="btn small" type="button">로그아웃</button>
+</header>
+<main>
+<details id="model-card" class="card">
+<summary>모델 정보</summary>
 <pre>MODEL_CARD_PLACEHOLDER</pre>
+</details>
+
+<section id="password-view" class="card plain" hidden>
+<h2>비밀번호 변경</h2>
+<p class="notice">처음 로그인했거나 비밀번호가 초기화됐습니다. 새 비밀번호(10자 이상)로 바꾼 뒤 이용할 수 있습니다.</p>
+<form id="password-form">
+<label for="current">현재 비밀번호</label>
+<input id="current" type="password" autocomplete="current-password" required>
+<label for="new-password">새 비밀번호</label>
+<input id="new-password" type="password" autocomplete="new-password" minlength="10" required>
+<div class="row end"><button class="btn primary" type="submit">비밀번호 변경</button></div>
+</form>
+<p id="password-message" class="msg" role="alert"></p>
 </section>
-<div id="app"></div>
+
+<div id="work-view">
+<section class="card plain" aria-labelledby="doc-title">
+<h2 id="doc-title">1. 문서 넣기</h2>
+<label for="file">PDF 파일 선택 (텍스트 PDF)</label>
+<input id="file" type="file" accept=".pdf,application/pdf">
+<div class="row">
+<button id="load" class="btn primary" type="button">문서 읽기</button>
+<button id="clear" class="btn" type="button" disabled>자료 지우기</button>
+</div>
+<p id="doc-status" class="msg" role="status"></p>
+<details id="doc-view" hidden>
+<summary id="doc-summary">추출 문서 보기</summary>
+<div id="doc-pages"></div>
+</details>
+</section>
+
+<section class="card plain" aria-labelledby="ask-title">
+<h2 id="ask-title">2. 질문하기</h2>
+<p class="notice">질문마다 완전한 문장으로 써 주세요. 이전 질문은 이어서 해석하지 않습니다.</p>
+<label for="question">질문 (2,000자 이하)</label>
+<textarea id="question" maxlength="2000" spellcheck="false"></textarea>
+<div class="counter"><span id="count">0</span> / 2,000</div>
+<div class="row end"><button id="ask" class="btn primary" type="button" disabled>질문하기</button></div>
+<p id="ask-status" class="msg" role="status"></p>
+<div id="result" aria-live="polite"></div>
+</section>
+</div>
 </main>
 <script src="/app.js"></script>
 </body>

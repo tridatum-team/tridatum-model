@@ -33,6 +33,7 @@ SMALL_BODY = 16 * 1024
 STATIC = {
     '/app.js': 'text/javascript; charset=utf-8',
     '/login.js': 'text/javascript; charset=utf-8',
+    '/admin.js': 'text/javascript; charset=utf-8',
     '/common.css': 'text/css; charset=utf-8',
 }
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; "
@@ -215,6 +216,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                         .replace('TOKEN_PLACEHOLDER', html.escape(session.csrf, quote=True))
                         .replace('MUST_CHANGE_PLACEHOLDER', '1' if session.must_change else '0')
                         .replace('ROLE_PLACEHOLDER', html.escape(session.role, quote=True))
+                        .replace('USERNAME_PLACEHOLDER', html.escape(session.username, quote=True))
                         .replace('MODEL_CARD_PLACEHOLDER', card_text))
             self.respond(200, text.encode(), 'text/html; charset=utf-8')
 
