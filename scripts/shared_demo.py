@@ -30,6 +30,8 @@ from trid.document_case import (CONTEXT_OVERFLOW, LEADING_TAGS, MIN_QUOTE_CHARS,
                                 answer_document_case as _answer_document_case, evidence_start)
 from trid.extractive import load_reader, read as read_extractive, passage_spans
 from trid.prompts import rag_prompt
+from trid import pdf_isolated
+from trid.pdf_isolated import DEMO_LIMITS
 from trid.pdf_documents import Document, DocumentError, make_chunks, answer_document, retrieve
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1695,42 +1697,7 @@ class State:
 
 
 def parse_pdf(body, name, tok):
-    # Parsing untrusted PDFs happens in a separate process with a wall-clock timeout.
-    try:
-        process = subprocess.Popen(
-            [sys.executable, str(ROOT / 'scripts/shared_pdf_extract.py')],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            cwd=ROOT,
-        )
-        output = []
-        def communicate():
-            output.append(process.communicate(body)[0])
-        communication = threading.Thread(target=communicate, daemon=True)
-        communication.start()
-        deadline = time.monotonic() + 15
-        try:
-            while process.poll() is None:
-                if time.monotonic() > deadline:
-                    raise DocumentError('PDF 처리 시간이 초과됐습니다. 더 작은 문서를 넣어 주세요.')
-                if sys.platform == 'darwin':
-                    memory = subprocess.run(['/bin/ps', '-o', 'rss=', '-p', str(process.pid)], capture_output=True, timeout=2).stdout.strip()
-                    if memory and int(memory) > 512 * 1024:
-                        raise DocumentError('PDF 처리 메모리 한도를 넘었습니다. 더 작은 문서를 넣어 주세요.')
-                communication.join(.1)
-        finally:
-            if process.poll() is None:
-                process.kill()
-            process.wait(timeout=3)
-            communication.join(3)
-        if process.returncode or not output:
-            raise DocumentError('PDF를 읽지 못했습니다. 작은 텍스트 PDF로 다시 시도해 주세요.')
-        result = json.loads(output[0])
-    except (subprocess.SubprocessError, ValueError):
-        raise DocumentError('PDF를 읽지 못했습니다. 텍스트가 있는 작은 PDF로 다시 시도해 주세요.')
-    if 'error' in result:
-        raise DocumentError(result['error'])
-    name = name.replace('\\', '/').rsplit('/', 1)[-1][:180] or 'document.pdf'
-    return Document(name, result['pages'], make_chunks(result['pages'], tok), result['warnings'])
+    return pdf_isolated.parse_pdf(body, name, tok, limits=DEMO_LIMITS)
 
 
 class BoundedServer(ThreadingHTTPServer):
