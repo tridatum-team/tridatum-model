@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# llama-server (CPU only, AVX2) with the Qwen3-1.7B Q8_0 model baked in.
+# Build context: repository root. The build machine needs internet for the git fetch.
+FROM debian:12.8-slim AS build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates cmake g++ make \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git init . \
+    && git remote add origin https://github.com/ggml-org/llama.cpp.git \
+    && git fetch --depth 1 origin 8ca4060 \
+    && git checkout FETCH_HEAD
+RUN cmake -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DGGML_NATIVE=OFF -DGGML_AVX2=ON \
+        -DGGML_CUDA=OFF -DGGML_METAL=OFF \
+        -DLLAMA_CURL=OFF \
+    && cmake --build build --target llama-server -j"$(nproc)"
+
+FROM debian:12.8-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10002 --no-create-home --shell /usr/sbin/nologin llm
+COPY --from=build /src/build/bin/llama-server /usr/local/bin/llama-server
+COPY runs/open-weight-base/Qwen3-1.7B-Q8_0.gguf /models/Qwen3-1.7B-Q8_0.gguf
+RUN echo "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a  /models/Qwen3-1.7B-Q8_0.gguf" | sha256sum -c -
+USER 10002:10002
+ENV LLM_THREADS=4
+EXPOSE 8080
+CMD ["sh", "-c", "exec llama-server -m /models/Qwen3-1.7B-Q8_0.gguf -c 4096 --host 0.0.0.0 --port 8080 -t ${LLM_THREADS:-4} --no-webui"]
