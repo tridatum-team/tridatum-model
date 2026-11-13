@@ -193,11 +193,13 @@ class Auth:
             if new == current:
                 raise ValueError("새 비밀번호는 현재 비밀번호와 달라야 합니다.")
             version = user.password_version + 1
-            self._store.update_user(
-                user.username, pw_hash=hash_password(new), must_change=False,
-                password_version=version, failed=0, locked_until=0.0)
-            session.password_version = version
-            session.must_change = False
+            new_hash = hash_password(new)
+            with self._lock:  # store bump and session version change together, so this session cannot be revoked
+                self._store.update_user(
+                    user.username, pw_hash=new_hash, must_change=False,
+                    password_version=version, failed=0, locked_until=0.0)
+                session.password_version = version
+                session.must_change = False
             self._drop_user_sessions(user.username, keep=session.sid)
             self._store.log("password_changed", user.username, ip, "ok")
 

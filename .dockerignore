@@ -1,0 +1,17 @@
+# Build context is the repo root. Send only what deploy/onprem/Dockerfile.app and Dockerfile.llm COPY.
+*
+!trid/__init__.py
+!trid/pdf_documents.py
+!trid/pdf_isolated.py
+!trid/pdf_extract_worker.py
+!trid/document_case.py
+!trid/llama_client.py
+!trid/prompts.py
+!trid/case_prompts.py
+!trid/onprem/
+!trid/onprem_ui/
+!deploy/onprem/wheels/
+!deploy/onprem/requirements-app.txt
+!runs/open-weight-base/Qwen3-1.7B-Q8_0.gguf
+!runs/reader-factorial-01-cpt-v1-v2-v4/tokenizer.json
+**/__pycache__

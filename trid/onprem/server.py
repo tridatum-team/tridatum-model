@@ -19,7 +19,7 @@ import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from trid.document_case import CONTEXT_OVERFLOW, answer_document_case, fit_own_passages
 from trid.llama_client import complete, count_prompt_tokens
@@ -30,6 +30,7 @@ from trid.pdf_isolated import parse_pdf
 
 UI_DIR = Path(__file__).resolve().parent.parent / 'onprem_ui'
 SMALL_BODY = 16 * 1024
+COUNT_TIMEOUT = 10  # seconds for the token-count calls; a hung model must not hold the lock for minutes
 STATIC = {
     '/app.js': 'text/javascript; charset=utf-8',
     '/login.js': 'text/javascript; charset=utf-8',
@@ -39,6 +40,7 @@ STATIC = {
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; "
        "object-src 'none'; base-uri 'none'; form-action 'self'")
 BUSY_ASK = '다른 질문을 처리 중입니다. 잠시 후 다시 시도해 주세요.'
+BUSY_PARSE = '다른 문서를 읽는 중입니다. 잠시 후 다시 시도해 주세요.'
 BAD_LOGIN = '아이디 또는 비밀번호가 올바르지 않습니다.'
 MODEL_DOWN = '모델 서버에 연결할 수 없습니다. 관리자에게 문의해 주세요.'
 GENERIC_ERROR = '처리 중 오류가 발생했습니다.'
@@ -82,7 +84,7 @@ def _default_answer(config):
             document, question, config.llm_base, config.family, config.context,
             max_tokens=config.max_tokens, complete=complete,
             fit_context=lambda s, b, base, c, m: fit_own_passages(
-                s, b, lambda msgs: count_prompt_tokens(base, msgs), c, m))
+                s, b, lambda msgs: count_prompt_tokens(base, msgs, timeout=COUNT_TIMEOUT), c, m))
     return answer
 
 
@@ -91,6 +93,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
     answer = answer or _default_answer(config)
     cookie_name = 'trid-dev' if insecure_dev else '__Host-trid'
     gen_lock = threading.Lock()
+    parse_lock = threading.Semaphore(1)  # uploads never compete with generation for gen_lock
     rate_lock = threading.Lock()
     origin_holder = {'value': 'https://' + config.hostname}
     admin_api = AdminApi(store, auth)
@@ -352,12 +355,12 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
 
         def load(self, session, body, ip):
             digest = hashlib.sha256(body).hexdigest()
-            if not gen_lock.acquire(timeout=config.lock_wait):
-                self.respond(503, {'error': BUSY_ASK}); return
+            if not parse_lock.acquire(timeout=config.pdf.wall_seconds + config.lock_wait):
+                self.respond(503, {'error': BUSY_PARSE}); return
             try:
-                name = unquote(self.headers.get('X-File-Name', 'document.pdf'))[:200] or 'document.pdf'
+                # The file name never leaves the browser: any X-File-Name header is ignored.
                 try:
-                    doc = parse_pdf(body, name, tok, limits=config.pdf)
+                    doc = parse_pdf(body, 'document.pdf', tok, limits=config.pdf)
                 except DocumentError as e:
                     store.log('pdf_upload', session.username, ip, 'error', sha256=digest, status='error')
                     self.respond(400, {'error': str(e)}); return
@@ -373,7 +376,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 self.respond(200, {'document_id': document_id, 'name': doc.name,
                                    'pages': doc.pages, 'warnings': doc.warnings})
             finally:
-                gen_lock.release()
+                parse_lock.release()
 
         def ask(self, session, body, ip):
             request = self.json_body(body)
@@ -410,6 +413,9 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
                 self.respond(500, {'error': GENERIC_ERROR}); return
             finally:
                 gen_lock.release()
+            if auth.session(self.sid()) is not session:
+                log('error', status='error', error='session_revoked')
+                self.respond(401, {'error': '로그인이 필요합니다.'}, clear_cookie=True); return
             status = result.get('status')
             log('ok', status=status if isinstance(status, str) and _STATUS_RE.fullmatch(status) else 'unknown')
             self.respond(200, {k: v for k, v in result.items() if k not in ('checked', 'raw_output')})
@@ -418,6 +424,7 @@ def make_server(config, store, auth, tok, answer=None, insecure_dev: bool = Fals
         host = '127.0.0.1'  # the serve command passes 0.0.0.0 explicitly inside the container
     server = BoundedServer((host, config.port), Handler, slots=config.slots)
     server.generation_lock = gen_lock
+    server.parse_lock = parse_lock
     if insecure_dev:
         origin_holder['value'] = f'http://127.0.0.1:{server.server_address[1]}'
     return server

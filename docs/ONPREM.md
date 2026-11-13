@@ -106,7 +106,8 @@ echo 'TRID_HOSTNAME=trid.example.internal' > .env
 
 ```sh
 cp onprem.example.json data/onprem.json
-chown -R 10001:10001 data     # 앱은 uid 10001로 실행됩니다
+sudo chown -R 10001:10001 data     # 앱은 uid 10001로 실행됩니다
+sudo chmod 700 data                # data/onprem.db에는 비밀번호 해시와 접속 IP가 들어 있으므로 다른 사용자가 읽지 못하게 합니다
 ```
 
 `data/onprem.json`을 열어 `hostname`을 `.env`의 `TRID_HOSTNAME`과 같게 고칩니다. 견본 내용은 다음과 같습니다.
@@ -156,7 +157,7 @@ docker compose ps             # llm, app, tls 모두 running이어야 합니다
 docker compose logs app       # "서버를 시작합니다"가 보이면 정상
 ```
 
-`docker compose logs`에는 질문, 파일 이름, 답변, PDF 내용이 남지 않습니다(예외 클래스 이름만 기록).
+`docker compose logs`에는 질문, 파일 이름, 답변, PDF 내용이 남지 않습니다(예외 클래스 이름만 기록). 파일 이름은 브라우저가 서버로 보내지 않으며(화면 표시용으로만 보관), 서버는 항상 `document.pdf`라는 고정 이름만 씁니다. Caddy(`tls`)의 자체 로그는 `log default { output discard }`로 꺼져 있어 요청 정보가 남지 않습니다.
 
 ### 3-7. 첫 관리자 만들기
 
@@ -169,6 +170,12 @@ docker compose exec app python -I -m trid.onprem create-admin --config /data/onp
 브라우저에서 `https://<호스트 이름>/`에 접속해 로그인되는지 확인합니다.
 
 ### 3-8. 배포 전 점검 (release_check.py)
+
+빌드 머신 점검 목록(릴리스 전에 한 번 확인하고 기록합니다).
+
+- `docker compose logs llm`(기본 로그 수준)에 질문·프롬프트 문장이 없는지 확인합니다.
+- 강제로 502를 낸 뒤(예: `docker compose stop app`) `docker compose logs tls`에 요청 정보(경로, 헤더, 파일 이름)가 없는지 확인합니다.
+- 20쪽 PDF를 올려 질문하는 동안 `docker stats`로 `app` 메모리를 측정하고 `mem_limit`(1g) 안에 여유가 있는지 확인합니다.
 
 설치가 끝나면 점검 도구로 실제 설치본을 한 번 돌려 봅니다. 이 도구는 파이썬 3 표준 라이브러리만 쓰므로 별도 설치가 필요 없으며, 서버에 접속할 수 있는 PC 어디서나 실행할 수 있습니다.
 
@@ -256,7 +263,7 @@ docker compose exec app python -I -m trid.onprem create-admin --config /data/onp
 
 ```sh
 docker compose stop app
-cp -a data data-backup-$(date +%Y%m%d)
+sudo cp -a data data-backup-$(date +%Y%m%d)
 docker compose start app
 ```
 
@@ -273,9 +280,10 @@ docker compose start app
 
 ```sh
 docker compose stop app
-cp -a data-backup-<날짜>/. data/        # 방법 B로 받은 파일이면 backup-onprem.db를 data/onprem.db로 복사
-rm -f data/onprem.db-wal data/onprem.db-shm   # 방법 B 파일을 복원할 때만
-chown -R 10001:10001 data
+sudo cp -a data-backup-<날짜>/. data/        # 방법 B로 받은 파일이면 backup-onprem.db를 data/onprem.db로 복사
+sudo rm -f data/onprem.db-wal data/onprem.db-shm   # 방법 B 파일을 복원할 때만
+sudo chown -R 10001:10001 data
+sudo chmod 700 data
 docker compose start app
 ```
 

@@ -3,6 +3,9 @@
 	auto_https off
 	skip_install_trust
 	ocsp_stapling off
+	log default {
+		output discard
+	}
 	servers {
 		protocols h1 h2
 	}

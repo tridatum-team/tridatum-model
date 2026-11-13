@@ -7,7 +7,7 @@ const EVENT_LABELS = {
   login_ok: '로그인', login_failed: '로그인 실패', login_locked: '로그인 잠김', logout: '로그아웃',
   session_expired: '세션 만료', password_changed: '비밀번호 변경', pdf_upload: 'PDF 올리기', ask: '질문',
   clear: '자료 지우기', admin_create_user: '계정 생성', admin_update_user: '계정 변경',
-  admin_reset_password: '비밀번호 초기화', admin_export: '기록 내보내기',
+  admin_reset_password: '비밀번호 초기화', admin_export: '기록 내보내기', retention_purge: '보관 기간 정리',
 };
 const ROLE_LABELS = {user: '직원', admin: '관리자'};
 let offset = 0, lastCount = 0;

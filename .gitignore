@@ -36,3 +36,7 @@ reports/*.tmp
 .env.*
 !.env.example
 .dev.vars*
+
+# on-prem build outputs
+deploy/onprem/wheels/
+deploy/onprem/dist/

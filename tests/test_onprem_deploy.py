@@ -63,6 +63,12 @@ class ComposeTests(unittest.TestCase):
         self.assertIn('./data:/data', services['app']['volumes'])
         self.assertIn('./certs:/certs:ro', services['tls']['volumes'])
 
+    def test_every_service_rotates_json_file_logs(self):
+        for name, service in self.compose['services'].items():
+            logging = service.get('logging') or {}
+            self.assertEqual(logging.get('driver'), 'json-file', name)
+            self.assertEqual(logging['options'], {'max-size': '10m', 'max-file': '3'}, name)
+
     def test_images_pinned_by_version(self):
         self.assertRegex(self.compose['services']['tls']['image'], r'^caddy:\d+\.\d+\.\d+$')
 
@@ -145,6 +151,60 @@ class CaddyTests(unittest.TestCase):
                          'header_up X-Real-IP {remote_host}', 'header_up -X-Forwarded-For',
                          'max_size {$TRID_MAX_BODY:3MB}', 'ocsp_stapling off', 'protocols h1 h2'):
             self.assertIn(expected, text)
+
+
+    def test_caddy_discards_its_own_logs(self):
+        text = read('Caddyfile')
+        self.assertRegex(text, r'log default \{\s*output discard\s*\}')
+        head = text[:text.index('https://')]
+        self.assertIn('output discard', head)  # global block, before the site
+
+
+class BuildContextTests(unittest.TestCase):
+    @staticmethod
+    def excluded(path, rules):
+        state = False
+        for rule in rules:
+            negate = rule.startswith('!')
+            pattern = rule.lstrip('!').rstrip('/')
+            if pattern == '*' or path == pattern or path.startswith(pattern + '/'):
+                state = not negate
+        return state
+
+    def copy_sources(self):
+        text = read('Dockerfile.app') + chr(10) + read('Dockerfile.llm')
+        text = text.replace('\\\n', ' ')
+        sources = []
+        for line in text.splitlines():
+            parts = line.split()
+            if parts and parts[0] == 'COPY' and not any(p.startswith('--from') for p in parts):
+                sources.extend(p for p in parts[1:-1] if not p.startswith('--'))
+        return sources
+
+    def test_dockerignore_keeps_every_copy_source_and_excludes_the_rest(self):
+        rules = [l.strip() for l in (ROOT / '.dockerignore').read_text(encoding='utf-8').splitlines()
+                 if l.strip() and not l.startswith('#')]
+        self.assertEqual(rules[0], '*')
+        sources = self.copy_sources()
+        self.assertGreaterEqual(len(sources), 6)
+        for src in sources:
+            self.assertFalse(self.excluded(src.rstrip('/'), rules), src)
+        for path in ('data', 'runs/reader-factorial-01-cpt-v1-v2-v4/model.safetensors', '.git', '.venv',
+                     'deploy/onprem/dist', 'docs'):
+            self.assertTrue(self.excluded(path, rules), path)
+
+    def test_build_outputs_are_gitignored(self):
+        lines = (ROOT / '.gitignore').read_text(encoding='utf-8').splitlines()
+        for entry in ('deploy/onprem/wheels/', 'deploy/onprem/dist/'):
+            self.assertIn(entry, lines)
+
+
+class DocsTests(unittest.TestCase):
+    def test_guide_covers_logging_and_checklist_items(self):
+        text = (ROOT / 'docs' / 'ONPREM.md').read_text(encoding='utf-8')
+        self.assertNotIn('X-File-Name', text)
+        for needle in ('sudo chmod 700 data', 'docker compose logs llm', 'docker compose logs tls', 'mem_limit'):
+            self.assertIn(needle, text)
 
 
 class BundleTests(unittest.TestCase):

@@ -38,11 +38,11 @@ def complete(base, messages, family, max_tokens, context, grammar=None):
     return result
 
 
-def count_prompt_tokens(base, messages):
+def count_prompt_tokens(base, messages, timeout=180):
     """Tokens of the prompt as the serving model renders and tokenizes it (same /apply-template + /tokenize calls as
     `complete`), or None when the server cannot be asked."""
     try:
-        prompt = request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}})['prompt']
-        return len(request(base, '/tokenize', {'content': prompt, 'add_special': True, 'parse_special': True})['tokens'])
+        prompt = request(base, '/apply-template', {'messages': messages, 'chat_template_kwargs': {'enable_thinking': False}}, timeout=timeout)['prompt']
+        return len(request(base, '/tokenize', {'content': prompt, 'add_special': True, 'parse_special': True}, timeout=timeout)['tokens'])
     except OSError:
         return None

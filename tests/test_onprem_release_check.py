@@ -61,6 +61,7 @@ def start_fake(login_status='ok', fail_question=None, model_failure_question=Non
                 self.send(403, {'error': 'csrf'}); return
             if self.path == '/api/load':
                 state['pdf'] = body
+                state['load_headers'] = dict(self.headers)
                 self.send(200, {'document_id': 'd1', 'name': 'x.pdf', 'pages': ['a', 'b', 'c'], 'warnings': []}); return
             if self.path == '/api/ask':
                 n = state['asked'] = state['asked'] + 1
@@ -123,6 +124,18 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(report['upload']['pages'], 3)
         self.assertEqual(state['pdf'], b'%PDF-fake')
         self.assertEqual(state['calls'][-1], ('POST', '/api/logout'))
+
+    def test_file_name_header_is_not_sent(self):
+        base, state = self.start()
+        self.assertEqual(self.run_check(base), 0)
+        self.assertNotIn('X-File-Name', state['load_headers'])
+
+    def test_default_port_is_dropped_from_origin(self):
+        for base, origin in (('https://host.example:443', 'https://host.example'),
+                             ('http://host.example:80', 'http://host.example'),
+                             ('https://host.example:8443', 'https://host.example:8443'),
+                             ('https://host.example', 'https://host.example')):
+            self.assertEqual(self.mod.Client(base, False, None).origin, origin)
 
     def test_report_never_contains_answer_or_question_text(self):
         base, _ = self.start()

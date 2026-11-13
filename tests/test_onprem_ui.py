@@ -22,6 +22,10 @@ class UiFileTests(unittest.TestCase):
             for needle in ('http://', 'https://', '//fonts', '@import url('):
                 self.assertNotIn(needle, text, f'{path.name}: {needle}')
 
+    def test_ui_never_sends_the_file_name(self):
+        for path in FILES:
+            self.assertNotIn('X-File-Name', path.read_text(encoding='utf-8'), path.name)
+
     def test_ui_has_no_inline_script_or_innerhtml_from_server(self):
         for path in FILES:
             text = path.read_text(encoding='utf-8')

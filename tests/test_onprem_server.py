@@ -97,7 +97,12 @@ class Client:
         return self.json('POST', path, body if body is not None else {}, **kwargs)
 
     def upload(self, name=SECRET_NAME):
-        with mock.patch('trid.onprem.server.parse_pdf', return_value=fake_doc(name)):
+        self.parsed_names = []
+
+        def parse(body, parsed_name, tok, limits=None):
+            self.parsed_names.append(parsed_name)
+            return fake_doc(parsed_name)
+        with mock.patch('trid.onprem.server.parse_pdf', side_effect=parse):
             return self.json('POST', '/api/load', b'%PDF-1.4 fake',
                              headers={'X-File-Name': name})
 
@@ -211,7 +216,8 @@ class ServerTests(unittest.TestCase):
         c = self.client(ip='203.0.113.7')
         status, value, _ = c.upload()
         self.assertEqual(status, 200)
-        self.assertEqual(value['name'], SECRET_NAME)
+        self.assertEqual(value['name'], 'document.pdf')
+        self.assertEqual(c.parsed_names, ['document.pdf'])
         self.assertEqual(value['pages'], ['본문 한 쪽'])
         status, value, _ = c.post('/api/ask', {'question': SECRET_QUESTION, 'document_id': value['document_id']})
         self.assertEqual(status, 200)
@@ -368,6 +374,39 @@ class ServerTests(unittest.TestCase):
         self.assertGreaterEqual(waited, 1.5)
         self.assertEqual(self.calls, [])
         self.assertEqual(c.post('/api/ask', {'question': 'q', 'document_id': document_id})[0], 200)
+
+    def test_x_file_name_is_ignored_and_never_echoed(self):
+        c = self.client()
+        status, value, response = c.upload()
+        self.assertEqual(status, 200)
+        self.assertNotIn(SECRET_NAME, json.dumps(value, ensure_ascii=False))
+        self.assertNotIn(SECRET_NAME, str(response.getheaders()))
+
+    def test_upload_succeeds_while_an_ask_holds_the_generation_lock(self):
+        c = self.client()
+        self.server.generation_lock.acquire()
+        try:
+            started = time.monotonic()
+            status, value, _ = c.upload()
+            waited = time.monotonic() - started
+        finally:
+            self.server.generation_lock.release()
+        self.assertEqual(status, 200, value)
+        self.assertLess(waited, 1.5)
+
+    def test_session_revoked_during_answer_gets_401_and_no_answer(self):
+        c = self.client()
+        document_id = c.upload()[1]['document_id']
+        store = self.store
+
+        def revoke(document, question):
+            store.update_user('alice', password_version=store.get_user('alice').password_version + 1)
+            return {'status': 'quoted', 'answer': 'secret-answer', 'candidates': []}
+        type(self).answer = staticmethod(revoke)
+        self.addCleanup(setattr, type(self), 'answer', staticmethod(ok_answer))
+        status, value, resp = c.post('/api/ask', {'question': 'q', 'document_id': document_id})
+        self.assertEqual(status, 401)
+        self.assertNotIn('secret-answer', json.dumps(value, ensure_ascii=False))
 
     def test_rate_limit_21st_request_in_minute_is_429(self):
         c = self.client()

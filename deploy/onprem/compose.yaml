@@ -7,6 +7,11 @@ services:
   llm:
     image: trid-onprem-llm:latest
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       LLM_THREADS: ${LLM_THREADS:-4}
     networks: [internal]
@@ -17,6 +22,11 @@ services:
   app:
     image: trid-onprem-app:latest
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     mem_limit: 1g
     depends_on: [llm]
     volumes:
@@ -31,6 +41,11 @@ services:
   tls:
     image: caddy:2.8.4
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on: [app]
     environment:
       TRID_HOSTNAME: ${TRID_HOSTNAME:?set TRID_HOSTNAME in .env}

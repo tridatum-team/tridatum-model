@@ -24,7 +24,7 @@ import statistics
 import sys
 import time
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 TIMEOUT = 600
 MUST_CHANGE_MESSAGE = '이 계정은 비밀번호 변경이 필요합니다. 먼저 웹에서 비밀번호를 변경하세요.'
@@ -40,7 +40,10 @@ class Client:
         parts = urlsplit(base)
         if parts.scheme not in ('https', 'http') or not parts.hostname:
             raise CheckError('--base는 https://호스트 형식이어야 합니다.')
-        self.origin = f'{parts.scheme}://{parts.netloc}'
+        host = parts.netloc
+        if parts.port == {'https': 443, 'http': 80}[parts.scheme]:
+            host = host.rsplit(':', 1)[0]  # browsers omit the default port from Origin
+        self.origin = f'{parts.scheme}://{host}'
         self.scheme, self.host, self.port = parts.scheme, parts.hostname, parts.port
         self.context = None
         if self.scheme == 'https':
@@ -149,7 +152,7 @@ def run(args, password: str) -> int:
             raise CheckError(MUST_CHANGE_MESSAGE)
         started = time.monotonic()
         code, _, data = client.request('POST', '/api/load', pdf, {
-            'Content-Type': 'application/pdf', 'X-File-Name': quote(Path(args.pdf).name)})
+            'Content-Type': 'application/pdf'})
         value = _json(data)
         if code != 200:
             raise CheckError(f'PDF를 올리지 못했습니다. (HTTP {code}) {value.get("error", "")}'.strip())
