@@ -71,4 +71,6 @@ def load_config(path: Path) -> Config:
             values[name] = Path(_typed(name, value, ''))
         else:
             values[name] = _typed(name, value, getattr(Config, name, '') if name != 'hostname' else '')
+    if 'retention_days' in values and values['retention_days'] < 1:
+        raise ValueError('retention_days는 1 이상이어야 합니다.')
     return Config(**values)

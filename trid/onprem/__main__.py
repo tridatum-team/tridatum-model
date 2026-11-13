@@ -16,8 +16,8 @@ import threading
 import time
 from pathlib import Path
 
-os.environ.setdefault('HF_HUB_OFFLINE', '1')
-os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
+os.environ['HF_HUB_OFFLINE'] = '1'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 from trid.onprem.auth import Auth  # noqa: E402
 from trid.onprem.config import load_config  # noqa: E402

@@ -129,6 +129,22 @@ class CliTest(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertNotIn('Traceback', err)
 
+    def test_load_config_rejects_non_positive_or_bool_retention(self):
+        for bad in (0, -1, True):
+            self.write_config(retention_days=bad)
+            with self.assertRaises(ValueError):
+                load_config(self.cfg)
+        self.write_config(retention_days=1)
+        self.assertEqual(load_config(self.cfg).retention_days, 1)
+
+    def test_offline_env_is_forced(self):
+        import importlib
+        with mock.patch.dict('os.environ', {'HF_HUB_OFFLINE': '0', 'TOKENIZERS_PARALLELISM': 'true'}):
+            importlib.reload(cli)
+            import os
+            self.assertEqual(os.environ['HF_HUB_OFFLINE'], '1')
+            self.assertEqual(os.environ['TOKENIZERS_PARALLELISM'], 'false')
+
     def test_example_config_loads(self):
         path = Path(__file__).resolve().parent.parent / 'deploy' / 'onprem' / 'onprem.example.json'
         self.assertEqual(load_config(path).hostname, 'trid.example.internal')
