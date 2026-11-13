@@ -1,0 +1,10 @@
+[
+  {"id": "q1", "kind": "answerable", "question": "시외 출장 시 하루 일비는 얼마인가요?"},
+  {"id": "q2", "kind": "answerable", "question": "서울특별시에서 숙박하면 1박 숙박비 한도는 얼마인가요?"},
+  {"id": "q3", "kind": "numeric", "question": "자기 차량으로 출장하면 1킬로미터당 유류비를 얼마 지급하나요?"},
+  {"id": "q4", "kind": "answerable", "question": "출장 신청은 출발 며칠 전까지 해야 하나요?"},
+  {"id": "q5", "kind": "answerable", "question": "천재지변으로 택시를 탔을 때 택시 요금은 지급되나요?"},
+  {"id": "q6", "kind": "numeric", "question": "기관이 점심을 제공하는 행사에 참석하면 식비에서 얼마를 빼나요?"},
+  {"id": "q7", "kind": "not_in_document", "question": "해외 출장 시 하루 체재비는 얼마인가요?"},
+  {"id": "q8", "kind": "not_in_document", "question": "출장 중 병가를 쓰면 급여는 어떻게 되나요?"}
+]

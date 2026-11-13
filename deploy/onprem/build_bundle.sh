@@ -12,6 +12,7 @@ TOK=runs/reader-factorial-01-cpt-v1-v2-v4/tokenizer.json
 TOK_SHA=73551e65acfa80834c235602900f31dc353ce230bfb69939ffdf44ca26ebc58d
 CADDY_IMAGE=caddy:2.8.4
 
+[ -f docs/ONPREM.md ] || { echo "docs/ONPREM.md is missing" >&2; exit 1; }
 [ "$(uname -m)" = "x86_64" ] || { echo "build on x86_64 only" >&2; exit 1; }
 echo "$MODEL_SHA  $MODEL" | sha256sum -c -
 echo "$TOK_SHA  $TOK" | sha256sum -c -
@@ -48,8 +49,9 @@ docker save -o "$OUT/$NAME.tar" trid-onprem-app:latest trid-onprem-llm:latest "$
 } > "$OUT/IMAGES.txt"
 
 cp deploy/onprem/compose.yaml deploy/onprem/Caddyfile deploy/onprem/onprem.example.json \
-   deploy/onprem/LICENSES.md deploy/onprem/make_self_signed.sh "$OUT/"
-if [ -f docs/ONPREM.md ]; then cp docs/ONPREM.md "$OUT/"; else echo "warning: docs/ONPREM.md missing" >&2; fi
+   deploy/onprem/LICENSES.md deploy/onprem/make_self_signed.sh \
+   deploy/onprem/release_check.py deploy/onprem/release-questions.json \
+   deploy/onprem/release-document.txt docs/ONPREM.md "$OUT/"
 chmod +x "$OUT/make_self_signed.sh"
 
 (cd "$OUT" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS)
