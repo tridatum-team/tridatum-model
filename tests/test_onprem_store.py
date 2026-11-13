@@ -31,6 +31,13 @@ class PasswordTests(unittest.TestCase):
             check_new_password("123456789")
         check_new_password("1234567890")
 
+    def test_overlong_or_non_str_password_rejected(self):
+        check_new_password("x" * 1024)
+        with self.assertRaises(ValueError):
+            check_new_password("x" * 1025)
+        with self.assertRaises(ValueError):
+            check_new_password(None)
+
 
 class StoreTests(unittest.TestCase):
     def setUp(self):

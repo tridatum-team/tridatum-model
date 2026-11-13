@@ -202,6 +202,39 @@ class AuthTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.auth.admin_update(adm, "ghost", disabled=True, ip=None)
 
+    def test_change_password_wrong_current_after_lock_expiry_does_not_relock(self):
+        _, sess = self.auth.login("alice", PW, "10.0.0.1")
+        for _ in range(5):
+            self.auth.login("alice", "wrong-password", None)
+        self.advance(901)
+        with self.assertRaises(ValueError):
+            self.auth.change_password(sess, "wrong-password", "brand new pass 2", None)
+        user = self.store.get_user("alice")
+        self.assertEqual((user.failed, user.locked_until), (1, 0.0))
+        self.assertIsNotNone(self.auth.session(sess.sid))
+
+    def test_change_password_wrong_current_during_lock_does_not_extend(self):
+        _, sess = self.auth.login("alice", PW, "10.0.0.1")
+        for _ in range(5):
+            self.auth.login("alice", "wrong-password", None)
+        until = self.store.get_user("alice").locked_until
+        self.advance(10)
+        with self.assertRaises(ValueError):
+            self.auth.change_password(sess, "wrong-password", "brand new pass 2", None)
+        self.assertEqual(self.store.get_user("alice").locked_until, until)
+
+    def test_overlong_new_password_rejected_everywhere(self):
+        self.store.create_user("root", PW, "admin", must_change=False)
+        _, adm = self.auth.login("root", PW, None)
+        _, sess = self.auth.login("alice", PW, None)
+        long_pw = "x" * 1025
+        with self.assertRaises(ValueError):
+            self.auth.change_password(sess, PW, long_pw, None)
+        with self.assertRaises(ValueError):
+            self.auth.admin_update(adm, "alice", reset_password=long_pw, ip=None)
+        self.assertEqual(self.store.get_user("alice").password_version, 1)
+        self.auth.change_password(sess, PW, "x" * 1024, None)
+
     def test_session_cap_returns_busy(self):
         auth = Auth(self.store, clock=self.mono, wall=self.wall, max_sessions=32)
         for _ in range(32):

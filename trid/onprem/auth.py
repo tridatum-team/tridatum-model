@@ -78,6 +78,29 @@ class Auth:
             for sess in [s for s in self._sessions.values() if self._is_idle(s)]:
                 self._expire_locked(sess)
 
+    # -- failure counting ----------------------------------------------------
+    def _expire_served_lock(self, user, now: float) -> None:
+        """Start counting afresh once a lock window has passed."""
+        if user.locked_until and user.locked_until <= now:
+            self._store.update_user(user.username, failed=0, locked_until=0.0)
+            user.failed, user.locked_until = 0, 0.0
+
+    def _record_failure(self, user, now: float) -> bool:
+        """Count one failure; return True if the account is (now) locked.
+
+        Call with _acct_lock held. An active lock is never extended.
+        """
+        self._expire_served_lock(user, now)
+        if user.locked_until > now:
+            return True
+        failed = user.failed + 1
+        fields = {"failed": failed}
+        locked = failed >= self._max_failures
+        if locked:
+            fields["locked_until"] = now + self._lock_seconds
+        self._store.update_user(user.username, **fields)
+        return locked
+
     # -- login ---------------------------------------------------------------
     def login(self, username: str, password: str, ip: str | None):
         if not isinstance(password, str) or len(password) > _MAX_PASSWORD_CHARS:
@@ -91,10 +114,7 @@ class Auth:
                 verify_password(password, self._dummy_hash)
                 self._store.log("login_failed", None, ip, "invalid")
                 return "invalid", None
-            if user.locked_until and user.locked_until <= now:
-                # Lock served: start counting afresh.
-                self._store.update_user(user.username, failed=0, locked_until=0.0)
-                user.failed, user.locked_until = 0, 0.0
+            self._expire_served_lock(user, now)
             if user.locked_until > now:
                 verify_password(password, self._dummy_hash)
                 self._store.log("login_locked", user.username, ip, "locked")
@@ -105,11 +125,7 @@ class Auth:
                                 error="disabled")
                 return "invalid", None
             if not ok:
-                failed = user.failed + 1
-                fields = {"failed": failed}
-                if failed >= self._max_failures:
-                    fields["locked_until"] = now + self._lock_seconds
-                self._store.update_user(user.username, **fields)
+                self._record_failure(user, now)
                 self._store.log("login_failed", user.username, ip, "invalid")
                 return "invalid", None
             if user.failed:
@@ -168,12 +184,7 @@ class Auth:
                 raise PermissionError("세션이 유효하지 않습니다.")
             if not isinstance(current, str) or len(current) > _MAX_PASSWORD_CHARS \
                     or not verify_password(current, user.pw_hash):
-                failed = user.failed + 1
-                fields = {"failed": failed}
-                locked = failed >= self._max_failures
-                if locked:
-                    fields["locked_until"] = self._wall() + self._lock_seconds
-                self._store.update_user(user.username, **fields)
+                locked = self._record_failure(user, self._wall())
                 self._store.log("password_changed", user.username, ip, "invalid")
                 if locked:
                     self._drop_user_sessions(user.username)

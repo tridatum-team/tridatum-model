@@ -13,6 +13,7 @@ _P = 1
 _DKLEN = 32
 _SALT_BYTES = 16
 _MIN_LENGTH = 10
+_MAX_LENGTH = 1024
 
 
 def _scrypt(pw: str, salt: bytes, n: int, r: int, p: int) -> bytes:
@@ -46,5 +47,7 @@ def verify_password(pw: str, stored: str) -> bool:
 
 
 def check_new_password(pw: str) -> None:
+    if not isinstance(pw, str) or len(pw) > _MAX_LENGTH:
+        raise ValueError("비밀번호는 10자 이상 1024자 이하여야 합니다.")
     if len(pw) < _MIN_LENGTH:
         raise ValueError("비밀번호는 10자 이상이어야 합니다.")
