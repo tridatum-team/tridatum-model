@@ -6,8 +6,14 @@ Run in that order under mlx_grounded_guard.py. The allocator limit is a guidelin
 not a hard cap; the guard owns sampled RSS, pressure, swap and process-group wall
 limits. This module imports neither MLX nor Torch until main's startup gate (and
 never imports Torch). Tests may import the pure encoding/decoding helpers.
+
+The v2 plan declares both training cohorts and exact unique row counts. Training
+visits every admitted row once per declared epoch (one or two), with a seeded
+shuffle per epoch; only the final adapter is retained. Receipts distinguish
+unique rows from optimizer exposures.
 """
 import argparse
+from collections import Counter
 import contextlib
 import datetime as dt
 import hashlib
@@ -22,15 +28,18 @@ import tempfile
 import threading
 import time
 
-SCHEMA = 'trid-local-mlx-v1'
-RECEIPT_SCHEMA = 'trid-local-mlx-receipt-v1'
+SCHEMA = 'trid-local-mlx-v2'
+RECEIPT_SCHEMA = 'trid-local-mlx-receipt-v2'
 PHASES = ('audit', 'capacity', 'baseline', 'train', 'adapter')
 NO_THINK = '<think>\n\n</think>\n\n'
 MODEL_REPO = 'mlx-community/Qwen3-4B-4bit'
 MODEL_REVISION = '4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25'
 RECIPE = dict(seed=14, rank=8, scale=2.0, dropout=0.0, num_layers=4,
               keys=['self_attn.q_proj', 'self_attn.v_proj'], learning_rate=0.00002,
-              epochs=1, steps=34, train_context=2048, eval_context=3072, answer_tokens=768)
+              train_context=2048, eval_context=3072, answer_tokens=768)
+TASK_COHORTS = {'mois_grounded_explanation': 'grounded_messages',
+                'general_instruction': 'general_instruction'}
+COHORTS = tuple(TASK_COHORTS.values())
 LIMITS = dict(rss_stop_bytes=6442450944, mlx_stop_bytes=6442450944,
               swap_growth_stop_bytes=268435456, pressure_required=1,
               capacity_seconds=180, question_seconds=180, train_seconds=900,
@@ -94,12 +103,30 @@ def source_provenance():
     return versions, [dict(path=str(Path(path).resolve()), sha256=sha256(path)) for path in files]
 
 
+def validate_training_declaration(train, recipe):
+    require(isinstance(train, dict) and set(train) == {'path', 'sha256', 'rows', 'cohorts'},
+            'Training declaration requires exact path/hash/rows/cohorts')
+    rows, cohorts = train['rows'], train['cohorts']
+    require(type(rows) is int and 0 < rows <= 192, 'Training rows must be an integer in 1..192')
+    require(isinstance(cohorts, dict) and set(cohorts) == set(COHORTS)
+            and all(type(value) is int and value > 0 for value in cohorts.values())
+            and sum(cohorts.values()) == rows, 'Training cohort counts must be positive and sum to rows')
+    require(isinstance(recipe, dict) and set(recipe) == set(RECIPE) | {'epochs', 'steps'}
+            and all(type(recipe[key]) is type(value) and recipe[key] == value
+                    for key, value in RECIPE.items()), 'Local invariant recipe differs')
+    require(type(recipe['epochs']) is int and recipe['epochs'] in (1, 2),
+            'Training epochs must explicitly be 1 or 2')
+    require(type(recipe['steps']) is int and recipe['steps'] == rows * recipe['epochs']
+            and recipe['steps'] <= 384, 'Training steps must equal rows times epochs and be <=384')
+
+
 def validate_plan(plan):
     require(plan.get('schema') == SCHEMA and isinstance(plan.get('run_id'), str)
             and bool(plan['run_id']), 'Invalid local plan identity')
     require(plan['model']['repo_id'] == MODEL_REPO and plan['model']['revision'] == MODEL_REVISION,
             'Only the registered new Qwen3-4B quantized base is allowed')
-    require(plan['recipe'] == RECIPE and plan['limits'] == LIMITS, 'Local recipe/limits differ')
+    validate_training_declaration(plan['train'], plan['recipe'])
+    require(plan['limits'] == LIMITS, 'Local limits differ')
     root = Path(plan['model']['path'])
     require(root.is_absolute() and root.is_dir(), 'Local pinned model directory required')
     names = [item['path'] for item in plan['model']['files']]
@@ -134,6 +161,26 @@ def check_messages(messages):
                 and bool(message['content'].strip()), f'Invalid {role} message')
 
 
+def check_training_row(row):
+    require(isinstance(row, dict) and 'history' not in row, 'Training history is forbidden')
+    for field in ('id', 'task', 'split', 'answer'):
+        require(isinstance(row.get(field), str) and bool(row[field].strip()), f'Missing training {field}')
+    require(row['split'] == 'train', 'Only admitted training rows may be optimized')
+    require(row['task'] in TASK_COHORTS, 'Unknown training task/cohort')
+    require('cohort' not in row or row['cohort'] == TASK_COHORTS[row['task']],
+            'Training cohort differs from task')
+    check_messages(row.get('messages'))
+
+
+def admit_training_rows(rows, declaration):
+    require(len(rows) == declaration['rows'], 'Training row count differs from declaration')
+    for row in rows:
+        check_training_row(row)
+    require(len({row['id'] for row in rows}) == len(rows), 'Duplicate training IDs')
+    require(dict(Counter(TASK_COHORTS[row['task']] for row in rows)) == declaration['cohorts'],
+            'Training task/cohort counts differ from declaration')
+
+
 def prompt_tokens(tokenizer, messages):
     check_messages(messages)
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True,
@@ -153,10 +200,7 @@ def assemble_training_tokens(prompt_ids, answer_ids, context, answer_budget):
 
 
 def encode_training(tokenizer, row, recipe):
-    require('history' not in row, 'Training history is forbidden')
-    for field in ('id', 'task', 'split', 'answer'):
-        require(isinstance(row.get(field), str) and bool(row[field].strip()), f'Missing training {field}')
-    require(row['split'] == 'train', 'Only admitted training rows may be optimized')
+    check_training_row(row)
     text, prompt_ids = prompt_tokens(tokenizer, row['messages'])
     require(isinstance(tokenizer.eos_token, str) and type(tokenizer.eos_token_id) is int,
             'Tokenizer EOS is unavailable')
@@ -193,7 +237,8 @@ def decode_generation(tokenizer, generated_ids, eos_token_id, max_new_tokens):
 
 def audit_inputs(plan, tokenizer):
     train = read_jsonl(plan['train']['path'])
-    require(len(train) == 34 and len({row.get('id') for row in train}) == 34, 'Exactly 34 unique training rows required')
+    validate_training_declaration(plan['train'], plan['recipe'])
+    admit_training_rows(train, plan['train'])
     encoded = [encode_training(tokenizer, row, plan['recipe']) for row in train]
     blind = read_jsonl(plan['blind_inputs']['path'])
     pins = plan['blind_cases']
@@ -403,7 +448,8 @@ def train_step(runtime, model, optimizer, item):
     mx.eval(model.trainable_parameters(), optimizer.state)
     require(finite_tree(model.trainable_parameters()), 'Nonfinite updated adapter')
     runtime.check('update', row_id=item['id'], loss=value, gradient_norm=grad_norm)
-    return dict(id=item['id'], loss=value, gradient_norm=grad_norm, supervised_tokens=item['answer_tokens'])
+    return dict(id=item['id'], task=item['task'], loss=value, gradient_norm=grad_norm,
+                supervised_tokens=item['answer_tokens'])
 
 
 def adapter_config(recipe):
@@ -447,6 +493,40 @@ def changed_trainables(initial, model):
     return result
 
 
+def training_schedule(items, recipe):
+    """Start each epoch from admitted order and shuffle with seed + zero-based epoch."""
+    for epoch in range(1, recipe['epochs'] + 1):
+        order = list(items)
+        random.Random(recipe['seed'] + epoch - 1).shuffle(order)
+        for item in order:
+            yield epoch, item
+
+
+def training_coverage(history, items, declaration, recipe):
+    expected = {item['id']: item['task'] for item in items}
+    require(len(expected) == len(items) == declaration['rows'], 'Training unique row count differs')
+    population = Counter(TASK_COHORTS[task] for task in expected.values())
+    require(population == declaration['cohorts'], 'Training cohort population differs')
+    require(len(history) == recipe['steps'] == declaration['rows'] * recipe['epochs'],
+            'Training exposure count differs')
+    require(all(row['id'] in expected and row['task'] == expected[row['id']]
+                and type(row['epoch']) is int and 1 <= row['epoch'] <= recipe['epochs']
+                and type(row['global_step']) is int and row['global_step'] == step
+                and row['supervised_tokens'] > 0
+                for step, row in enumerate(history, 1)), 'Training history identity/step/supervision differs')
+    counts = Counter(row['id'] for row in history)
+    require(counts == Counter({row_id: recipe['epochs'] for row_id in expected}),
+            'Training row exposure differs from epochs')
+    for epoch in range(1, recipe['epochs'] + 1):
+        require(Counter(row['id'] for row in history if row['epoch'] == epoch)
+                == Counter({row_id: 1 for row_id in expected}), 'Incomplete training epoch coverage')
+    cohorts = Counter(TASK_COHORTS[row['task']] for row in history)
+    require(cohorts == {key: value * recipe['epochs'] for key, value in declaration['cohorts'].items()},
+            'Training cohort exposure differs')
+    return dict(unique_rows=len(counts), exposures=len(history), row_exposures=dict(counts),
+                cohort_unique_rows=dict(population), cohort_exposures=dict(cohorts))
+
+
 def run_training(runtime, model, items, capacity):
     import mlx.optimizers as optim
     from mlx_lm.tuner.utils import remove_lora_layers
@@ -480,17 +560,17 @@ def run_training(runtime, model, items, capacity):
                                capacity_selection='longest_audited_training_row', history=history,
                                changed_trainable_max_abs=changes, reload=proof, capacity_adapter_discarded=True)
     else:
-        order = list(items)
-        random.Random(recipe['seed']).shuffle(order)
+        schedule = training_schedule(items, recipe)
         history = []
-        for step, item in enumerate(order, 1):
+        for step, (epoch, item) in enumerate(schedule, 1):
             record = train_step(runtime, model, optimizer, item)
-            record.update(step=step, elapsed_seconds=time.monotonic() - runtime.start)
+            record.update(epoch=epoch, global_step=step, elapsed_seconds=time.monotonic() - runtime.start)
             history.append(record)
             runtime.receipt['history'] = history
-        require(len(history) == recipe['steps'] == len({row['id'] for row in history}), 'Final row coverage is not one pass')
+        coverage = training_coverage(history, items, runtime.plan['train'], recipe)
         changes = changed_trainables(initial, model)
-        runtime.receipt.update(epochs=1, updates=len(history), row_coverage=[row['id'] for row in history],
+        runtime.receipt.update(epochs=recipe['epochs'], updates=len(history), **coverage,
+                               row_coverage=[item['id'] for item in items],
                                changed_trainable_max_abs=changes, optimizer='mlx.optimizers.Adam',
                                learning_rate=recipe['learning_rate'], fresh_base=True, capacity_adapter_reused=False)
         runtime.receipt['artifacts'] = save_adapter(model, runtime.output / 'adapter', recipe)
@@ -593,7 +673,8 @@ def main(argv=None):
             train, blind = audit_inputs(plan, tokenizer)
             stops = eos_ids(tokenizer, config)
             if args.phase == 'audit':
-                runtime.receipt.update(train_rows=train,
+                runtime.receipt.update(train_rows=train, unique_rows=len(train),
+                                       cohort_unique_rows=dict(Counter(TASK_COHORTS[row['task']] for row in train)),
                                        blind_rows=[dict(id=row['id'], prompt_tokens=len(row['prompt_ids']),
                                                         rendered_prompt_sha256=row['rendered_prompt_sha256']) for row in blind],
                                        eos_token_ids=stops, native_template_no_thinking=True,

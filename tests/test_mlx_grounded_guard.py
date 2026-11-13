@@ -16,7 +16,7 @@ from scripts import mlx_grounded_guard as guard
 
 
 def plan_value(output_dir):
-    return {'schema': 'trid-local-mlx-v1', 'output_dir': str(output_dir),
+    return {'schema': 'trid-local-mlx-v2', 'output_dir': str(output_dir),
             'limits': {'rss_stop_bytes': 6 * guard.GIB, 'mlx_stop_bytes': 6 * guard.GIB,
                        'swap_growth_stop_bytes': 256 * 1024 ** 2, 'pressure_required': 1,
                        'capacity_seconds': 180, 'train_seconds': 900,
@@ -46,6 +46,11 @@ class LimitTests(unittest.TestCase):
     def setUp(self):
         self.plan = plan_value('/unused/results')
         self.limits = guard.read_limits(self.plan, 'capacity')
+
+    def test_old_plan_schema_is_not_admitted(self):
+        self.plan['schema'] = 'trid-local-mlx-v1'
+        with self.assertRaisesRegex(ValueError, 'schema'):
+            guard.read_limits(self.plan, 'capacity')
 
     def test_sample_thresholds_allow_exact_limit_and_stop_above(self):
         baseline = 777 * 1024 ** 2
@@ -214,7 +219,7 @@ class SupervisorTests(unittest.TestCase):
                 kwargs['stdout'].write(encoded(*initial_events))
                 if not missing_receipt:
                     (output / f'{phase}-receipt.json').write_text(json.dumps({
-                        'schema': 'trid-local-mlx-receipt-v1', 'phase': phase,
+                        'schema': 'trid-local-mlx-receipt-v2', 'phase': phase,
                         'status': 'complete', 'plan_sha256': guard.file_pin(plan_path)['sha256'],
                         **(worker_receipt_updates or {})}))
                 return child
@@ -363,7 +368,8 @@ class SupervisorTests(unittest.TestCase):
 
     def test_contradictory_or_wrong_plan_worker_receipt_fails_consumer(self):
         for updates in ({'status': 'failed'}, {'phase': 'train'},
-                        {'plan_sha256': 'not this plan'}, {'schema': 'unrelated'}):
+                        {'plan_sha256': 'not this plan'}, {'schema': 'unrelated'},
+                        {'schema': 'trid-local-mlx-receipt-v1'}):
             with self.subTest(updates=updates):
                 record, _, _ = self.run_guard(worker_receipt_updates=updates)
                 self.assertFalse(record['success'])

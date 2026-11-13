@@ -42,7 +42,7 @@ def file_pin(path):
 
 
 def read_limits(plan, phase):
-    if plan.get('schema') != 'trid-local-mlx-v1':
+    if plan.get('schema') != 'trid-local-mlx-v2':
         raise ValueError('Unsupported local plan schema')
     if phase not in PHASE_SECONDS:
         raise ValueError('Unknown phase')
@@ -450,7 +450,7 @@ def _supervise(plan_path, plan_bytes, phase, limits, receipt, log, log_path, wor
                 record['worker_receipt'] = file_pin(worker_receipt)
                 worker_record = json.loads(worker_receipt.read_bytes())
                 if record['stop_reason'] == 'worker_exit' and (
-                        worker_record.get('schema') != 'trid-local-mlx-receipt-v1'
+                        worker_record.get('schema') != 'trid-local-mlx-receipt-v2'
                         or worker_record.get('phase') != phase
                         or worker_record.get('status') != 'complete'
                         or worker_record.get('plan_sha256') != record['plan_sha256']):
