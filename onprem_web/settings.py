@@ -13,6 +13,8 @@ from trid.onprem.config import load_config
 TRID_CONFIG = load_config(Path(os.environ['TRID_WEB_CONFIG']))
 TRID_DEV = os.environ.get('TRID_WEB_DEV') == '1'
 
+TRID_TEST_ROUTES = os.environ.get('TRID_TEST_ROUTES') == '1'  # set only by the test support module
+
 BASE_DIR = Path(__file__).resolve().parent
 _DATA_DIR = TRID_CONFIG.data_dir
 
@@ -101,6 +103,17 @@ SECURE_SSL_REDIRECT = False
 FILE_UPLOAD_HANDLERS = ['django.core.files.uploadhandler.MemoryFileUploadHandler']
 DATA_UPLOAD_MAX_MEMORY_SIZE = TRID_CONFIG.pdf.max_bytes
 FILE_UPLOAD_MAX_MEMORY_SIZE = TRID_CONFIG.pdf.max_bytes
+
+# Content-free logging: one stderr handler, type/status only (see logging_policy). No mail_admins.
+_LOG_LOGGER = {'handlers': ['stderr'], 'level': 'INFO', 'propagate': False}
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'type_only': {'()': 'onprem_web.logging_policy.TypeOnlyFormatter'}},
+    'handlers': {'stderr': {'class': 'logging.StreamHandler', 'formatter': 'type_only'}},
+    'loggers': {name: dict(_LOG_LOGGER)
+                for name in ('django', 'django.request', 'django.server', 'django.security', 'waitress')},
+}
 
 APPEND_SLASH = False
 USE_I18N = False

@@ -69,6 +69,12 @@ def font_file(request, name):
     return _serve(FONT_DIR, FONTS[name], name, 'private, max-age=86400')
 
 
+def boom(request):
+    """Test-only (routed only when settings.TRID_TEST_ROUTES): raises an error carrying secrets."""
+    import test_onprem_server as T  # only importable under the test runner
+    raise ValueError(T.SECRET_QUESTION + T.SECRET_NAME)
+
+
 def not_found(request, exception=None):
     return json_response(404, {'error': '없는 페이지입니다.'})
 

@@ -18,7 +18,9 @@ class BootTests(django.test.TestCase):
         r = S.client().get('/fonts/PretendardVariable.woff2', secure=True)
         self.assertEqual(r['Content-Type'], 'font/woff2'); self.assertEqual(r['Cache-Control'], 'private, max-age=86400')
         self.assertEqual(b''.join(r.streaming_content if r.streaming else [r.content])[:4], b'wOF2')
-        self.assertEqual(S.client().get('/static/vendor/htmx.min.js', secure=True)['Cache-Control'], 'no-store')
+        js = S.client().get('/static/vendor/htmx.min.js', secure=True)
+        self.assertEqual(js.status_code, 200); self.assertIn('javascript', js['Content-Type'])
+        self.assertEqual(js['Cache-Control'], 'no-store')
         self.assertEqual(S.client().get('/static/../settings.py', secure=True).status_code, 404)
 
     def test_django_defaults_are_overridden(self):

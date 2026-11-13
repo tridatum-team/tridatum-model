@@ -29,6 +29,7 @@ CONFIG_PATH.write_text(json.dumps({
 }), encoding='utf-8')
 os.environ['TRID_WEB_CONFIG'] = str(CONFIG_PATH)
 os.environ.pop('TRID_WEB_DEV', None)
+os.environ['TRID_TEST_ROUTES'] = '1'
 os.environ['DJANGO_SETTINGS_MODULE'] = 'onprem_web.settings'
 
 import django  # noqa: E402

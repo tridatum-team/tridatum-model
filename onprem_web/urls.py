@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.urls import path
 
 from onprem_web import web
@@ -10,3 +11,6 @@ urlpatterns = [
     path('static/<path:name>', web.static_file),
     path('fonts/<str:name>', web.font_file),
 ]
+
+if settings.TRID_TEST_ROUTES:
+    urlpatterns.append(path('__boom', web.boom))
