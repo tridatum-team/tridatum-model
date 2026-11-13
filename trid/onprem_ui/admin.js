@@ -131,10 +131,14 @@ function formatTime(ts) {
 }
 function eventRow(e) {
   const tr = node('tr');
-  const detail = Object.entries(e.detail || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
-  for (const text of [formatTime(e.ts), EVENT_LABELS[e.event] || e.event, e.username ?? '(알 수 없음)', e.result, e.ip ?? '', detail]) {
-    tr.append(node('td', '', text));
-  }
+  // A sha256 is 64 characters; show its first 12 in the table (full value in the tooltip and the CSV).
+  const entries = Object.entries(e.detail || {});
+  const detail = entries.map(([k, v]) => `${k}: ${k === 'sha256' ? String(v).slice(0, 12) + '…' : v}`).join(' · ');
+  const cells = [[formatTime(e.ts), 'nowrap'], [EVENT_LABELS[e.event] || e.event, 'nowrap'],
+                 [e.username ?? '(알 수 없음)', 'nowrap'], [e.result, 'nowrap'], [e.ip ?? '', 'nowrap'], [detail, 'detail']];
+  for (const [text, cls] of cells) tr.append(node('td', cls, text));
+  const full = entries.map(([k, v]) => `${k}: ${v}`).join(' · ');
+  if (full !== detail) tr.lastChild.title = full;
   return tr;
 }
 async function loadEvents() {

@@ -7,6 +7,7 @@
 | Caddy | Apache-2.0 |
 | tokenizers | Apache-2.0 |
 | pypdf | BSD-3-Clause |
+| Pretendard 1.3.9 (PretendardVariable.woff2, UI font) | SIL Open Font License 1.1 (full text: trid/onprem_ui/fonts/Pretendard-OFL.txt) |
 | Python | PSF License |
 | Base image python:3.12-slim-bookworm | Debian packages (various, mostly GPL/LGPL/BSD) and PSF |
 | Base image debian:12-slim | Debian packages (various, mostly GPL/LGPL/BSD) |

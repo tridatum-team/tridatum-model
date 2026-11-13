@@ -13,19 +13,25 @@
 </head>
 <body>
 <header class="topbar">
+<div class="topbar-inner">
 <h1>TRID 문서 확인</h1>
+<div class="top-actions">
 <span id="who" class="who"></span>
 <a id="admin-link" class="btn small" href="/admin" hidden>관리자 화면</a>
 <button id="logout" class="btn small" type="button">로그아웃</button>
+</div>
+</div>
 </header>
 <main>
+<div class="status-strip">
 <p id="model-status" class="notice">MODEL_STATUS_PLACEHOLDER</p>
-<details id="model-card" class="card">
+<details id="model-card">
 <summary>모델 정보</summary>
-<pre>MODEL_CARD_PLACEHOLDER</pre>
+<div class="model-card">MODEL_CARD_PLACEHOLDER</div>
 </details>
+</div>
 
-<section id="password-view" class="card plain" hidden>
+<section id="password-view" class="card plain login-like" hidden>
 <h2>비밀번호 변경</h2>
 <p class="notice">처음 로그인했거나 비밀번호가 초기화됐습니다. 새 비밀번호(10자 이상)로 바꾼 뒤 이용할 수 있습니다.</p>
 <form id="password-form">
@@ -33,19 +39,21 @@
 <input id="current" type="password" autocomplete="current-password" required>
 <label for="new-password">새 비밀번호</label>
 <input id="new-password" type="password" autocomplete="new-password" minlength="10" required>
-<div class="row end"><button class="btn primary" type="submit">비밀번호 변경</button></div>
+<div class="actions"><button class="btn primary" type="submit">비밀번호 변경</button></div>
 </form>
 <p id="password-message" class="msg" role="alert"></p>
 </section>
 
-<div id="work-view">
-<section class="card plain" aria-labelledby="doc-title">
-<h2 id="doc-title">1. 문서 넣기</h2>
+<div id="work-view" class="workspace">
+<section class="card plain doc-panel" aria-labelledby="doc-title">
+<div class="panel-head"><h2 id="doc-title"><span class="step">1</span>문서 넣기</h2></div>
 <label for="file">PDF 파일 선택 (텍스트 PDF)</label>
+<div class="file-drop">
 <input id="file" type="file" accept=".pdf,application/pdf">
-<div class="row">
+<div class="actions">
 <button id="load" class="btn primary" type="button">문서 읽기</button>
 <button id="clear" class="btn" type="button" disabled>자료 지우기</button>
+</div>
 </div>
 <p id="doc-status" class="msg" role="status"></p>
 <details id="doc-view" hidden>
@@ -55,12 +63,14 @@
 </section>
 
 <section class="card plain" aria-labelledby="ask-title">
-<h2 id="ask-title">2. 질문하기</h2>
+<div class="panel-head"><h2 id="ask-title"><span class="step">2</span>질문하기</h2></div>
 <p class="notice">질문마다 완전한 문장으로 써 주세요. 이전 질문은 이어서 해석하지 않습니다.</p>
 <label for="question">질문 (2,000자 이하)</label>
 <textarea id="question" maxlength="2000" spellcheck="false"></textarea>
+<div class="ask-bar">
 <div class="counter"><span id="count">0</span> / 2,000</div>
-<div class="row end"><button id="ask" class="btn primary" type="button" disabled>질문하기</button></div>
+<button id="ask" class="btn primary" type="button" disabled>질문하기</button>
+</div>
 <p id="ask-status" class="msg" role="status"></p>
 <div id="result" aria-live="polite"></div>
 </section>
