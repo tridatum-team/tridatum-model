@@ -250,6 +250,27 @@ Git 독자는 [공개 검증 요약](reports/mois-graph-v0.2-verification.json)�
 
 설정·구현 판단에는 [Qwen3 모델 카드](https://huggingface.co/Qwen/Qwen3-4B), [Instruct-2507 카드](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507), [Qwen3.5 카드](https://huggingface.co/Qwen/Qwen3.5-4B), [MLX-LM 0.32.2](https://github.com/ml-explore/mlx-lm/tree/v0.32.2)를 사용했습니다. [Qwen3 보고서](https://arxiv.org/abs/2505.09388), [LoRA Learns Less and Forgets Less](https://arxiv.org/abs/2405.09673), [regularized replay 연구](https://arxiv.org/abs/2512.22337), [pretraining replay 연구](https://arxiv.org/abs/2603.04964)도 검토했지만, 이를 작은 기존 SFT의 효과 보증으로 해석하거나 검증되지 않은 replay/KL 학습을 추가하지는 않았습니다.
 
+#### 프로필을 분리한 후속 비교와 자원 제약
+
+후속 실행은 `runs/mois-ordered-models-20261113T062501Z/`에 별도로 보존했습니다. 새로운 가상 사례 **개발 6문항·검증 JSON 12문항·설명형 4문항**을 사용했으며, 이전 절의 문항 집합과 다르므로 두 실행의 정답 수를 직접 비교해 개선·퇴보를 판정하지 않습니다. 이 검증 집합도 **후보 선택용 진단**이지 독립적인 최종 반입 승인 자료가 아닙니다. 구조화된 정답 18개는 참조 계산과 독립 검토로 확인했습니다.
+
+Qwen3.5-4B의 non-thinking 두 설정과 thinking 설정을 각각 시드 14·29의 **독립 프로세스**로 실행했습니다. 프로필마다 RSS/MLX 각 6GiB, 메모리 압력 정상 단계, swap 증가 256MiB, 문항 180초·phase 1,800초 제한을 유지했습니다. Thinking 시드 14는 개발 5/6문항을 통과했지만 나머지 1문항은 생성이 완료되지 않았습니다. 시드 29는 메모리 압력 경고로 중단됐으므로 그 답변은 채점하지 않았습니다. 따라서 thinking 품질은 검증 미완료이며, 완료된 두 시드를 갖춘 non-thinking 후보 중 사전 정의된 동률 규칙으로 `presence_penalty=0` 설정을 골랐습니다.
+
+| 완료된 검증 arm | JSON 정답·완료 12문항 | 설명형 의미·문체·완료 4문항 | 열거된 중대 오류가 있는 설명형 문항 |
+| --- | ---: | ---: | ---: |
+| 원본 Qwen3-4B-Instruct-2507 · 기존 greedy | 1/12 | 1/4 | 2 |
+| 이전 업무 특화 adapter · 기존 greedy | 1/12 | 2/4 | 1 |
+| Qwen3.5-4B · 선정 설정 · 시드 14 | 1/12 | 1/4 | 1 |
+| Qwen3.5-4B · 선정 설정 · 시드 29 | 3/12 | 3/4 | 0 |
+
+설명형 16개 답변은 모델 정체를 가린 **두 독립 AI 채점자**가 검토했고, 불일치 3개는 문서의 의무 주체·조건·답변 내 모순을 근거로 판정했습니다. 사람 전문가 평가를 대신하지 않습니다. 열거된 중대 오류가 0이라는 것도 환각이 없다는 보장은 아닙니다. 원문에 없는 원본 제출 요건을 추가한 답변은 기존 오류 목록을 사후 확장해 점수를 바꾸지 않고 별도 기록했습니다. 후보는 시드별 **JSON 10/12 이상·설명형 3/4 이상·열거된 중대 오류 0·완료된 원본/adapter 대조군보다 낮지 않은 점수**라는 잠정 관문을 통과하지 못했습니다. 이 결과로 후속 특화 학습에 진입하지 않았습니다.
+
+다음 후보 [Qwen3-8B-4bit](https://huggingface.co/mlx-community/Qwen3-8B-4bit/tree/545dc4251c05440727734bcd94334791f6ab0192)는 고정 revision의 파일 크기와 해시를 확인해 확보했습니다. 첫 non-thinking 개발 phase는 로딩 중 **3.54초에 `pressure_not_1`로 중단**됐습니다. 프로세스 그룹 RSS 최대 4,889,608,192바이트, swap 증가 0이며, 소유 프로세스의 종료·정리를 확인했습니다. MLX peak 0 기록은 로드 완료 측정을 받지 못했다는 뜻이지 실제 할당이 없었다는 뜻이 아닙니다. **8B의 품질은 미측정**이고, 나머지 세 프로필은 자원 문제가 해결되기 전 실행하지 않았습니다. 같은 실패를 반복 실행하거나 6GiB 제한을 올리지 않았습니다.
+
+대체 16GiB Mac도 조회 당시 메모리 압력 경고 상태여서 모델을 실행하지 않았습니다. 검토한 14B 4bit 가중치만 약 7.74GiB이므로 현 제한에서는 실행할 수 없습니다. 기존 AWS 인증은 유효하지만 조회한 서울 GPU 인스턴스는 모두 중지 상태이며 다른 세션의 소유·사용 제한이 있습니다. 새 비용 승인 없이 재시작하거나 새 GPU를 만들지 않았습니다. **추가 비교 → 통과 후보의 특화 학습·독립 회귀 검증 → 실제 반입 환경 검증**은 남아 있으며, 이번 실행으로 모델 교체·서비스 배포·반입 승인을 하지 않았습니다.
+
+근거 파일: `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.
