@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/aws_eval'))
+import grounded_hf_lifecycle as L
 import grounded_hf_worker as W
 import ordered_hf_comparison as O
 
@@ -32,6 +33,14 @@ def plan_fixture():
             phase_seconds=dict(acquire8=900, dev8=2400, val8=2400, parent_decision=300,
                                acquire14=900, dev14=2400, val14=2400),
             checkpoint_keys=dict(decision='code/parent-decision.json')))
+
+
+def decision_listing(*, present=True, **overrides):
+    plan = plan_fixture()
+    key = plan['workload']['checkpoint_keys']['decision']
+    return dict(dict(Name=plan['identity']['bucket'], Prefix=key, MaxKeys=2,
+        IsTruncated=False, KeyCount=int(present),
+        Contents=[dict(Key=key, Size=512)] if present else []), **overrides)
 
 
 def response(text='{"answer":1}', **overrides):
@@ -272,27 +281,163 @@ class ConditionalTransitionTests(unittest.TestCase):
             decision = dict(run_id=plan['identity']['run_id'], plan_sha256=O.digest(base / 'plan.json'),
                             checkpoint_sha256='a' * 64, decision='complete', reason='parent-reviewed')
             def download(*args):
+                if args[1] == 'list-objects-v2':
+                    return decision_listing()
                 Path(args[-1]).write_text(json.dumps(decision))
             client = Mock(side_effect=download); client.deadline = time.time() + 1000
             received = O.await_decision(plan, base, client, {'export': {'sha256': 'a' * 64}}, time.time() + 300)
             self.assertEqual(received, decision)
-            self.assertEqual(client.call_count, 1)
+            self.assertEqual(client.call_count, 2)
             with self.assertRaises((RuntimeError, FileExistsError)):
                 O.await_decision(plan, base, client, {'export': {'sha256': 'a' * 64}}, time.time() + 300)
-            self.assertEqual(client.call_count, 1)
+            self.assertEqual(client.call_count, 2)
 
     def test_mismatched_decision_is_not_polled_again(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp); (base / 'output').mkdir()
             (base / 'plan.json').write_text('{}')
             def download(*args):
+                if args[1] == 'list-objects-v2':
+                    return decision_listing()
                 Path(args[-1]).write_text(json.dumps(dict(run_id='wrong', plan_sha256='x',
                     checkpoint_sha256='y', decision='compare14', reason='invalid')))
             client = Mock(side_effect=download); client.deadline = time.time() + 1000
             with self.assertRaises(RuntimeError):
                 O.await_decision(plan_fixture(), base, client, {'export': {'sha256': 'a' * 64}}, time.time() + 300)
-            self.assertEqual(client.call_count, 1)
+            self.assertEqual(client.call_count, 2)
             self.assertFalse((base / 'output/parent-decision.json').exists())
+
+    def test_missing_decision_waits_until_publication_then_validates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp); (base / 'output').mkdir()
+            (base / 'plan.json').write_text('{}')
+            plan = plan_fixture()
+            decision = dict(run_id=plan['identity']['run_id'], plan_sha256=O.digest(base / 'plan.json'),
+                            checkpoint_sha256='a' * 64, decision='compare14', reason='parent-reviewed')
+            listings = iter([decision_listing(present=False), decision_listing()])
+            def transport(*args):
+                self.assertEqual(client.deadline, 1300)
+                if args[1] == 'list-objects-v2':
+                    self.assertEqual(args, ('s3api', 'list-objects-v2', '--bucket', 'fixture',
+                        '--prefix', 'code/parent-decision.json', '--max-keys', '2'))
+                    return next(listings)
+                self.assertEqual(args[:-1], ('s3api', 'get-object', '--bucket', 'fixture',
+                    '--key', 'code/parent-decision.json', '--range', 'bytes=0-1048576'))
+                Path(args[-1]).write_text(json.dumps(decision))
+            client = Mock(side_effect=transport); client.deadline = 2000
+            with patch.object(O.time, 'time', return_value=1000), patch.object(O.time, 'sleep') as sleep:
+                received = O.await_decision(plan, base, client, {'export': {'sha256': 'a' * 64}}, 1300)
+            sleep.assert_called_once_with(5)
+            self.assertEqual(received, decision)
+            self.assertEqual(json.loads((base / 'output/parent-decision.json').read_text()), decision)
+            self.assertEqual([call.args[1] for call in client.call_args_list],
+                             ['list-objects-v2', 'list-objects-v2', 'get-object'])
+            self.assertEqual(client.deadline, 2000)
+
+    def test_decision_listing_must_be_exact_complete_and_bounded(self):
+        key = plan_fixture()['workload']['checkpoint_keys']['decision']
+        invalid = [
+            dict(Name='other'), dict(Prefix='code/'), dict(IsTruncated=True),
+            dict(IsTruncated=None), dict(NextContinuationToken='next'),
+            dict(CommonPrefixes=[{'Prefix': key + '/'}]), dict(MaxKeys=1000),
+            dict(KeyCount=0), dict(KeyCount=True), dict(Contents=None),
+            dict(Contents=[dict(Key=key + '.other', Size=10)]),
+            dict(KeyCount=2, Contents=[dict(Key=key, Size=10), dict(Key=key + '.other', Size=10)]),
+            *[dict(Contents=[dict(Key=key, Size=size)]) for size in (0, -1, True, '512', 1024 ** 2 + 1)],
+        ]
+        for mutation in invalid:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                base = Path(temp); (base / 'output').mkdir()
+                client = Mock(return_value=decision_listing(**mutation)); client.deadline = 2000
+                with patch.object(O.time, 'time', return_value=1000), patch.object(O.time, 'sleep') as sleep:
+                    with self.assertRaisesRegex(RuntimeError, 'Parent decision listing'):
+                        O.await_decision(plan_fixture(), base, client, {'export': {'sha256': 'a' * 64}}, 1300)
+                self.assertEqual(client.call_count, 1)
+                sleep.assert_not_called()
+                self.assertEqual(client.deadline, 2000)
+                self.assertFalse((base / 'parent-decision-download.json').exists())
+
+    def test_decision_aws_errors_are_fatal_without_retry(self):
+        for operation, code in [('list-objects-v2', 'AccessDenied'),
+                                ('list-objects-v2', 'NoSuchBucket'),
+                                ('get-object', 'AccessDenied'), ('get-object', 'NoSuchKey')]:
+            with self.subTest(operation=operation, code=code), tempfile.TemporaryDirectory() as temp:
+                base = Path(temp); (base / 'output').mkdir()
+                error = L.AWSCallError('s3api', operation, f'An error occurred ({code})')
+                replies = [error] if operation == 'list-objects-v2' else [decision_listing(), error]
+                client = Mock(side_effect=replies); client.deadline = 2000
+                with patch.object(O.time, 'time', return_value=1000), patch.object(O.time, 'sleep') as sleep:
+                    with self.assertRaises(L.AWSCallError):
+                        O.await_decision(plan_fixture(), base, client, {'export': {'sha256': 'a' * 64}}, 1300)
+                self.assertEqual(client.call_count, len(replies))
+                sleep.assert_not_called()
+                self.assertEqual(client.deadline, 2000)
+
+    def test_absence_stops_at_frozen_deadline_and_restores_client(self):
+        with tempfile.TemporaryDirectory() as temp:
+            now = [1000]
+            def sleep(seconds):
+                now[0] += seconds
+            client = Mock(return_value=decision_listing(present=False)); client.deadline = 2000
+            with patch.object(O.time, 'time', side_effect=lambda: now[0]), \
+                    patch.object(O.time, 'sleep', side_effect=sleep):
+                with self.assertRaisesRegex(RuntimeError, 'deadline'):
+                    O.await_decision(plan_fixture(), temp, client, {'export': {'sha256': 'a' * 64}}, 1300)
+            self.assertEqual(now[0], 1300)
+            self.assertEqual(client.call_count, 60)
+            self.assertTrue(all(call.args[1] == 'list-objects-v2' for call in client.call_args_list))
+            self.assertEqual(client.deadline, 2000)
+
+    def test_decision_wait_obeys_shared_request_envelope(self):
+        with tempfile.TemporaryDirectory() as temp:
+            client = L.Client({'region': 'ap-northeast-2'}, deadline=2000, request_limit=1)
+            reply = SimpleNamespace(returncode=0, stdout=json.dumps(decision_listing()), stderr='')
+            with patch.object(O.time, 'time', return_value=1000), \
+                    patch.object(L.subprocess, 'run', return_value=reply) as run:
+                with self.assertRaisesRegex(RuntimeError, 'request envelope'):
+                    O.await_decision(plan_fixture(), temp, client, {'export': {'sha256': 'a' * 64}}, 1300)
+            self.assertEqual(client.requests, 1)
+            run.assert_called_once()
+            self.assertEqual(client.deadline, 2000)
+
+
+class DecisionPolicyTests(unittest.TestCase):
+    def policy_plan(self):
+        plan = plan_fixture()
+        plan['identity'].update(code_prefix='code/', output_prefix='output/')
+        statements = [
+            dict(Effect='Allow', Action=['s3:GetObject'], Resource=['arn:aws:s3:::fixture/code/*']),
+            dict(Effect='Allow', Action=['s3:PutObject'], Resource=['arn:aws:s3:::fixture/output/*']),
+            dict(Effect='Allow', Action=['s3:ListBucket'], Resource=['arn:aws:s3:::fixture'],
+                 Condition={'StringEquals': {'s3:prefix': 'code/parent-decision.json'}}),
+        ]
+        plan['iam'] = {'instance_role': {'inline': {'ExactRunOnly': {'Statement': statements}}}}
+        return plan
+
+    def test_only_exact_decision_prefix_listing_is_admitted(self):
+        L.validate_worker_policy(self.policy_plan())
+        for mutation in ('missing', 'blanket', 'run_prefix', 'wildcard', 'wrong_bucket'):
+            with self.subTest(mutation=mutation):
+                plan = self.policy_plan()
+                statements = plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement']
+                if mutation == 'missing':
+                    statements.pop()
+                elif mutation == 'blanket':
+                    del statements[-1]['Condition']
+                elif mutation == 'run_prefix':
+                    statements[-1]['Condition']['StringEquals']['s3:prefix'] = 'code/'
+                elif mutation == 'wildcard':
+                    statements[-1]['Condition'] = {'StringLike': {'s3:prefix': 'code/*'}}
+                else:
+                    statements[-1]['Resource'] = ['arn:aws:s3:::other']
+                with self.assertRaisesRegex(RuntimeError, 'exact-decision listing'):
+                    L.validate_worker_policy(plan)
+
+    def test_nonordered_worker_policy_remains_read_write_only(self):
+        plan = self.policy_plan()
+        plan['schema'] = 'trid-grounded-hf-v1'
+        plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement'].pop()
+        L.validate_worker_policy(plan)
 
 
 class NetworkQuotaHandoffTests(unittest.TestCase):

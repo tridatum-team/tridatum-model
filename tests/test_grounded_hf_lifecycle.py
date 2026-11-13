@@ -1216,6 +1216,15 @@ class OrderedInferenceAdmissionTests(unittest.TestCase):
             checkpoint_keys=dict(archive=plan['identity']['output_prefix'] + 'qwen8-checkpoint.tar',
                 receipt=plan['identity']['output_prefix'] + 'qwen8-checkpoint.json',
                 decision=plan['identity']['code_prefix'] + 'parent-decision.json'))
+        ident = plan['identity']
+        plan['iam']['instance_role'] = {'inline': {'ExactRunOnly': {'Statement': [
+            dict(Effect='Allow', Action=['s3:GetObject'],
+                 Resource=[f"arn:aws:s3:::{ident['bucket']}/{ident['code_prefix']}*"]),
+            dict(Effect='Allow', Action=['s3:PutObject'],
+                 Resource=[f"arn:aws:s3:::{ident['bucket']}/{ident['output_prefix']}*"]),
+            dict(Effect='Allow', Action=['s3:ListBucket'], Resource=[f"arn:aws:s3:::{ident['bucket']}"],
+                 Condition={'StringEquals': {'s3:prefix': workload['checkpoint_keys']['decision']}}),
+        ]}}}
         for key, (model_id, revision) in L.ORDERED_MODELS.items():
             files = [dict(path=name, bytes=1, sha256='b' * 64,
                 url=f'https://huggingface.co/{model_id}/resolve/{revision}/{name}')
@@ -1292,6 +1301,20 @@ class OrderedInferenceAdmissionTests(unittest.TestCase):
             self.assertEqual(len(L.validate_data(temp, plan)['validation_inputs']), 16)
             self.assertNotIn('recipe', plan)
             self.assertNotIn('peft', plan['runtime']['packages'])
+
+    def test_ordered_plan_without_exact_decision_listing_permission_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original, approval = self.fixture(temp)
+            for prefix in (None, original['identity']['code_prefix'], '*'):
+                with self.subTest(prefix=prefix):
+                    plan = copy.deepcopy(original)
+                    statements = plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement']
+                    if prefix is None:
+                        statements.pop()
+                    else:
+                        statements[-1]['Condition']['StringEquals']['s3:prefix'] = prefix
+                    with self.assertRaisesRegex(RuntimeError, 'exact-decision listing'):
+                        L.validate_plan(plan, approval, 'a' * 64, now=1000)
 
     def test_old_grant_or_changed_workload_cannot_admit_inference(self):
         with tempfile.TemporaryDirectory() as temp:

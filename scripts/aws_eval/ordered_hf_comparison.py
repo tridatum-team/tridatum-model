@@ -9,7 +9,7 @@ import sys
 import tarfile
 import time
 
-from grounded_hf_lifecycle import (AWSCallError, LIMITS, canonical, digest, exclusive_intent,
+from grounded_hf_lifecycle import (LIMITS, canonical, digest, exclusive_intent,
                                   object_sha, relative, remaining, require, save)
 
 SCHEMA = 'trid-ordered-hf-inference-v1'
@@ -379,20 +379,36 @@ def await_decision(plan, base, client, checkpoint, deadline):
     from grounded_hf_lifecycle import validate_parent_decision
     base = Path(base)
     target = base / 'parent-decision-download.json'
+    bucket, key = plan['identity']['bucket'], plan['workload']['checkpoint_keys']['decision']
     exclusive_intent(base / 'parent-decision-dispatch.json', dict(checkpoint_sha256=checkpoint['export']['sha256']))
     old_deadline = client.deadline
     client.deadline = min(old_deadline, deadline)
     try:
         while True:
             remaining(deadline)
-            try:
-                client('s3api', 'get-object', '--bucket', plan['identity']['bucket'], '--key',
-                       plan['workload']['checkpoint_keys']['decision'], '--range', 'bytes=0-1048576', str(target))
-            except AWSCallError as exc:
-                if exc.code not in ('NoSuchKey', '404', 'NotFound'):
-                    raise
+            # A missing GET may be AccessDenied with prefix-scoped ListBucket.
+            # Only an exact, complete empty LIST proves absence; no AWS error
+            # (including a failed GET after a successful LIST) is retried here.
+            # The frozen 300s/5s wait now costs <=60 LISTs plus <=1 GET.
+            listing = client('s3api', 'list-objects-v2', '--bucket', bucket,
+                             '--prefix', key, '--max-keys', '2')
+            contents = listing.get('Contents', [])
+            require(listing.get('Name') == bucket and listing.get('Prefix') == key
+                    and listing.get('IsTruncated') is False and not listing.get('NextContinuationToken')
+                    and not listing.get('CommonPrefixes') and listing.get('MaxKeys') == 2
+                    and isinstance(contents, list) and len(contents) <= 1
+                    and type(listing.get('KeyCount')) is int and listing['KeyCount'] == len(contents),
+                    'Parent decision listing is not exact and complete')
+            if not contents:
                 time.sleep(min(5, remaining(deadline)))
                 continue
+            row = contents[0]
+            require(isinstance(row, dict) and row.get('Key') == key
+                    and type(row.get('Size')) is int and 0 < row['Size'] <= 1024 ** 2,
+                    'Parent decision listing key or size differs')
+            remaining(deadline)
+            client('s3api', 'get-object', '--bucket', bucket, '--key', key,
+                   '--range', 'bytes=0-1048576', str(target))
             remaining(deadline)
             require(target.stat().st_size <= 1024 ** 2, 'Parent decision overflow')
             decision = json.loads(target.read_text())

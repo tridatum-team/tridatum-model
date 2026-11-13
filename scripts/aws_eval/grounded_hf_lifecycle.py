@@ -396,6 +396,21 @@ def verify_gpu_observation(observation, plan, expected=None):
         require(observation == expected, 'Released NVML GPU observation changed')
 
 
+def validate_worker_policy(plan):
+    identity = plan['identity']
+    expected = [dict(Effect='Allow', Action=['s3:GetObject'], Resource=[
+        f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
+        dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
+        f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])]
+    if inference_mode(plan):
+        expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
+            Resource=[f"arn:aws:s3:::{identity['bucket']}"],
+            Condition={'StringEquals': {'s3:prefix': identity['code_prefix'] + 'parent-decision.json'}}))
+    statements = [s for p in plan['iam']['instance_role']['inline'].values() for s in p['Statement']]
+    require(statements == expected,
+            'Worker role must have only exact-run read/write and, for ordered inference, exact-decision listing scope')
+
+
 def validate_plan(plan, approval, plan_sha, *, now=None):
     require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA), 'Unknown plan schema')
     ordered = inference_mode(plan)
@@ -505,6 +520,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                 for n in bundled), 'Protected input or credential-like bundle member')
     if ordered:
         validate_ordered_workload(plan, bundled)
+        validate_worker_policy(plan)
     else:
         data = plan['data']
         for key in ('manifest', 'blind_inputs', 'admission', 'allocation'):
@@ -1175,12 +1191,7 @@ def live_preflight(plan, client):
     require(plan['iam']['instance_role']['trust'] == {'Version': '2012-10-17', 'Statement': [
         {'Effect': 'Allow', 'Principal': {'Service': 'ec2.amazonaws.com'}, 'Action': 'sts:AssumeRole'}]},
         'Instance trust is not exclusively EC2')
-    instance_statements = [s for p in plan['iam']['instance_role']['inline'].values() for s in p['Statement']]
-    require(instance_statements == [dict(Effect='Allow', Action=['s3:GetObject'], Resource=[
-        f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
-        dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
-        f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])],
-        'Worker role must have only exact-run read/write S3 scope')
+    validate_worker_policy(plan)
     scheduler_statements = [s for p in plan['iam']['scheduler_role']['inline'].values() for s in p['Statement']]
     require(scheduler_statements == [dict(Effect='Allow', Action='ec2:TerminateInstances',
         Resource=f"arn:aws:ec2:{identity['region']}:{identity['account']}:instance/*",
