@@ -179,7 +179,76 @@ Git 독자는 [공개 검증 요약](reports/mois-graph-v0.2-verification.json)�
 
 실행·검토 근거는 `runs/mois-local-mlx-balanced-20261113T020154Z/`의 `plan.json`, `local-quality-registration-v2.json`, `guard-*-receipt.json`, `results/*-receipt.json`, `execution-measurements.json`, `scoring-preparation-verification.json`, 두 correction record와 `blind-aggregate-final.json`에 보관합니다. 최종 adapter SHA256은 `f9ef041b176a7d8b90e718032fa216c9e03c2b40d426a7bcf33e6362174ea7a0`입니다. 실제 tiny MLX 혼합 2-epoch·토크나이저/EOS·감시자 검사 **48개**, 격리된 채점 계약 검사 **13개**, 경로 동일성/필드 변환 검사 **15개/11개**를 통과했고, 별도로 실제 4B 학습과 익명 비교의 준비·집계를 실행했습니다. 모델·데이터·실행 자료는 로컬 보관 대상이며 Git에 포함된다고 가정하지 않습니다.
 
-14B 클라우드 실험은 GPU 제원 사전 검사 실패 후 보류한 상태입니다. 이전 준비 단계에서 IAM·보안그룹·S3 객체는 생성했지만 새 GPU 인스턴스는 실행하지 않았습니다. 이번 두 로컬 실행에서는 추가 AWS 변경·GPU 임대·운영 배포를 하지 않았습니다. 다음 개선은 형식 준수와 내용 정확도를 분리하고, 기본 모델 추론 경로·계산·조건 해석의 실패를 진단한 뒤 별도의 학습 자료와 새 평가로 검증해야 합니다. 같은 자료를 더 반복하거나 파라미터만 늘리면 해결된다고 판단하지 않습니다.
+14B 클라우드 실험은 GPU 제원 사전 검사 실패 후 보류한 상태입니다. 이전 준비 단계에서 IAM·보안그룹·S3 객체는 생성했지만 새 GPU 인스턴스는 실행하지 않았습니다. 이번 두 로컬 실행에서는 추가 AWS 변경·GPU 임대·운영 배포를 하지 않았습니다. 후속 추론·반입 비교는 아래에 기록합니다. 같은 자료를 더 반복하거나 파라미터만 늘리면 해결된다고 판단하지 않습니다.
+
+#### 오프라인 반입용 MLX 추론 개선
+
+**추론·반입 코드는 수정하고 실제 실행했지만, 새 모델의 품질 승격은 보류했습니다.** 추가 학습 성공이나 운영 모델 교체로 표시하지 않습니다. 이번 작업에서도 AWS 변경·GPU 임대·`test.tridatum.co` 배포는 하지 않았습니다.
+
+- `scripts/mlx_inference.py`로 native template·샘플링·생각 모드·생성 길이·문맥·seed·penalty 설정을 명시합니다. 실제 원본 4B의 6문항은 기존 greedy 설정과 MLX 공식 `generate_step` 경로의 출력 토큰이 모두 일치했습니다. 손실 정렬·정답 마스킹·LoRA 갱신에서 명백한 결함은 확인되지 않았으며, 원래 경로가 잘못된 토큰을 생성했다는 결론은 내리지 않습니다.
+- 실제 tokenizer의 added-token 등록·원자적 왕복·template 근거로 생각 구간의 종료를 판별합니다. 원본 Qwen3의 일반 assistant 시작과 Qwen3.5의 열린 생각 구간을 구별하고, 생각 모드를 지원하지 않는 template은 거부합니다. EOS·생각 종료·최종 답변을 분리하며, 잘린 출력을 수선하거나 닫는 태그를 강제로 넣지 않습니다.
+- `scripts/diagnose_mlx_inference.py`는 모델·adapter·입력·소스·프로필 해시와 원본 토큰·최종 답변·중단 사유를 보존합니다. 매 질문의 seed와 KV cache를 초기화하고 penalty는 생성 토큰에만 적용합니다. 기존 `trid-local-mlx-v2` 출력의 다섯 decoder 필드는 그대로 유지합니다.
+- 모델 비교에는 원본 Qwen3-4B, 기존 학습 adapter, Qwen3-4B-Instruct-2507, Qwen3.5-4B를 포함했습니다. 개발 문항과 두 seed를 먼저 고정했으며, 완료된 비교에서 선택한 후보는 `mlx-community/Qwen3-4B-Instruct-2507-4bit` revision `50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b`입니다. **새 공개 기반 모델 후보이지, 새로 학습한 TRID adapter가 아닙니다.** 기존 adapter를 다른 기반 모델에 붙이지 않았습니다.
+- 후보 설정은 no-thinking, temperature `0.7`, top-p `0.8`, top-k `20`, min-p `0`, presence/repetition penalty `0/1`, seed `14`, 문맥 상한 `8192`, 생성 상한 `1024`입니다. 문맥에는 입력과 생성 예산이 함께 포함되며 초과 입력을 자르지 않고 거부합니다. 이 설정 상한 전체의 부하 검증을 마쳤다는 뜻은 아닙니다.
+
+최종 비교는 macOS 전체 메모리 압력 경고로 일부 중단됐습니다. 모델 작업의 관측 RSS·MLX 사용량은 6GiB 미만이었고 스왑 증가도 없었지만, 별도 호스트 관측에서는 압축 메모리가 약 11.15GiB였습니다. 안전장치를 낮추거나 사용자 앱을 종료하지 않았습니다. Qwen3.5 개발 비교도 27/36 응답 후 중단돼 **품질이 낮다고 판정한 것이 아니라 실행 수락 대상에서 제외**했으며, 그 부분 답변은 선택에 사용하지 않았습니다.
+
+아래는 중단 후 별도로 선언한 **기록된 답변의 참고 분석이며 정식 수락 점수가 아닙니다.** 구조화 문항은 JSON 객체·정확한 자료형/내용·종료를 함께 확인했습니다. 설명 문항은 고정된 의미·문체 기준으로 두 독립 세션이 익명 검토했습니다. 미관측 답변을 오답으로 표시하거나 분모에서 없애지 않았습니다.
+
+| 경로 | 완료 응답/계획 | 구조화 12문항 참고 일치 | 설명 4문항 참고 일치 | 전체 감시 실행 |
+|---|---:|---:|---|---|
+| 기존 원본·greedy | 0/16 | 미관측 | 미관측 | 첫 prefill 중 메모리 압력 중단 |
+| 기존 2차 학습본·greedy | 16/16 | 5/12 | 3/4 | 완료 |
+| 새 후보·seed14 | 16/16 | 7/12 | 3/4 | 두 seed를 묶은 전체 실행은 중단 |
+| 새 후보·seed29 | 13/16 | 7/12 | 1/4 — 3개 미관측 | 메모리 압력 중단 |
+
+새 후보 seed14는 가상 규칙에 없는 **퇴장·재입장 제한**을 추가했습니다. 형식이 맞거나 문장이 자연스러워도 근거 충실성이 확보된 것은 아닙니다. 실제로 읽을 수 있는 설명 9답변의 69개 판정 중 67개가 일치했고, 차이 2개만 원문·고정 기준으로 조정했습니다. 중단된 후보의 정식 품질 점수는 미확정, 수락 credit은 0으로 유지합니다. 이 작은 가상 진단과 사후 참고 분석을 전체 행정안전부 지식·실제 법령·일반 정확도 개선으로 해석하지 않습니다.
+
+**반입 패키지와 실행 범위**
+
+`scripts/mlx_offline.py`는 모델·tokenizer·프로필·실행 코드·라이선스·고정 wheel 34개를 실제 파일로 복사하고 해시로 결박합니다. 선택적 adapter는 패키지 내 base 해시와 결박하고 로딩 시 tensor key/shape 전체를 검사합니다. 이는 알 수 없는 adapter의 학습 출처를 증명한다는 뜻은 아닙니다. 임의 remote code·pickle 가중치·경로 이탈·symlink·누락/추가/변조 파일을 거부하며, 가중치를 fuse하거나 다시 양자화하지 않습니다.
+
+실제 패키지는 `runs/mois-offline-quality-20261113T035409Z/bundle/`에 있으며 논리 크기는 약 **2.23GiB**입니다. 대상은 **macOS 26+ arm64·CPython 3.12·pip**이고 Apple M5에서 검증했습니다. Linux/GGUF 반입물은 아닙니다. 모델·wheel·실행 자료는 Git에 포함하지 않으므로 저장소 clone만으로 이 경로가 생기지는 않습니다.
+
+패키지를 원래 위치에서 옮긴 뒤 새 venv에 외부 네트워크·원 저장소 읽기를 OS 수준에서 차단하고 wheel 34개를 설치했으며, 사전 무결성 검사·설치 후 호환성 검사·의존성 검사를 통과했습니다. 지원 CLI의 실제 모델 실행은 `28-3`에 `{"value": 25}`를 출력했고 기존 개발 실행과 입력·출력 토큰이 일치했습니다. 별도의 **OS 차단 native worker 실행은 메모리 압력으로 중단**됐으므로 그 강화 격리 조건까지 완전 수락한 것은 아닙니다. 처음 전체 supervisor를 OS sandbox 안에 넣은 시도는 `/bin/ps` 실행 권한 문제로 실패해 기록을 보존했으며, 후속 시도에서는 감시자를 밖에 두고 worker만 격리했습니다. 일반 CLI의 Python 네트워크 차단을 OS sandbox와 동일시하지 않습니다.
+
+사용 전 launcher와 manifest 해시를 **패키지와 별도의 신뢰 경로**에서 받아 먼저 대조해야 합니다. 변경되지 않은 launcher도 비격리 실행에서는 같은 디렉터리의 모듈에 가려질 수 있어 CLI는 `-I`를 강제합니다. 설치 전에는 `-I -S`의 표준 라이브러리 전용 `--integrity-only` 검사로 lockfile·wheel까지 인증하며, 이 검사는 플랫폼·모델 품질 수락이 아닙니다. 신뢰할 수 있는 Python과 검사 중 변경되지 않는 로컬 파일시스템이 전제입니다.
+
+다음 내용을 `messages.json`으로 저장한 뒤 실행합니다. 기존 출력 파일은 덮어쓰지 않습니다.
+
+```json
+[
+  {"role":"system","content":"제공된 가상 문제를 정확히 풀고 요청된 JSON 객체만 답하세요. 외부 사실을 보태지 마세요."},
+  {"role":"user","content":"뺄셈 28-3의 결과를 value 하나만 있는 JSON 객체로 답하세요."}
+]
+```
+
+```sh
+(
+  set -eu
+  BUNDLE="$PWD/runs/mois-offline-quality-20261113T035409Z/bundle"
+  MANIFEST="fc070f0ce45bca426a4bb52391ed30ebee8bcf8fb2d7ec4b5993cdb5b21bc1f8"
+  printf '%s  %s\n' \
+    "aa1fefe457f61be8de24fe63ef43c58ee18ec890e07fccd21e1b9e2528b14650" "$BUNDLE/runtime/mlx_offline.py" \
+    "$MANIFEST" "$BUNDLE/manifest.json" | shasum -a 256 -c -
+  python3.12 -I -S "$BUNDLE/runtime/mlx_offline.py" verify "$BUNDLE" \
+    --manifest-sha256 "$MANIFEST" --integrity-only
+  test ! -e .trid-offline-venv
+  python3.12 -I -m venv .trid-offline-venv
+  PY="$PWD/.trid-offline-venv/bin/python"
+  "$PY" -I -m pip --isolated install --no-index --no-deps --only-binary=:all: \
+    --require-hashes --find-links "$BUNDLE/wheelhouse" -r "$BUNDLE/requirements.lock"
+  "$PY" -I "$BUNDLE/runtime/mlx_offline.py" verify "$BUNDLE" --manifest-sha256 "$MANIFEST"
+  "$PY" -I "$BUNDLE/runtime/mlx_offline.py" run "$BUNDLE" \
+    --manifest-sha256 "$MANIFEST" --messages messages.json --output answer.json
+)
+```
+
+관련 native/tokenizer·기존 출력 계약·감시자·반입 보안 **108개 검사**를 통과했습니다. 원래 실험·중단 기록은 덮어쓰지 않았습니다. 개발 출력 생성 후 발견한 채점기의 gold 인증 누락은 별도 correction record로 공개하고, 정답/입력 해시·문항 분모를 고정하는 검사만 추가했습니다. 기존 채점 수치와 후보 선택은 변하지 않았고 답변도 재생성하지 않았습니다. 과거 학습 실행을 재현할 때는 당시 기록된 소스/Git 버전을 사용해야 합니다.
+
+실행 근거는 같은 run의 `comparison-protocol.json`, `candidate-selection.json`, 각 phase의 guard/분류 기록, `scoring-integrity-correction.json`, `posthoc-observation-protocol.json`, `posthoc-observed-heldout-diagnostics.json`, `posthoc-prose-aggregate.json`, `offline-runtime-evidence.json`, `relocation-evidence/`, `offline-final-runtime-tests.log`에 보관합니다.
+
+설정·구현 판단에는 [Qwen3 모델 카드](https://huggingface.co/Qwen/Qwen3-4B), [Instruct-2507 카드](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507), [Qwen3.5 카드](https://huggingface.co/Qwen/Qwen3.5-4B), [MLX-LM 0.32.2](https://github.com/ml-explore/mlx-lm/tree/v0.32.2)를 사용했습니다. [Qwen3 보고서](https://arxiv.org/abs/2505.09388), [LoRA Learns Less and Forgets Less](https://arxiv.org/abs/2405.09673), [regularized replay 연구](https://arxiv.org/abs/2512.22337), [pretraining replay 연구](https://arxiv.org/abs/2603.04964)도 검토했지만, 이를 작은 기존 SFT의 효과 보증으로 해석하거나 검증되지 않은 replay/KL 학습을 추가하지는 않았습니다.
 
 ### Packed-head 학습 엔진
 
