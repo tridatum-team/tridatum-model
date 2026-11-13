@@ -96,6 +96,9 @@ def _background(store, auth, config, stop: threading.Event) -> None:
 
 
 def cmd_serve(args) -> int:
+    if args.insecure_dev and args.bind not in (None, '127.0.0.1'):
+        return _fail('--insecure-dev에서는 --bind 127.0.0.1만 사용할 수 있습니다.')
+    host = args.bind if args.bind is not None else ('127.0.0.1' if args.insecure_dev else '0.0.0.0')
     config = load_config(args.config)
     try:
         digest = hashlib.sha256(config.tokenizer_path.read_bytes()).hexdigest()
@@ -113,7 +116,6 @@ def cmd_serve(args) -> int:
     store = open_store(config)
     auth = Auth(store, max_sessions=config.max_sessions, idle_seconds=config.idle_seconds)
     run_purge(store, config)
-    host = '127.0.0.1' if args.insecure_dev else '0.0.0.0'
     server = make_server(config, store, auth, tok, insecure_dev=args.insecure_dev, host=host)
     stop = threading.Event()
     threading.Thread(target=_background, args=(store, auth, config, stop), daemon=True).start()
@@ -142,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest='command', required=True)
     serve = sub.add_parser('serve', help='서버 시작')
     serve.add_argument('--config', required=True, type=Path)
+    serve.add_argument('--bind', help='수신 주소 (기본: 0.0.0.0, 개발용: 127.0.0.1)')
     serve.add_argument('--insecure-dev', action='store_true', help='개발용: 127.0.0.1, HTTP, 쿠키 trid-dev')
     admin = sub.add_parser('create-admin', help='관리자 계정 만들기')
     admin.add_argument('--config', required=True, type=Path)

@@ -2,9 +2,66 @@
 
 공유 주소: https://test.tridatum.co
 
-이 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됩니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
+## 현재 공개 배포 (2026-11-13)
 
-**현재 상태 (2026-11-12)**
+현재 공유 주소는 **로그인 필수 PDF 전용 앱**입니다. 로그인 후 텍스트 PDF 한 건을 올려 그 문서에 질문하며, 관리자는 계정·이용 기록과 CSV 내보내기를 사용합니다. **이전 근거 그래프 기본 선택, 일반 대화, 공유 색인 검색, `/paste` 등은 현재 공개 사이트에서 제공하지 않습니다.** 모델은 기존 Qwen3-1.7B 원본을 재사용하며 업무 특화·품질 합격을 주장하지 않습니다.
+
+PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하십시오. 앱은 질문·답변·PDF 본문을 이용 기록에 저장하지 않으며, 계정·접속 IP·이벤트 등 운영 기록은 SQLite에 보관합니다. PDF와 추출 텍스트는 세션 메모리에만 있고 로그아웃·30분 세션 만료·자료 지우기로 정리됩니다. Cloudflare의 네트워크 처리·메타데이터 정책은 별개입니다. 자세한 기능과 제한은 [온프레미스 안내](ONPREM.md)를 참조하십시오.
+
+### 연결 경로와 운영 파일
+
+```text
+https://test.tridatum.co
+  → Worker trid-model-test (6557e165-9101-401b-8757-91bdcd349bb1)
+  → named tunnel trid-test-origin.eommydocs.com
+  → Caddy 127.0.0.1:51875 (호스트·프록시 비밀키 인증)
+  → secure onprem app 127.0.0.1:51874
+  → 기존 Qwen llama-server 127.0.0.1:51912
+```
+
+- 맥미니 기준 폴더: `/Users/eomgyuhyeon/Services/trid-onprem`. 현재 앱은 `6bb85bd` UI 증분 릴리스인 `releases/6bb85bd-native`이며, 실행 Python은 `/Users/eomgyuhyeon/Services/trid-onprem/releases/6bb85bd-native/venv/bin/python`입니다. 기준 폴더의 `data/onprem.json`, `data/onprem.db`와 기존 계정·자격 증명을 그대로 사용합니다. 이전 PDF 앱의 wheel 설치 환경인 기준 폴더의 `venv/`는 롤백용으로 보존합니다.
+- 배포 소스: `deploy/onprem/Caddyfile.test`, `deploy/onprem/start-test-gateway.sh`, `deploy/onprem/wrangler.test.json`, `deploy/onprem/requirements-macos-arm64.txt`. Python 3.12 릴리스 전용 venv에 해시 고정 macOS arm64 의존성과 앱 wheel(`--no-deps`)을 설치합니다. 현재 패키지는 Pretendard 폰트와 라이선스를 포함합니다. 앱은 `--bind 127.0.0.1`을 사용하고 **`--insecure-dev`를 사용하지 않습니다.** [네이티브 실행 안내](ONPREM.md#3-6-시작)
+- launchd 작업은 `co.tridatum.trid.onprem`(앱), `co.tridatum.trid.onprem.gateway`(Caddy)입니다. 이번 UI 릴리스에서 Caddy·터널·모델 구성은 변경하지 않았습니다. 기존 `co.tridatum.trid.site.tunnel`과 기존 site·모델은 보존했습니다. **`co.tridatum.trid.site` supervisor를 중지하지 마십시오. 현재 앱도 사용하는 llama-server를 소유합니다.**
+- 프록시 비밀키는 기존 `/Users/eomgyuhyeon/Services/trid-site/.runtime/proxy-secret`에서 공급합니다. 값·관리자 비밀번호·자격 증명은 문서나 저장소에 게시하지 않습니다.
+- Worker가 신뢰 가능한 클라이언트 IP로 설정한 `X-Trid-Client-IP`만 Caddy의 호스트·비밀키 인증을 통과한 뒤 `X-Real-IP`로 앱에 전달합니다. 임의 클라이언트 헤더를 그대로 신뢰하지 않습니다.
+- Worker는 정확한 폰트 경로 `/fonts/PretendardVariable.woff2`만 허용합니다. 해당 폰트는 `Content-Type: font/woff2`, `Cache-Control: private, max-age=86400`으로 제공하며, 모든 페이지·API는 `Cache-Control: no-store`를 유지합니다.
+- 맥미니 전원·인터넷·GUI 로그인 세션이 필요하며 소규모 시험용으로 가용성을 보장하지 않습니다. 네이티브 앱에는 Compose식 앱 전체 하드 메모리 상한이 없습니다.
+
+### 확인 범위와 수락 경계
+
+- 최초 PDF 앱 배포에서는 공개 HTTPS 로그인, 관리자 화면, PDF 업로드 후 질문, CSV 내보내기를 확인했습니다. 인증 없는 직접 원점 접근은 HTTP403이었으며, IP 전달 수정 뒤 이용 기록의 클라이언트 IP가 올바른 것을 확인했습니다.
+- 이번 UI 증분 릴리스에서는 기존 관리자 로그인·PDF 업로드·질문 동작과 공개 health HTTP200을 확인했습니다. 설치된 폰트의 HTTP200, MIME·캐시 헤더와 크기2,057,688바이트를 확인했습니다. 실제 Chrome에서도 Pretendard Variable 로드·폰트 리소스 디코딩(2,057,688바이트)을 확인했습니다. 데스크톱 화면은 2열과 문서 자동 펼침, 모바일 너비390px에서는 패널 세로 배치·가로 넘침 없음·업로드 문서 접힘을 확인했습니다. 실제 질문 응답 렌더링과 모델 정보 카드의 정의 항목 표시도 확인했습니다.
+- 이번 릴리스의 Python CLI·서버 대상 테스트37개와 Worker 테스트16개를 통과했습니다. 최초 PDF 앱 배포의 코어 단위 테스트83개 + 업로드 테스트5개, Worker 테스트15개 통과 기록과는 구분합니다.
+- 실제 질문 응답 예시는 **검증되지 않은 답변**이었으며, 연결·기능 확인을 답변 품질 합격으로 취급하지 않습니다. 원본 모델의 품질 기준 미달 표시는 유지합니다.
+- 이는 **인터넷 공개 macOS 네이티브 배포**의 확인입니다. 오프라인 tar 납품, Linux Compose 설치·수락, 전체 앱 메모리 격리 또는 기관 보안 적합성 검증을 완료했다는 뜻이 아닙니다.
+
+### 이전 PDF 앱으로 롤백
+
+이번 UI 릴리스 직전의 PDF 앱으로 되돌릴 때는 아래 절차를 사용합니다. 기준 폴더는 `/Users/eomgyuhyeon/Services/trid-onprem`입니다. Caddy·터널·모델은 바꾸거나 중지하지 않습니다.
+
+1. 기준 폴더의 `rollback/6bb85bd-before.plist`를 `/Users/eomgyuhyeon/Library/LaunchAgents/co.tridatum.trid.onprem.plist`로 복원합니다. 이전 앱은 기준 폴더에 보존한 `venv/`의 wheel 설치 환경을 사용합니다.
+2. `launchctl bootout gui/501/co.tridatum.trid.onprem`으로 현재 앱을 내립니다. `launchctl print gui/501/co.tridatum.trid.onprem`에서 작업이 완전히 등록 해제된 것을 확인한 **뒤에만** `launchctl bootstrap gui/501 /Users/eomgyuhyeon/Library/LaunchAgents/co.tridatum.trid.onprem.plist`로 복원한 앱을 올립니다.
+3. PDF 앱용 Worker 설정으로 `wrangler versions deploy 66d5bd19-d46d-4a1e-a134-ce565c98daee@100% --yes --config deploy/onprem/wrangler.test.json`을 실행합니다.
+4. 공개 health·로그인·PDF 업로드·질문 동작을 확인합니다. 앱 재시작으로 메모리의 세션과 PDF가 사라지므로 다시 로그인하고 PDF를 다시 올려야 합니다. 계정·이용 기록은 보존됩니다.
+
+배포 전 SQLite 온라인 백업은 기준 폴더의 `rollback/6bb85bd-before.db`입니다. 이번 릴리스에는 스키마 마이그레이션이 없으므로 **일반적인 앱 롤백에서는 현재 `data/onprem.db`를 그대로 유지**합니다. 백업으로 덮어써 배포 이후의 계정·이용 기록을 잃지 마십시오.
+
+### 이전 그래프 공개 데모로 롤백 (최초 PDF 전환의 복구 이력)
+
+아래는 UI 릴리스 직전 PDF 앱이 아니라, **최초 PDF 전환 이전의 그래프 데모**로 복구하는 절차입니다. 기존 site와 모델을 보존한 상태에서 **터널과 Worker를 함께** 되돌립니다. 운영자가 필요할 때 수행할 복구 절차이며, 현재 배포에서 실행할 정지 명령이 아닙니다.
+
+1. 맥미니에서 `/Users/eomgyuhyeon/Services/trid-onprem/rollback/tunnel-config.json`을 `/Users/eomgyuhyeon/Services/trid-site/tunnel/config.json`으로 복원합니다.
+2. `launchctl kickstart -k gui/501/co.tridatum.trid.site.tunnel`로 기존 터널 작업을 다시 시작합니다.
+3. 보존한 **이전 Worker 설정**을 지정하여 `wrangler versions deploy a3bb3219-a675-4e72-9269-8e3f2f17eb1a@100% --yes --config <이전 Worker 설정 경로>`를 실행합니다. 새 `deploy/onprem/wrangler.test.json`을 이전 설정 대신 사용하지 않습니다.
+4. 복구한 공개 health·이전 데모 화면과 직접 원점 차단을 확인합니다. `co.tridatum.trid.site` supervisor와 공유 모델은 중지하지 않습니다.
+
+## 이전 공개 데모·연구 기록 (2026-11-12까지)
+
+**이 절부터 문서 끝까지는 이전 데모의 기능·검증·운영 이력입니다.** “현재”, “기본”, “공개”는 각 기록 당시를 뜻하며, 현재 `test.tridatum.co`의 기능이나 운영 절차가 아닙니다. 당시 데이터·실패 판정은 보존하되, 현재 배포·복구에는 위 절을 사용하십시오. 특히 아래 과거 중지·맥북 롤백 명령을 현재 공유 llama-server에 적용하지 마십시오.
+
+당시 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됐습니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 모델 서버와 터널은 `co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`로 상주했고 맥북의 이전 원점은 정지·비활성화했습니다.
+
+**이전 상태 (2026-11-12)**
 - 기본 선택지는 **TRID 행안부 · 근거 그래프 v0.2** (`trid-mois-graph-v0.2`, 모델 미사용)이며, **Qwen3-1.7B 원본**은 일반 대화·기존 검색·첨부 질문용으로 유지합니다. 이전 `trid-v0.1-reader`는 공개 목록에서 제거했습니다.
 - 기존 맥미니 운영본에 그래프 모듈·온톨로지·검토 사실·불변 RDF 저장소, 서버 연결·버전 설정·UI 변경만 **선택 적용**했습니다. 전체 main이나 기관별 기능 등 다른 미커밋 작업의 동기화가 아닙니다. Qwen 원본 가중치·문맥4,096·출력최대512토큰과 학습 실패 판정은 유지합니다.
 - 실제 release는 `mois-000966417b72488e5182`, 경로는 `runs/mois-graph/v1`입니다. 정상 재시작과 공개 Chrome 답변·인용·출처 표시를 확인했습니다. 새 GPU/클라우드 실행·Docker 중지는 하지 않았고, 유보한512토큰 원본/adapter 진단은 재개하지 않았습니다.
@@ -24,9 +81,9 @@
 - 일반 대화(검색 아님)는 원본 1.7B의 능력 한계가 그대로다. 예: 메일 다듬기 요청의 뜻을 바꾼다(C-030, 2026-11-02 사용자 관측).
 - CPU Qwen 기관 질문의 당시 실측은 약17–21초입니다. 그래프 처리 시간이나 현재 성능 보장으로 읽지 않습니다.
 
-## 현재 개발 상태: 근거 그래프 + LLM 생성 (2026-11-12)
+## 이전 개발 상태: 근거 그래프 + LLM 생성 (2026-11-12)
 
-**구현 완료와 공개 승격은 별개입니다.** 근거 그래프 조회 결과를 LLM으로 종합하고 원문 근거 표·출처 추적 정보(provenance)를 함께 표시하는 경로를 구현했지만, 실제 로컬 Qwen3.5-4B CPU 답변에서 중대한 의미 오류가 확인되어 **공개 v0.3 승격을 보류합니다. 운영 기본값은 근거 그래프 v0.2 그대로입니다.**
+**구현 완료와 공개 승격은 별개입니다.** 근거 그래프 조회 결과를 LLM으로 종합하고 원문 근거 표·출처 추적 정보(provenance)를 함께 표시하는 경로를 구현했지만, 실제 로컬 Qwen3.5-4B CPU 답변에서 중대한 의미 오류가 확인되어 **공개 v0.3 승격을 보류했습니다. 당시 운영 기본값은 근거 그래프 v0.2였습니다.** 현재 공개 PDF 앱의 기능 설명이 아닙니다.
 
 - **구현 검증:** 단위 테스트54개와 두 소스 투영본의 HTTP 검증, 실제 로컬 UI 렌더링 확인은 통과했습니다. HTTP/UI에는 합성 fake-native 응답을 사용했으므로 연결·표시 계약의 증거이지 실제 모델 답변 품질의 증거가 아닙니다.
 - **실제 품질 — `NOT_ACCEPTED`:** 독립 검토에서 생성 답변10건은 **PASS4·LIMITED3(내용은 맞지만 원문 나열 수준)·FAIL3**이었습니다. 실패는 사전 협의 기산점 변경, 사전협의 기한의 전후 모순, 제공된 등록 예외를 누락한 무조건적 설명입니다. 10건 모두 숫자·인용 구조 검증은 통과했으나 이는 품질 합격이 아닙니다. 별도 경계 질문5건은 모델 호출 없이 적절히 처리했습니다.
@@ -41,9 +98,9 @@
 - **수정 후 실제 답변:** 4B의 중대 사례3건은 독립 검토에서 PASS0·LIMITED1·FAIL2였습니다. 개요는 협의를 계획 제출 전이 아닌 출발7일 전으로 설명했고, 결과보고는 특정 시스템의 미등록 예외를 등록 대상 전체로 확대했습니다. 수정 후9B 개요1건도161.5초가 걸렸지만20일·7일 기한 모두 토요일·공휴일 제외를 누락해 독립 검토에서 FAIL로 확인됐습니다. 이 판정 범위는 해당1문항뿐입니다.
 - **중단·게시 경계:** 실패 후보의 추가 확대 실행은 중단하며 후보는 계속 `NOT_ACCEPTED`입니다. 개발 브랜치의 생성기 설정은1.7B이며4B/9B 진단이 설정 교체나 운영 승격을 뜻하지 않습니다. `main`에는 문서·보고서만, 별도 개발 브랜치에는 구현을 관리합니다. 새 GPU 실행·학습·다운로드·클라우드 지출·운영 변경은 없습니다.
 
-## 제공 버전 (`deploy/macmini-site/versions.json`)
+## 이전 제공 버전 (`deploy/macmini-site/versions.json`)
 
-이 절은 **현재 공개 운영의 v0.2 기본 구성**을 설명합니다. 별도 개발 브랜치의 실험용 버전 설정을 운영에 반영했다는 뜻이 아닙니다.
+이 절은 **2026-11-12 공개 운영의 v0.2 기본 구성**을 설명합니다. 현재 PDF 앱의 공개 선택지나 별도 개발 브랜치의 실험용 버전 설정을 운영에 반영했다는 뜻이 아닙니다.
 
 | 버전 | 기반 모델 | 라이선스 | 상태 |
 |---|---|---|---|
@@ -107,7 +164,7 @@ python scripts/build_mois_graph.py \
 Git 독자용 [공개 검증 요약](../reports/mois-graph-v0.2-verification.json)과 별도로, 원본 근거는 로컬 `runs/mois-graph-upgrade-20261112/{build-actual-graph.log,graph-store-unittest.log,graph-final-tests.log,graph-followup-tests.log,actual-answers-fixed.json,http-smoke-head.json,http-smoke-deployed.json,deployment-result.json,ui-asset-correction.json,live-two-deadlines-fixed-ui.json,live-source-pin-followup.json,live-retained-qwen-upload.json,typed-graph-proof.json}`에 보존합니다. 원본 실행 증거·실제 입력·DB는 Git clone에 포함되지 않습니다.
 최종 공개 화면의 로컬 증거는 `runs/mois-graph-upgrade-20261112/site-graph-answer.png`이며 Git에 포함되지 않습니다. 답변 시작이 보이도록 인용·출처·고급 JSON을 기본 접힘으로 표시합니다. 실제 고정 문서 후속 질문 “그럼 결과보고서는 언제까지 내야 해?”에서30일·다음 날 기산·연결된 등록 예외를 함께 표시한 결과를 위 후속 영수증에 보존했습니다.
 
-## 일반 대화와 근거 검색 (TRID-CONVERSATION-001, 유지한 Qwen 원본 버전)
+## 이전 일반 대화와 근거 검색 (TRID-CONVERSATION-001, 당시 Qwen 원본 버전)
 
 - **경로 선택:** 서비스 모델 자신이 2단어 문법(`검색` | `대화`)으로 처리 경로를 고른다. 키워드 규칙이나 고정 응답은 없다(GENERAL-CHAT-001).
   - 2-word grammar는 입력 하나만 분류한다. 직전 턴이 일반 대화였으면 직전 사용자 입력을 함께 적어 준다. 그래야 "그 중에 하나만 골라줘", "두 문장으로 줄여줘"가 검색으로 가지 않는다.
@@ -185,7 +242,7 @@ Git 독자용 [공개 검증 요약](../reports/mois-graph-v0.2-verification.jso
     - gemma3:4b: 새 세션 기억 날조
   - 기본 Qwen3-1.7B 원본은 품질 합격이 아니라 현상 유지다. 실험판 표시도 그대로 둔다.
 
-## 사용
+## 이전 데모 사용
 
 - 기본 **TRID 행안부 · 근거 그래프 v0.2**에서 “행안부 공무국외출장 사전 협의와 허가요청 기한은?”을 질문하고 접힌 근거·출처를 열어 원문과 시점을 확인하세요. `/doc 번호`로 문서를 고정한 후 “그럼 결과보고서 제출 기한은?”처럼 후속 질문할 수 있습니다. 고정도 다른 기관·미수록 규정으로 범위를 넓히지 않습니다.
 - 일반 대화·기존 공유 검색·첨부 질문은 **Qwen3-1.7B 원본으로 전환**합니다. Qwen에서 `/pdf`, `/paste`로 넣은 문서가 있으면 그 문서에서만 찾습니다. 그래프 모드에서는 첨부 질문을 대신 처리하지 않습니다. 텍스트 PDF는2MB·20페이지·5만 자, 붙여넣기는5,000자까지입니다.
@@ -196,9 +253,9 @@ Git 독자용 [공개 검증 요약](../reports/mois-graph-v0.2-verification.jso
 
 PDF와 질문은 Cloudflare HTTPS 중계를 거쳐 운영자의 맥미니로 전송됩니다. 비공개·민감한 자료 대신 공개 가능한 테스트 자료만 사용하세요. 앱은 문서와 질문을 파일·학습 자료로 저장하지 않습니다. 문서는 HttpOnly/Secure/SameSite 세션별 메모리에 저장되며, 지우기 또는 15분 미사용 후 정리됩니다. Cloudflare 자체 네트워크 처리·메타데이터 정책과는 별개입니다.
 
-## 운영 / 중지 / 재실행
+## 이전 데모 운영 / 중지 / 재실행
 
-**현재 원점: 맥미니 (2026-11-01 22:08 KST부터, SITE-MEMORY-023).** 맥북 원점(SITE-RECOVERY-010)은 정지·비활성화했다.
+**당시 원점: 맥미니 (2026-11-01 22:08 KST부터, SITE-MEMORY-023).** 맥북 원점(SITE-RECOVERY-010)은 정지·비활성화했다. 아래 명령은 과거 운영 기록이며 현재 배포 복구에는 위 롤백 절차를 사용합니다.
 
 - **코드 기준선:** 브랜치 `model-resume-030-followup` 커밋 `2b8ba92`(2026-11-02 반영)에 아래 선택 패치를 적용한 운영본입니다. 직전 과거 운영은 `site-memory-022` `6a5eb37` = 배포판 `9256df4` + 색인 적재 메모리 절감(022/023).
   - Qwen 원본 가중치·정밀도·문맥4,096은 그대로입니다. 출력512는 아래 한도 패치에서 적용됐고 그래프 배포 때 다시 바꾸지 않았습니다.
@@ -258,7 +315,7 @@ launchctl bootout gui/$(id -u)/co.tridatum.trid.site.tunnel     # 원점 내리�
 
 서버는 127.0.0.1에만 바인딩하며 인터넷 터널 직접 접근은 프록시 비밀키 없이 거절합니다. 요청 원본과 CSRF 토큰을 검사하고, 브라우저가 보내는 프록시 신원 헤더는 Worker가 덮어씁니다. Worker는 IP별 분당 30회, 서버는 세션별 분당 20회를 제한합니다. 최대 32개 세션, HTTP 작업 8개, 모델·PDF 처리 1개를 허용합니다. PDF는 별도 프로세스에서 15초 제한 및 CPU/메모리 감시하에 읽습니다. 이 조치들은 정식 보안 심사나 운영용 격리 환경을 대신하지 않습니다.
 
-## 검증
+## 이전 데모 검증
 
 - `tests/test_shared_demo.py`: 방문자별 문서 격리, CSRF/Origin/프록시 차단, 만료, 잘못된 입력, 크기 제한.
 - `deploy/shared-demo/worker.test.mjs`: 경로 차단, 프록시 헤더 교체, 비밀키 전달 범위, 연결 종료 화면.

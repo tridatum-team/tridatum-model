@@ -1,0 +1,37 @@
+{
+    admin off
+    auto_https off
+    persist_config off
+    servers {
+        max_header_size 16KiB
+        timeouts {
+            read_header 5s
+            read_body 20s
+            write 130s
+            idle 30s
+        }
+    }
+}
+http://:51875 {
+    bind 127.0.0.1
+    @trusted {
+        header X-Trid-Proxy {$TRID_PROXY_SECRET}
+        header X-Trid-Host test.tridatum.co
+    }
+    handle @trusted {
+        request_body {
+            max_size 2MiB
+        }
+        reverse_proxy 127.0.0.1:51874 {
+            header_up X-Real-IP {http.request.header.X-Trid-Client-IP}
+            header_up -X-Trid-Client-IP
+            header_up -X-Trid-Proxy
+            header_up -X-Trid-Host
+            header_up -Forwarded
+            header_up -X-Forwarded-*
+        }
+    }
+    handle {
+        respond "Forbidden" 403
+    }
+}
