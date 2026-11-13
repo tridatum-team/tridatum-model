@@ -12,6 +12,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 HOST = 'test.example'
@@ -43,14 +44,19 @@ call_command('migrate', verbosity=0)
 
 from trid.onprem.config import load_config  # noqa: E402
 from onprem_web import runtime  # noqa: E402
+from onprem_web.accounts.registry import SessionRegistry  # noqa: E402
 
 
-def make_runtime(answer=None, tok=None, **config_overrides) -> runtime.Runtime:
+def make_runtime(answer=None, tok=None, registry=None, clock=None, **config_overrides) -> runtime.Runtime:
+    """Install a runtime with a fresh SessionRegistry from the config (or `registry`); `clock` drives its idle timer."""
     config = dataclasses.replace(load_config(CONFIG_PATH), **config_overrides)
+    if registry is None:
+        registry = SessionRegistry(config.max_sessions, config.idle_seconds, config.per_minute,
+                                   clock=clock or time.monotonic)
     rt = runtime.Runtime(
         config=config, tokenizer=tok,
         answer=answer or (lambda document, question: {'status': 'ok'}),
-        registry=None, gen_lock=threading.Lock(), parse_lock=threading.Lock(),
+        registry=registry, gen_lock=threading.Lock(), parse_lock=threading.Lock(),
         insecure_dev=False, port=0)
     runtime.install(rt)
     return rt

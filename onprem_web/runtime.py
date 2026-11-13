@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from trid.onprem.config import Config
+
+if TYPE_CHECKING:
+    from onprem_web.accounts.registry import SessionRegistry
 
 
 @dataclass
@@ -14,7 +17,7 @@ class Runtime:
     config: Config
     tokenizer: object
     answer: Callable[[object, str], dict]
-    registry: 'SessionRegistry'  # defined in a later task; None until then
+    registry: SessionRegistry
     gen_lock: threading.Lock
     parse_lock: threading.Lock
     insecure_dev: bool

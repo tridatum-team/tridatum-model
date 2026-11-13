@@ -8,7 +8,7 @@ from pathlib import Path
 from django.http import Http404, HttpResponse
 
 import trid
-from trid.onprem.server import CSP, GENERIC_ERROR
+from trid.onprem.server import CSP, CSRF_FAIL, GENERIC_ERROR
 
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
 FONT_DIR = Path(trid.__file__).resolve().parent / 'onprem_ui' / 'fonts'
@@ -81,3 +81,7 @@ def not_found(request, exception=None):
 
 def server_error(request):
     return json_response(500, {'error': GENERIC_ERROR})
+
+
+def csrf_failure(request, reason=''):
+    return json_response(403, {'error': CSRF_FAIL})

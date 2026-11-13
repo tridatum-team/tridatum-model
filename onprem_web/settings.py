@@ -60,8 +60,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'onprem_web.web.SecurityHeadersMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'onprem_web.accounts.middleware.TridSessionMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
 ]
 
 ROOT_URLCONF = 'onprem_web.urls'
@@ -84,6 +85,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.ScryptPasswordHasher']
 AUTH_USER_MODEL = 'accounts.User'
+AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']  # rejects is_active=False
 AUTH_PASSWORD_VALIDATORS = []  # rules live in trid.onprem.passwords.check_new_password
 
 # Sessions and CSRF: the token lives in the session and travels in X-Trid-Token.
@@ -97,6 +99,7 @@ SESSION_COOKIE_PATH = '/'
 CSRF_USE_SESSIONS = True
 CSRF_HEADER_NAME = 'HTTP_X_TRID_TOKEN'
 CSRF_COOKIE_SECURE = not TRID_DEV
+CSRF_FAILURE_VIEW = 'onprem_web.web.csrf_failure'
 
 # Caddy terminates TLS in front of the app; no SECURE_* redirects here.
 SECURE_SSL_REDIRECT = False
