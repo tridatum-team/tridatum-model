@@ -121,6 +121,35 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(rows[2][1], "(unknown)")
         self.assertEqual(self.store.export_csv(event="pdf_upload").count("\n"), 2)
 
+    def test_log_rejects_free_text_in_fixed_columns(self):
+        bad = [
+            dict(username="x" * 33, ip="10.0.0.1", result="ok"),
+            dict(username="bad name", ip="10.0.0.1", result="ok"),
+            dict(username="kim", ip="not an ip", result="ok"),
+            dict(username="kim", ip="10.0.0.1", result="free text answer"),
+            dict(username="kim", ip="10.0.0.1", result="a" * 33),
+            dict(username="kim", ip="10.0.0.1", result="ok", error="x" * 129),
+            dict(username="kim", ip="10.0.0.1", result="ok", error="has space"),
+            dict(username="kim", ip="10.0.0.1", result="ok", target="=cmd"),
+        ]
+        for kw in bad:
+            with self.subTest(kw=kw):
+                with self.assertRaises(ValueError):
+                    self.store.log("ask", **kw)
+        self.assertEqual(self.store.query_events(), [])
+        self.store.log("ask", "KIM", "::1", "ok", error="timeout:3.5")
+        self.assertEqual(self.store.query_events()[0]["username"], "kim")
+
+    def test_export_csv_escapes_formula_cells(self):
+        self.store.log("login_ok", "kim", "10.0.0.1", "ok")
+        # defence in depth: inject a hostile row directly, bypassing log()
+        self.store._db.execute(
+            "INSERT INTO events (ts, username, ip, event, result, detail) "
+            "VALUES (1, '=HYPERLINK(1)', '+1', 'ask', '@x', '{}')")
+        rows = list(csv.reader(io.StringIO(self.store.export_csv())))
+        hostile = [r for r in rows if r[3] == "ask"][0]
+        self.assertEqual(hostile[1:5], ["'=HYPERLINK(1)", "'+1", "ask", "'@x"])
+
 
 if __name__ == "__main__":
     unittest.main()

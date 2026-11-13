@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import ipaddress
 import json
 import re
 import sqlite3
@@ -29,6 +30,9 @@ USER_FIELDS = frozenset({
 })
 ROLES = frozenset({"user", "admin"})
 _USERNAME_RE = re.compile(r"[a-z0-9._-]{2,32}")
+_RESULT_RE = re.compile(r"[a-z_]{1,32}")
+_DETAIL_STR_RE = re.compile(r"[A-Za-z0-9._:-]{1,128}")
+_CSV_DANGER = ("=", "+", "-", "@", chr(9), chr(13))
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -170,7 +174,16 @@ class Store:
         for key, value in detail.items():
             if value is not None and not isinstance(value, (str, int, float, bool)):
                 raise ValueError(f"detail 값은 단순 값이어야 합니다: {key}")
-        name = _fold(username) if username is not None else None
+            if isinstance(value, str) and not _DETAIL_STR_RE.fullmatch(value):
+                raise ValueError(f"detail 문자열 형식이 올바르지 않습니다: {key}")
+        name = normalize_username(username) if username is not None else None
+        if ip is not None:
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                raise ValueError("ip 형식이 올바르지 않습니다.") from None
+        if not isinstance(result, str) or not _RESULT_RE.fullmatch(result):
+            raise ValueError("result 형식이 올바르지 않습니다.")
         with self._lock:
             self._db.execute(
                 "INSERT INTO events (ts, username, ip, event, result, detail) "
@@ -211,11 +224,16 @@ class Store:
     def export_csv(self, since=None, until=None, username=None, event=None,
                    limit=None, offset=0) -> str:
         rows = self.query_events(since, until, username, event, limit, offset)
+        def safe(cell):
+            if isinstance(cell, str) and cell.startswith(_CSV_DANGER):
+                return "'" + cell
+            return cell
+
         out = io.StringIO()
         writer = csv.writer(out, lineterminator="\n")
         writer.writerow(["ts", "username", "ip", "event", "result", "detail"])
         for r in rows:
-            writer.writerow([
+            writer.writerow(safe(c) for c in [
                 r["ts"],
                 r["username"] if r["username"] is not None else "(unknown)",
                 r["ip"] if r["ip"] is not None else "",
