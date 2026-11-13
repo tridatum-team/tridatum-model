@@ -167,7 +167,8 @@ function load() {
   if (file.size > MAX_UPLOAD) { setMessage('doc-status', `PDF는 ${MAX_UPLOAD_LABEL} 이하로 넣어 주세요.`, true); return; }
   setMessage('doc-status', '문서를 읽는 중입니다.');
   void run('doc-status', async () => {
-    const data = await api('/api/load', file, {'Content-Type': 'application/pdf'});
+    // The file name never leaves the browser (R14); show the local name instead of the server's fixed one.
+    const data = {...await api('/api/load', file, {'Content-Type': 'application/pdf'}), name: file.name};
     setDocument(data);
     el('result').replaceChildren();
     setMessage('doc-status', `${data.name}을(를) 읽었습니다 (${data.pages.length}쪽). 이제 이 문서에서만 찾습니다.`);
