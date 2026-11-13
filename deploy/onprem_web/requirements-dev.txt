@@ -1,0 +1,5 @@
+Django==5.2.19
+waitress==3.0.2
+tokenizers==0.23.3
+pypdf==6.21.2
+playwright==1.49.1
