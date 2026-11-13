@@ -1,13 +1,15 @@
 # TRID PDF 근거 확인 서비스 설치·운영 안내서 (온프레미스판)
 
 대상 독자: 이 서비스를 설치하고 운영하는 기관 전산 담당자.
-서비스 한 줄 요약: 직원이 웹에서 텍스트 PDF 한 건을 올리고 질문하면, 그 PDF 안에서 찾은 원문 인용을 쪽 번호와 함께 보여 주는 내부망 전용 서비스입니다. 외부 인터넷에 연결하지 않고 동작합니다.
+서비스 한 줄 요약: 직원이 로그인한 뒤 웹에서 텍스트 PDF 한 건을 올리고 질문하면, 그 PDF 안에서 찾은 원문 인용을 쪽 번호와 함께 보여 주는 서비스입니다. 기관 내부망에서는 외부 인터넷 연결 없이 동작하도록 구성합니다.
+
+**문서 범위:** 아래 기본 설치·운영 절차는 Linux 오프라인 Docker Compose 배포용입니다. **2026-11-13 현재 `https://test.tridatum.co`는 같은 PDF 전용 앱을 macOS 네이티브로 실행하는 인터넷 공개 시험 배포**이며, Cloudflare를 거칩니다. 이 배포는 오프라인 이미지 tar 납품이나 Linux 설치·수락 검증을 완료했다는 뜻이 아닙니다. 실제 연결 경로·확인 범위·롤백은 [공개 시험 배포 운영 기록](SHARING.md#현재-공개-배포-2026-11-13)을 따르십시오.
 
 ## 1. 구성과 한계
 
 ### 1-1. 구성
 
-컨테이너 3개가 `docker compose`로 함께 동작합니다.
+Linux 오프라인 배포는 컨테이너 3개가 `docker compose`로 함께 동작합니다. 아래 네트워크·외부 통신 설명은 이 구성에 한정하며, 공개 시험 배포에는 적용하지 않습니다.
 
 | 서비스 | 역할 | 외부 노출 |
 | --- | --- | --- |
@@ -158,6 +160,23 @@ docker compose logs app       # "서버를 시작합니다"가 보이면 정상
 ```
 
 `docker compose logs`에는 질문, 파일 이름, 답변, PDF 내용이 남지 않습니다(예외 클래스 이름만 기록). 파일 이름은 브라우저가 서버로 보내지 않으며(화면 표시용으로만 보관), 서버는 항상 `document.pdf`라는 고정 이름만 씁니다. Caddy(`tls`)의 자체 로그는 `log default { output discard }`로 꺼져 있어 요청 정보가 남지 않습니다.
+
+컨테이너 없이 호스트에서 실행하고 같은 호스트의 HTTPS 역방향 프록시로 연결할 때는 설정의 `data_dir`, `tokenizer_path`, `llm_base`, `port`를 호스트 환경에 맞추고 앱을 루프백에만 바인딩합니다.
+
+```sh
+python -m trid.onprem serve --config /path/to/onprem.json --bind 127.0.0.1
+```
+
+`--bind`는 수신 주소만 바꿉니다. 운영 모드의 토크나이저 SHA-256 검증, `Secure` 속성의 `__Host-trid` 쿠키, `https://<hostname>` Origin 검사는 그대로 유지됩니다. HTTPS는 역방향 프록시에서 종료해야 하며, 컨테이너용 기본 수신 주소는 계속 `0.0.0.0`입니다. `--insecure-dev`는 운영 배포에 쓰지 마십시오. 개발 모드는 기본 수신 주소가 `127.0.0.1`이며, 다른 `--bind` 값은 거부합니다.
+
+**현재 공개 시험 배포의 네이티브 설치·실행 (macOS arm64, Python 3.12):**
+
+- 운영 기준 폴더는 `/Users/eomgyuhyeon/Services/trid-onprem`이고, 앱 릴리스는 `releases/d32549d-native`입니다. 같은 기준 폴더의 `venv/`, `data/onprem.json`, `data/onprem.db`를 사용합니다.
+- Python 3.12로 전용 venv를 만들고, 릴리스의 `deploy/onprem/requirements-macos-arm64.txt`를 `venv/bin/python -m pip install --require-hashes -r <해당 파일>`로 설치합니다. 앱은 빌드한 wheel을 `venv/bin/python -m pip install --no-deps <앱 wheel>`로 설치합니다. 해시 고정 패키지 설치와 wheel 설치를 분리하며, 일반 개발용 의존성 전체를 설치하지 않습니다.
+- 앱은 `venv/bin/python -I -m trid.onprem serve --config /Users/eomgyuhyeon/Services/trid-onprem/data/onprem.json --bind 127.0.0.1`로 운영 모드를 유지합니다. 설정의 앱 포트는 `51874`, 모델은 기존 Qwen llama-server의 루프백 `51912`입니다. `--insecure-dev`를 사용하지 않습니다.
+- 새 launchd 작업 `co.tridatum.trid.onprem`과 `co.tridatum.trid.onprem.gateway`가 앱과 Caddy를 담당합니다. Caddy는 루프백 `51875`에서 호스트·프록시 비밀키를 확인한 요청만 앱으로 보냅니다. Worker가 지정한 `X-Trid-Client-IP`는 이 인증을 통과한 뒤에만 `X-Real-IP`가 됩니다.
+- 네이티브 앱에는 Compose의 `mem_limit: 1g`와 같은 **앱 전체 하드 메모리 상한이 없습니다.** PDF 처리 제한이나 기존 모델 감독을 앱 전체 메모리 격리로 해석하지 마십시오.
+- 공개 시험 배포의 관리·purge 명령도 위 venv의 Python과 호스트 설정 경로를 사용합니다. 아래 `docker compose` 명령은 Linux 구성용이며 네이티브 배포에 그대로 실행하지 않습니다. 기존 `co.tridatum.trid.site` supervisor는 공유 llama-server를 소유하므로 **중지하지 마십시오.**
 
 ### 3-7. 첫 관리자 만들기
 

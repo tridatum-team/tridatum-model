@@ -75,35 +75,55 @@ class CliTest(unittest.TestCase):
             self.assertEqual(self.run_cli(argv)[0], 0)
 
     def test_serve_refuses_tokenizer_with_wrong_sha256(self):
-        with mock.patch.object(cli, 'make_server') as make:
-            code, out, err = self.run_cli(['serve', '--config', str(self.cfg)])
-        self.assertNotEqual(code, 0)
-        self.assertIn(cli.TOKENIZER_SHA256, err)
-        self.assertNotIn('secret-tokenizer-content', out + err)
-        make.assert_not_called()
+        for bind in ([], ['--bind', '127.0.0.1']):
+            with self.subTest(bind=bind), mock.patch.object(cli, 'make_server') as make:
+                code, out, err = self.run_cli(['serve', '--config', str(self.cfg), *bind])
+                self.assertNotEqual(code, 0)
+                self.assertIn(cli.TOKENIZER_SHA256, err)
+                self.assertNotIn('secret-tokenizer-content', out + err)
+                make.assert_not_called()
 
     def test_serve_insecure_dev_warns_on_mismatch_and_binds_loopback(self):
-        server = mock.Mock(server_address=("127.0.0.1", 1))
-        server.serve_forever.side_effect = KeyboardInterrupt
-        with mock.patch.object(cli, 'make_server', return_value=server) as make, \
-                mock.patch.object(cli, 'load_tokenizer', return_value=object()):
-            code, out, err = self.run_cli(['serve', '--config', str(self.cfg), '--insecure-dev'])
-        self.assertEqual(code, 0, err)
-        self.assertIn(cli.TOKENIZER_SHA256, err)
-        self.assertEqual(make.call_args.kwargs['host'], '127.0.0.1')
-        self.assertTrue(make.call_args.kwargs['insecure_dev'])
-        server.server_close.assert_called_once()
-        self.assertNotIn('Traceback', err)
+        for bind in ([], ['--bind', '127.0.0.1']):
+            with self.subTest(bind=bind):
+                server = mock.Mock(server_address=("127.0.0.1", 1))
+                server.serve_forever.side_effect = KeyboardInterrupt
+                with mock.patch.object(cli, 'make_server', return_value=server) as make, \
+                        mock.patch.object(cli, 'load_tokenizer', return_value=object()):
+                    code, out, err = self.run_cli(['serve', '--config', str(self.cfg), '--insecure-dev', *bind])
+                self.assertEqual(code, 0, err)
+                self.assertIn(cli.TOKENIZER_SHA256, err)
+                self.assertEqual(make.call_args.kwargs['host'], '127.0.0.1')
+                self.assertTrue(make.call_args.kwargs['insecure_dev'])
+                server.server_close.assert_called_once()
+                self.assertNotIn('Traceback', err)
 
-    def test_serve_production_binds_all_interfaces(self):
-        server = mock.Mock(server_address=("127.0.0.1", 1))
-        server.serve_forever.side_effect = KeyboardInterrupt
-        with mock.patch.object(cli, 'make_server', return_value=server) as make, \
-                mock.patch.object(cli, 'load_tokenizer', return_value=object()), \
-                mock.patch.object(cli, 'TOKENIZER_SHA256', hashlib.sha256(self.tok.read_bytes()).hexdigest()):
-            code, _, err = self.run_cli(['serve', '--config', str(self.cfg)])
-        self.assertEqual(code, 0, err)
-        self.assertEqual(make.call_args.kwargs['host'], '0.0.0.0')
+    def test_serve_insecure_dev_rejects_incompatible_bind_before_startup(self):
+        for host in ('0.0.0.0', '192.0.2.1', 'localhost', '::1', ''):
+            with self.subTest(host=host), \
+                    mock.patch.object(cli, 'load_config') as config, \
+                    mock.patch.object(cli, 'make_server') as make:
+                code, _, err = self.run_cli([
+                    'serve', '--config', str(self.cfg), '--insecure-dev', '--bind', host,
+                ])
+                self.assertNotEqual(code, 0)
+                self.assertIn('--bind 127.0.0.1', err)
+                config.assert_not_called()
+                make.assert_not_called()
+
+    def test_serve_production_bind_does_not_enable_insecure_dev(self):
+        for bind, expected_host in (([], '0.0.0.0'), (['--bind', '127.0.0.1'], '127.0.0.1')):
+            with self.subTest(bind=bind):
+                server = mock.Mock(server_address=(expected_host, 1))
+                server.serve_forever.side_effect = KeyboardInterrupt
+                with mock.patch.object(cli, 'make_server', return_value=server) as make, \
+                        mock.patch.object(cli, 'load_tokenizer', return_value=object()), \
+                        mock.patch.object(cli, 'TOKENIZER_SHA256', hashlib.sha256(self.tok.read_bytes()).hexdigest()):
+                    code, _, err = self.run_cli(['serve', '--config', str(self.cfg), *bind])
+                self.assertEqual(code, 0, err)
+                self.assertEqual(make.call_args.kwargs['host'], expected_host)
+                self.assertFalse(make.call_args.kwargs['insecure_dev'])
+                server.server_close.assert_called_once()
 
     def test_purge_respects_retention_days(self):
         self.write_config(retention_days=10)

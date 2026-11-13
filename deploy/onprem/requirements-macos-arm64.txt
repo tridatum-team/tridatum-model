@@ -1,0 +1,3 @@
+# Native test.tridatum.co deployment; wheel hashes from uv.lock.
+tokenizers==0.23.3 --hash=sha256:68649e97d5b43c44c031d8d848874a6eecae8f8fe40ea989aa777a5a83aca716
+pypdf==6.21.2 --hash=sha256:1d44d1a3a200f25062adff0085b02040e4646431ac2ccac22e42679e91466084
