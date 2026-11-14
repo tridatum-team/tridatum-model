@@ -25,7 +25,14 @@ from grounded_hf_lifecycle import (LIMITS, MAX_EXPORT, Client, authenticate_arch
     canonical, digest, exclusive_intent, object_sha, pins, read_bound, relative,
     remaining, require, save, timestamp, validate_data, validate_cost_admission, validate_bootstrap_admission,
     verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml,
-    inference_mode, followup_mode)
+    inference_mode, followup_mode, eight_mode as is_eight)
+
+
+def eight_module(plan):
+    if is_eight(plan):
+        import eight_hf_worker
+        return eight_hf_worker
+    return None
 
 
 def ordered_module(plan):
@@ -122,8 +129,10 @@ def gpu_observation(deadline, *, with_usage=False):
 
 def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
     ordered = ordered_module(plan)
-    allowed = (phase == 'runtime' or ordered.phase_kind(plan, phase) is not None) if ordered else (
-        phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter'))
+    eight = eight_module(plan)
+    allowed = (eight.phase_kind(phase) is not None if eight else
+        ((phase == 'runtime' or ordered.phase_kind(plan, phase) is not None) if ordered else
+         phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter')))
     require(allowed and 0 < seconds <= 12600, 'Invalid phase/deadline')
     base = Path(base)
     unit = plan['identity']['run_id'] + '-' + phase
@@ -142,6 +151,8 @@ def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
         hidden = [base / 'model'] if selector else [
             base / 'code' / plan['workload']['development_references']['path']]
         properties.append('InaccessiblePaths=' + ' '.join(str(path) for path in hidden))
+    if eight and phase not in ('final_base', 'final_adapter'):
+        properties.append(f'InaccessiblePaths=-{base / "final-inputs.json"}')
     if not selector:
         properties += [f'DeviceAllow={path} rw' for path in
                        [f'/dev/nvidia{gpu["minor"]}', '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-uvm-tools']]
@@ -238,7 +249,7 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, 
                 require(cgroup_empty(state) and state['Result'] == 'success' and state['ExecMainStatus'] == '0',
                         'Native stage failed: ' + phase + ': ' + str(state))
                 receipt = dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
-                if followup_mode(plan):
+                if followup_mode(plan) or is_eight(plan):
                     receipt.update(run_id=run, plan_sha256=digest(Path(base) / 'plan.json'),
                                    instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
                 return receipt
@@ -436,6 +447,7 @@ def install_pinned_runtime(plan, base, deadline):
 def bootstrap(plan, plan_sha, base):
     require(os.geteuid() == 0 and platform.machine() == 'x86_64', 'Root x86_64 supervisor required')
     ordered = ordered_module(plan)
+    eight = eight_module(plan)
     base = Path(base)
     require(base == Path('/opt/trid-' + plan['identity']['run_id']) and not base.is_symlink(), 'Owned bootstrap root differs')
     exclusive_intent(base / 'bootstrap-dispatch.json', dict(plan_sha256=plan_sha))
@@ -452,7 +464,7 @@ def bootstrap(plan, plan_sha, base):
     shutdown_at = dt.datetime.fromtimestamp(deadline - 60).strftime('%H:%M')
     command(['/sbin/shutdown', '-c'], initial_deadline)
     command(['/sbin/shutdown', '-h', shutdown_at], initial_deadline)
-    success_key = 'inference_success' if ordered else 'training_success'
+    success_key = 'experimental_success' if eight else ('inference_success' if ordered else 'training_success')
     report = {success_key: False}
     report.update(stages=[], run_id=ident['run_id'],
                   instance_id=identity['instanceId'], plan_sha256=plan_sha)
@@ -465,16 +477,22 @@ def bootstrap(plan, plan_sha, base):
         bootstrap_admission = validate_bootstrap_admission(base / 'code', plan)
         install_network_cap(plan, initial_deadline, base)
         ticket = None
-        for attempt in range(120):
-            require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 600),
-                    'Independent termination ticket deadline exhausted')
-            try:
-                client('s3api', 'get-object', '--bucket', ident['bucket'], '--key', ident['code_prefix'] + 'termination.json',
-                       '--range', 'bytes=0-1048575', str(base / 'termination.json'))
-                ticket = json.loads((base / 'termination.json').read_text())
-                break
-            except Exception:
-                time.sleep(5)
+        if eight:
+            path = eight.await_object(client, ident['bucket'], ident['code_prefix'] + 'termination.json',
+                base / 'termination.json', min(deadline - 1800, timestamp(identity['pendingTime']) + 600),
+                1024**2, max_polls=120)
+            ticket = json.loads(path.read_text())
+        else:
+            for attempt in range(120):
+                require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 600),
+                        'Independent termination ticket deadline exhausted')
+                try:
+                    client('s3api', 'get-object', '--bucket', ident['bucket'], '--key', ident['code_prefix'] + 'termination.json',
+                           '--range', 'bytes=0-1048575', str(base / 'termination.json'))
+                    ticket = json.loads((base / 'termination.json').read_text())
+                    break
+                except Exception:
+                    time.sleep(5)
         require(ticket is not None, 'No independently verified termination ticket; no bootstrap downloads')
         deadline = verify_termination_ticket(ticket, plan, plan_sha, identity['instanceId'], time.time())
         client.deadline = deadline - 30
@@ -492,16 +510,22 @@ def bootstrap(plan, plan_sha, base):
         client('s3api', 'put-object', '--bucket', ident['bucket'], '--key', ident['output_prefix'] + 'ready.json',
                '--body', str(base / 'ready.json'), '--if-none-match', '*', '--server-side-encryption', 'AES256')
         release = None
-        for attempt in range(120):
-            require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 900),
-                    'Release wait deadline exhausted')
-            try:
-                client('s3api', 'get-object', '--bucket', ident['bucket'], '--key', ident['code_prefix'] + 'release.json',
-                       '--range', 'bytes=0-1048575', str(base / 'release.json'))
-                release = json.loads((base / 'release.json').read_text())
-                break
-            except Exception:
-                time.sleep(5)
+        if eight:
+            path = eight.await_object(client, ident['bucket'], ident['code_prefix'] + 'release.json',
+                base / 'release.json', min(deadline - 1800, timestamp(identity['pendingTime']) + 900),
+                1024**2, max_polls=180)
+            release = json.loads(path.read_text())
+        else:
+            for attempt in range(120):
+                require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 900),
+                        'Release wait deadline exhausted')
+                try:
+                    client('s3api', 'get-object', '--bucket', ident['bucket'], '--key', ident['code_prefix'] + 'release.json',
+                           '--range', 'bytes=0-1048575', str(base / 'release.json'))
+                    release = json.loads((base / 'release.json').read_text())
+                    break
+                except Exception:
+                    time.sleep(5)
         require(release is not None, 'Independent verified termination release missing')
         work_deadline = verify_release(release, plan, plan_sha, identity['instanceId'], time.time())
         verify_gpu_observation(gpu, plan, release['gpu'])
@@ -547,6 +571,9 @@ def bootstrap(plan, plan_sha, base):
         if ordered:
             ordered.run_ordered(sys.modules[__name__], plan, base, report, client, gpu, account,
                                 work_deadline, acquisition_deadline, budget, hosts, units)
+        elif eight:
+            eight.run_experiment(sys.modules[__name__], plan, base, report, client, gpu, account,
+                                 work_deadline, acquisition_deadline, budget, hosts, units)
         else:
             for row in plan['model']['files']:
                 download(row, base / 'model', hosts, acquisition_deadline, budget)
@@ -653,7 +680,7 @@ def runtime_stage(plan, base):
     torch = native_runtime(plan, base)
     receipt = dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
         count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0))
-    if followup_mode(plan):
+    if followup_mode(plan) or is_eight(plan):
         receipt.update(run_id=plan['identity']['run_id'], plan_sha256=digest(Path(base) / 'plan.json'),
                        instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
     save(Path(base) / 'output/runtime.json', receipt)
@@ -725,10 +752,21 @@ def capacity_stage(plan, base, torch):
             'Actual native-template tokenization differs from approved finite data')
     tokenized_rows = len(items)
     del items
-    for case in validate_data(Path(base) / 'code', plan):
+    cases = validate_data(Path(base) / 'code', plan)
+    if is_eight(plan):
+        cases = cases['development_inputs']
+        valid, valid_dropped = trainer['build_items'](tok, manifest['valid'], manifest_path.parent,
+            'qwen3', recipe['context_tokens'], recipe['answer_tokens'], False)
+        require(valid_dropped == 0 and len(valid) == 8, 'Eight development tokenization differs')
+        del valid
+    for case in cases:
         prompt = tok.apply_chat_template(case['messages'], tokenize=False, add_generation_prompt=True, enable_thinking=False)
-        require(len(tok.encode(prompt, add_special_tokens=False)) + recipe['answer_tokens'] <= recipe['context_tokens'],
-                'Blind native-template token budget exceeds approval')
+        prompt_tokens = len(tok.encode(prompt, add_special_tokens=False))
+        if is_eight(plan):
+            eight_module(plan).validate_prompt_budget(plan, prompt_tokens)
+        else:
+            require(prompt_tokens + recipe['answer_tokens'] <= recipe['context_tokens'],
+                    'Blind native-template token budget exceeds approval')
     folder = Path(base) / 'output/capacity'
     folder.mkdir(mode=0o700)
     item = synthetic_capacity_item(tok, trainer, folder, recipe['context_tokens'], recipe['answer_tokens'])
@@ -781,13 +819,16 @@ def capacity_stage(plan, base, torch):
 
 def train_argv(plan, base):
     r = plan['recipe']; base = Path(base)
-    return [str(base / 'code/scripts/train_open_weight_lora.py'), '--model', str(base / 'model'),
+    argv = [str(base / 'code/scripts/train_open_weight_lora.py'), '--model', str(base / 'model'),
         '--model-id', plan['model']['id'], '--model-revision', plan['model']['revision'], '--family', 'qwen3',
         '--manifest', str(base / 'code' / plan['data']['manifest']['path']), '--out', str(base / 'output/training'),
         '--steps', str(r['steps']), '--batch-size', str(r['batch_size']), '--micro-batch-size', str(r['micro_batch_size']),
         '--lr', str(r['lr']), '--rank', str(r['rank']), '--alpha', str(r['alpha']), '--dropout', str(r['dropout']),
         '--max-tokens', str(r['context_tokens']), '--max-answer-tokens', str(r['answer_tokens']),
         '--seed', str(r['seed']), '--device', 'cuda']
+    if is_eight(plan):
+        argv += ['--checkpoint-every', '12', '--valid-every', '12']
+    return argv
 
 
 def train_stage(plan, base, torch):
@@ -877,6 +918,10 @@ def main():
     ordered = ordered_module(plan)
     if ordered:
         ordered.child_stage(sys.modules[__name__], plan, args.base, args.phase)
+        return
+    eight = eight_module(plan)
+    if eight:
+        eight.child_stage(sys.modules[__name__], plan, args.base, args.phase)
         return
     require(args.phase in ('capacity', 'baseline', 'train', 'adapter'), 'Unknown training stage')
     validate_model(args.base / 'model', plan)

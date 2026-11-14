@@ -41,6 +41,7 @@ SOURCES = {'scripts/aws_eval/grounded_hf_lifecycle.py',
 SHA = re.compile('[0-9a-f]{64}')
 INFERENCE_SCHEMA = 'trid-ordered-hf-inference-v1'
 FOLLOWUP_SCHEMA = 'trid-hf14-followup-v1'
+EIGHT_SCHEMA = 'trid-eight-sft-experiment-v1'
 FOLLOWUP_PHASES = dict(acquire14=900, dev14=2400, val14=2400)
 CHECKPOINT_MAX = 32 * 1024**2
 CHECKPOINT_CHANNEL_BYTES = CHECKPOINT_MAX + 3 * 1024**2
@@ -49,6 +50,19 @@ ORDERED_PHASES = dict(acquire8=900, dev8=2400, val8=2400, parent_decision=300,
 ORDERED_MODELS = {
     'qwen8': ('Qwen/Qwen3-8B', 'b968826d9c46dd6066d109eabc6255188de91218'),
     'qwen14': ('Qwen/Qwen3-14B', '40c069824f4251a91eefaf281ebe4c544efd3e18')}
+
+
+def eight_mode(plan):
+    return plan.get('schema') == EIGHT_SCHEMA
+
+
+def eight_module(plan):
+    require(eight_mode(plan), 'Eight helpers require the distinct eight schema')
+    if __package__:
+        from . import eight_hf_experiment
+    else:
+        import eight_hf_experiment
+    return eight_hf_experiment
 
 
 def ordered_mode(plan):
@@ -64,6 +78,8 @@ def inference_mode(plan):
 
 
 def success_field(plan):
+    if eight_mode(plan):
+        return 'experimental_success'
     return 'inference_success' if inference_mode(plan) else 'training_success'
 
 
@@ -363,7 +379,7 @@ def cost_bound(plan):
             'Missing GET/PUT/storage/egress/scheduler price closure')
     require(all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in prices.values()),
             'Prices require finite observed paid rates; no free-tier assumption')
-    cap = 20 if inference_mode(plan) else 50
+    cap = 20 if inference_mode(plan) or eight_mode(plan) else 50
     require(cost['cap_usd'] == cap and 0 < cost['retention_days'] <= 30
             and type(cost['retention_days']) is int
             and cost['ancillary_bound_usd'] >= 0
@@ -374,13 +390,19 @@ def cost_bound(plan):
     require(cost['get_requests'] >= 512 and cost['put_requests'] >= 16
             and cost['control_requests'] >= 1000 and cost['termination_grace_seconds'] >= 300,
             'Request/termination reserve does not cover bounded controller')
-    extra = CHECKPOINT_CHANNEL_BYTES if ordered_mode(plan) else 0
+    extra = eight_module(plan).CHANNEL_BYTES if eight_mode(plan) else (CHECKPOINT_CHANNEL_BYTES if ordered_mode(plan) else 0)
     if inference_mode(plan):
         require(cost['ancillary_bound_usd'] >= 5, 'Inference requires full USD5 ancillary reserve')
     if ordered_mode(plan):
         require(cost['get_requests'] >= 579 and cost['put_requests'] >= 20
                 and cost['control_requests'] >= 1067 and cost['ancillary_bound_usd'] >= 5,
                 'Ordered checkpoint channel and ancillary reserve are not priced')
+    if eight_mode(plan):
+        # S3 LIST is Tier1 (the s3_put rate), not Tier2 GET. Both categories
+        # conservatively cover the complete bounded controller/worker closure.
+        require(cost['get_requests'] >= 4608 and cost['put_requests'] >= 4608
+                and cost['control_requests'] >= 4608 and cost['ancillary_bound_usd'] >= 5,
+                'Eight full controller/worker GET and PUT/LIST envelope is not priced')
     required_storage = plan['bundle']['bytes'] + LIMITS['output_bytes'] + 8 * 1024**2 + extra
     require(type(plan['network']['egress_byte_cap']) is int
             and plan['network']['egress_byte_cap'] >= LIMITS['output_bytes'] + extra
@@ -464,6 +486,15 @@ def validate_worker_policy(plan):
         f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
         dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
         f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])]
+    if eight_mode(plan):
+        # Read only the seven bootstrap/control objects, never a wildcard data prefix.
+        expected[0]['Resource'] = [f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}{name}"
+            for name in ('plan.json', 'bundle.tar', 'approval-consumed.json', 'termination.json',
+                         'release.json', 'checkpoint-selection.json', 'final-inputs.json')]
+        expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
+            Resource=[f"arn:aws:s3:::{identity['bucket']}"],
+            Condition={'StringEquals': {'s3:prefix': [identity['code_prefix'] + name for name in
+                ('termination.json', 'release.json', 'checkpoint-selection.json', 'final-inputs.json')]}}))
     if ordered_mode(plan):
         expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
             Resource=[f"arn:aws:s3:::{identity['bucket']}"],
@@ -474,7 +505,7 @@ def validate_worker_policy(plan):
 
 
 def validate_plan(plan, approval, plan_sha, *, now=None):
-    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA), 'Unknown plan schema')
+    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA), 'Unknown plan schema')
     ordered = inference_mode(plan)
     ident = plan['identity']
     run = ident['run_id']
@@ -504,6 +535,15 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                     workload_sha256=object_sha(plan['workload']), limits=LIMITS,
                     ebs_kms_key_arn=key_arn, automatic_retry=False, approved=True),
                 'Exact USD20 inference-only approval is missing or mismatched')
+    elif eight_mode(plan):
+        key_arn = ebs_key_arn(plan)
+        require(plan['recipe'] == eight_module(plan).RECIPE, 'Frozen eight training recipe differs')
+        require(approval == dict(schema=eight_module(plan).APPROVAL_SCHEMA, run_id=run,
+            plan_sha256=plan_sha, instance_limit=1, additional_pretax_usd=20,
+            recipe=plan['recipe'], workload_sha256=object_sha(plan['workload']),
+            authorization_sha256=plan['authorization']['sha256'], limits=LIMITS,
+            ebs_kms_key_arn=key_arn, automatic_retry=False, automatic_extension=False,
+            deployment=False, approved=True), 'Exact fresh USD20 eight approval required')
     else:
         recipe = plan['recipe']
         require(all(recipe[k] == v for k, v in RECIPE.items())
@@ -532,7 +572,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         else:
             require('model' not in plan or plan['model'] == models['qwen8'], 'Initial model must be immutable 8B')
     else:
-        models = {'qwen14': plan['model']}
+        models = {'qwen8' if eight_mode(plan) else 'qwen14': plan['model']}
     file_count = 0
     for model_key, model in models.items():
         model_id, revision = ORDERED_MODELS[model_key]
@@ -579,7 +619,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
             and 0 < deb['max_unpacked_bytes'] <= 32 * 1024**2
             and deb['url'].startswith('https://') and deb['url'].split('/')[2] in runtime['download_hosts'],
             'Pinned historical NVIDIA package/archive/member contract differs')
-    required_sources = ordered_sources() if ordered else SOURCES
+    required_sources = (SOURCES | eight_module(plan).SOURCE_NAMES) if eight_mode(plan) else (ordered_sources() if ordered else SOURCES)
     require(required_sources <= set(bundled) and set(plan['sources']) >= required_sources
             and {n for n in bundled if n.endswith(('.py', '.sh'))} <= set(plan['sources'])
             and all(bundled[k]['sha256'] == v for k, v in plan['sources'].items()),
@@ -588,6 +628,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                 for n in bundled), 'Protected input or credential-like bundle member')
     if ordered:
         validate_ordered_workload(plan, bundled)
+        validate_worker_policy(plan)
+    elif eight_mode(plan):
+        eight_module(plan).validate_workload(plan, bundled)
         validate_worker_policy(plan)
     else:
         data = plan['data']
@@ -635,6 +678,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         'training/adapter/adapter_model.safetensors', 'training/adapter/README.md'}
     if ordered:
         required_outputs = ordered_output_members(plan)
+    if eight_mode(plan):
+        required_outputs = eight_module(plan).output_members(plan)
     require(len(plan['output_allowlist']) == len(required_outputs)
             and set(plan['output_allowlist']) == required_outputs,
             'Exact registered export allowlist required')
@@ -780,6 +825,8 @@ def blind_messages(case):
 
 
 def validate_data(root, plan):
+    if eight_mode(plan):
+        return eight_module(plan).validate_data(root, plan)
     if inference_mode(plan):
         return validate_ordered_data(root, plan)
     root = Path(root)
@@ -959,7 +1006,7 @@ def observe_volume_identity(client, identity, row, evidence, evidence_path=None)
 
 def cleanup_cutoff(plan, plan_sha, state):
     """One absolute priced cutoff, including an ambiguous launch's saved dispatch."""
-    require(inference_mode(plan), 'Absolute ordered cleanup cutoff requires inference plan')
+    require(inference_mode(plan) or eight_mode(plan), 'Absolute cleanup cutoff requires bounded experimental plan')
     state = Path(state)
     identity = plan['identity']
     consumed = json.loads((state / 'approval-consumed.json').read_text())
@@ -1283,6 +1330,25 @@ def live_preflight(plan, client):
         require(len(decisions) == 1 and decisions[0]['EvalActionName'] == action
                 and decisions[0]['EvalResourceName'] == resource and decisions[0]['EvalDecision'] == 'allowed'
                 and not decisions[0].get('MissingContextValues'), 'Required exact-role action not allowed')
+    if eight_mode(plan):
+        for key in ('decision', 'final_inputs'):
+            resource = f"arn:aws:s3:::{identity['bucket']}/{plan['workload']['channel_keys'][key]}"
+            decisions = client('iam', 'simulate-principal-policy',
+                '--policy-source-arn', plan['iam']['instance_role']['arn'],
+                '--action-names', 's3:GetObject', '--resource-arns', resource)['EvaluationResults']
+            require(len(decisions) == 1 and decisions[0]['EvalResourceName'] == resource
+                    and decisions[0]['EvalActionName'] == 's3:GetObject'
+                    and decisions[0]['EvalDecision'] == 'allowed'
+                    and not decisions[0].get('MissingContextValues'), 'Eight delayed channel GET denied')
+        resource = f"arn:aws:s3:::{identity['bucket']}"
+        context = [dict(ContextKeyName='s3:prefix', ContextKeyType='string',
+                        ContextKeyValues=[plan['workload']['channel_keys']['decision']])]
+        decisions = client('iam', 'simulate-principal-policy',
+            '--policy-source-arn', plan['iam']['instance_role']['arn'],
+            '--action-names', 's3:ListBucket', '--resource-arns', resource,
+            '--context-entries', json.dumps(context))['EvaluationResults']
+        require(len(decisions) == 1 and decisions[0]['EvalDecision'] == 'allowed'
+                and not decisions[0].get('MissingContextValues'), 'Eight exact-decision listing denied')
     bucket = identity['bucket']
     require(client('s3api', 'get-bucket-location', '--bucket', bucket)['LocationConstraint'] == identity['region'],
             'Bucket is not same region')
@@ -1421,8 +1487,46 @@ def bootstrap_text(plan, plan_sha, root):
     require(len(text.encode()) <= 16384, 'Raw user-data exceeds EC2 limit')
     return text
 
+def collect_eight_checkpoint(client, plan, plan_sha, state, *, clock=time.time, pause=time.sleep):
+    """Bounded metadata-only development export, without final inputs or labels."""
+    state = Path(state)
+    release = json.loads((state / 'release.json').read_text())
+    instance_id = release['instance_id']
+    deadline = min(verify_release(release, plan, plan_sha, instance_id, clock()), clock() + 64 * 120)
+    keys = plan['workload']['channel_keys']
+    receipt_path, archive_path = state / 'dev-checkpoint.json', state / 'dev-checkpoint.tar'
+    for attempt in range(64):
+        require(clock() < deadline, 'Eight dev collection deadline exhausted')
+        try:
+            client('s3api', 'get-object', '--bucket', plan['identity']['bucket'],
+                   '--key', keys['receipt'], '--range', 'bytes=0-1048575', str(receipt_path))
+        except AWSCallError as exc:
+            require(exc.code in ('NoSuchKey', '404'), 'Only absent dev exports may be awaited')
+            if attempt < 63:
+                pause(min(120, remaining(deadline, clock())))
+            continue
+        require(receipt_path.stat().st_size <= 1024**2, 'Eight dev receipt too large')
+        receipt = json.loads(receipt_path.read_text())
+        pin = receipt['archive']
+        require(receipt['run_id'] == plan['identity']['run_id'] and receipt['plan_sha256'] == plan_sha
+                and receipt['instance_id'] == instance_id and type(pin['bytes']) is int
+                and 0 < pin['bytes'] <= eight_module(plan).DEV_EXPORT_MAX and SHA.fullmatch(pin['sha256']),
+                'Eight dev export owner or bounds differ')
+        client('s3api', 'get-object', '--bucket', plan['identity']['bucket'],
+               '--key', keys['archive'], '--range', f'bytes=0-{pin["bytes"] - 1}', str(archive_path))
+        destination = state / 'dev-checkpoint'
+        authenticate_archive(archive_path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
+            unpacked_bytes=eight_module(plan).DEV_EXPORT_MAX, files=receipt['files']), destination)
+        eight_module(plan).validate_dev_export(plan, plan_sha, receipt, destination)
+        return dict(state='checkpoint_collected', checkpoint=receipt, checkpoint_path=str(archive_path),
+                    extracted_path=str(destination), semantic_acceptance='not_evaluated')
+    raise RuntimeError('No authenticated development export within finite allowance')
+
+
 def collect_checkpoint(client, plan, plan_sha, state, *, clock=time.time, pause=time.sleep):
     """Finite read-only watcher; never releases or removes termination protection."""
+    if eight_mode(plan):
+        return collect_eight_checkpoint(client, plan, plan_sha, state, clock=clock, pause=pause)
     require(ordered_mode(plan), 'Checkpoint collection is ordered-inference-only')
     state = Path(state)
     release = json.loads((state / 'release.json').read_text())
@@ -1658,6 +1762,26 @@ def collect_export(client, plan, plan_sha, state, instance_id):
                         and json.loads(proof_path.read_text()) == completion[field],
                         'Final completion differs from independently retrieved checkpoint/parent decision')
             validate_ordered_completion(completion, plan, plan_sha, instance_id, path, manifest)
+    elif eight_mode(plan):
+        require(manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
+                'Eight terminal manifest status differs')
+        if native:
+            destination = state / 'eight-export'
+            authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
+                unpacked_bytes=LIMITS['output_bytes'], files=rows), destination)
+            receipt_path = state / 'final-dev-checkpoint.json'
+            decision_path = state / 'final-checkpoint-selection.json'
+            for key, target in [('receipt', receipt_path), ('decision', decision_path)]:
+                client('s3api', 'get-object', '--bucket', identity['bucket'],
+                    '--key', plan['workload']['channel_keys'][key], '--range', 'bytes=0-1048575', str(target))
+            receipt = json.loads(receipt_path.read_text())
+            require(receipt['instance_id'] == instance_id
+                and receipt['archive']['sha256'] == completion['dev_export_sha256']
+                and digest(decision_path) == completion['selection_sha256']
+                and json.loads(decision_path.read_text()) == json.loads((destination / 'checkpoint-selection.json').read_text()),
+                'Eight independently retrieved dev/parent provenance differs')
+            eight_module(plan).validate_dev_export(plan, plan_sha, receipt, destination)
+            eight_module(plan).validate_completion(plan, plan_sha, completion, destination)
     else:
         require(not native or [s['phase'] for s in completion['stages']]
                 == ['capacity', 'baseline', 'train', 'adapter'], 'Incomplete native stage receipt')
@@ -1666,7 +1790,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
         require(bound['run_id'] == identity['run_id'] and bound['instance_id'] == instance_id
                 and bound['plan_sha256'] == plan_sha, 'Persisted GPU release ownership differs')
         for stage in [completion['runtime_unit'], *completion['stages']]:
-            if not inference_mode(plan) or 'gpu' in stage:
+            if (not inference_mode(plan) and not eight_mode(plan)) or 'gpu' in stage:
                 verify_gpu_observation(stage['gpu'], plan, bound['gpu'])
     return dict(native_pipeline_success=native, semantic_acceptance='not_evaluated',
                 completion=completion, export_sha256=pin['sha256'])
@@ -1680,7 +1804,7 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
             'No termination proof; retain independent protection')
     path = Path(state) / 'schedule-intent.json'
     if not path.exists():
-        require(plan is None or not inference_mode(plan),
+        require(plan is None or not (inference_mode(plan) or eight_mode(plan)),
                 'Missing ordered schedule intent; retain independent protection')
         return
     spec = json.loads(path.read_text())
@@ -1688,7 +1812,7 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
             and json.loads(spec['Target']['Input']) == {'InstanceIds': [cleanup['instance_id']]},
             'Schedule cleanup ownership conflict')
     snapshot = None
-    if plan is not None and inference_mode(plan):
+    if plan is not None and (inference_mode(plan) or eight_mode(plan)):
         require(identity == plan['identity'] and SHA.fullmatch(plan_sha or ''),
                 'Ordered schedule cleanup requires exact plan identity')
         consumed = json.loads((Path(state) / 'approval-consumed.json').read_text())
@@ -1700,6 +1824,24 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
         require(set(created) <= {'ScheduleArn', 'ResponseMetadata'}
                 and created.get('ScheduleArn') == snapshot['Arn'],
                 'Ordered schedule successful creation provenance differs')
+    deletion = None
+    if plan is not None and eight_mode(plan):
+        deletion = dict(run_id=identity['run_id'], plan_sha256=plan_sha,
+            name=identity['run_id'], group_name=identity['schedule_group'],
+            schedule_readback_sha256=object_sha(snapshot),
+            request=dict(service='scheduler', operation='delete-schedule',
+                args=['--name', identity['run_id'], '--group-name', identity['schedule_group']]))
+        intent_path = Path(state) / 'schedule-delete-intent.json'
+        result_path = Path(state) / 'schedule-delete-result.json'
+        if result_path.exists():
+            accepted = json.loads(result_path.read_text())
+            require(json.loads(intent_path.read_text()) == deletion
+                and set(accepted) == set(deletion) | {'state', 'response'}
+                and all(accepted.get(k) == v for k, v in deletion.items())
+                and accepted['state'] == 'accepted' and isinstance(accepted['response'], dict),
+                'Persisted schedule deletion acceptance differs')
+            return
+        require(not intent_path.exists(), 'Ambiguous prior schedule deletion; never repeat mutation')
     try:
         observed = client('scheduler', 'get-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
     except AWSCallError as exc:
@@ -1711,7 +1853,11 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
                 'Ordered schedule was replaced or modified; retain independent protection')
     else:
         verify_schedule(observed, spec)
-    client('scheduler', 'delete-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
+    if deletion is not None:
+        exclusive_intent(intent_path, deletion)
+    response = client('scheduler', 'delete-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
+    if deletion is not None:
+        exclusive_intent(result_path, dict(**deletion, state='accepted', response=response))
 
 
 def require_no_dispatch_evidence(state):
@@ -1719,7 +1865,8 @@ def require_no_dispatch_evidence(state):
     root = Path(state)
     names = ('dispatch-authorization.json', 'remote-approval-intent.json', 'launch-dispatched.json',
              'volume-identity.json', 'schedule-intent.json', 'schedule-created.json',
-             'schedule-readback.json', 'termination.json', 'release-intent.json', 'release.json')
+             'schedule-readback.json', 'termination.json', 'release-intent.json', 'release.json',
+             'parent-no-dispatch.json')
     for name in names:
         if os.path.lexists(root / name):
             raise FileExistsError('Possible dispatch evidence; continuation forbidden: ' + str(root / name))
@@ -1730,7 +1877,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     state = Path(state)
     state.mkdir(parents=True, exist_ok=True)
     identity = plan['identity']
-    ordered = inference_mode(plan)
+    ordered = inference_mode(plan) or eight_mode(plan)
     dispatch_root = Path(dispatch_state) if dispatch_state is not None else state
     if ordered:
         require(dispatch_root.is_dir() and state.resolve().is_relative_to(dispatch_root.resolve()),
@@ -1772,6 +1919,12 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
                           '--key', identity['code_prefix'] + suffix)
             require((head['ContentLength'] == size if size is not None else 0 < head['ContentLength'] <= 2 * 1024**2)
                     and head['Metadata'].get('sha256') == sha, 'Staged S3 object metadata differs')
+        if eight_mode(plan):
+            for key in ('decision', 'final_inputs'):
+                listing = client('s3api', 'list-objects-v2', '--bucket', identity['bucket'],
+                    '--prefix', plan['workload']['channel_keys'][key], '--max-keys', '1')
+                require(not listing.get('Contents') and not listing.get('IsTruncated'),
+                        'Eight selection/final inputs cannot exist before dispatch')
         request = dict(ImageId=plan['ami']['ImageId'], InstanceType='g6e.2xlarge', MinCount=1, MaxCount=1,
             ClientToken=identity['run_id'], IamInstanceProfile={'Name': identity['instance_profile']},
             InstanceInitiatedShutdownBehavior='terminate', DisableApiTermination=False,
@@ -1817,10 +1970,10 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         # keeps protection until observed termination, never retries creation.
         schedule_created = True
         created = client('scheduler', 'create-schedule', '--cli-input-json', json.dumps(spec), '--client-token', identity['run_id'])
-        if inference_mode(plan):
+        if inference_mode(plan) or eight_mode(plan):
             exclusive_intent(state / 'schedule-created.json', created)
         observed = client('scheduler', 'get-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
-        if inference_mode(plan):
+        if inference_mode(plan) or eight_mode(plan):
             exclusive_intent(state / 'schedule-readback.json', observed)
             snapshot = ordered_schedule_readback(observed, spec, identity)
             require(set(created) <= {'ScheduleArn', 'ResponseMetadata'}
@@ -1875,7 +2028,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     finally:
         if dispatched:
             cleanup_deadline = clock() + plan['cost']['termination_grace_seconds']
-            if inference_mode(plan):
+            if inference_mode(plan) or eight_mode(plan):
                 cleanup_deadline = min(cleanup_deadline, cleanup_cutoff(plan, plan_sha, state))
             result['cleanup'] = reconcile(client, identity, expected, cleanup_deadline,
                 evidence=evidence, evidence_path=evidence_path, clock=clock, pause=pause)
@@ -1917,7 +2070,7 @@ def main():
                 'Reconciliation requires exact local consumed approval')
         evidence = load_volume_identity(args.state, plan, args.plan_sha256)
         cleanup_deadline = time.time() + plan['cost']['termination_grace_seconds']
-        if inference_mode(plan):
+        if inference_mode(plan) or eight_mode(plan):
             cleanup_deadline = min(cleanup_deadline, cleanup_cutoff(plan, args.plan_sha256, args.state))
         result = reconcile(client, plan['identity'], evidence['instance_id'], cleanup_deadline,
                            evidence=evidence, evidence_path=args.state / 'volume-identity.json')

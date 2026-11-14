@@ -300,9 +300,9 @@ GPU 생성 요청 전 두 준비 오류를 확인했습니다. S3의 작업 인�
 
 근거 파일: 기존 `runs/mois-ordered-models-20261113T062501Z/`의 `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`, `gpu8-checkpoint-scored.json`, `gpu8-prose-aggregate.json`, `stage-two-result.json`, `ordered-execution-state/generation-3/controller-result.json`, `owned-cleanup-actual-v1/result.json`; 후속 `runs/mois-fourteen-followup-20261114T014951Z/`의 `gpu14-final-scored.json`, `gpu14-prose-aggregate.json`, `gpu14-qualification.json`, `fourteen-execution-state/generation-3/controller-result.json`, `on-demand-pricing-smoke.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
 
-#### 8B 실험 학습 준비 · GPU 미사용
+#### 8B 실험 학습 준비 · 당시 GPU 미사용
 
-사용자가 선택한 후속 작업은 **8B를 실험용 후보로 고정한 로컬 학습 준비**입니다. 원본의 기존 불합격 판정이나 최종 검증 기준을 바꾸지 않았으며, 8B 사전학습 가중치의 추가 학습·GPU 임대·배포는 수행하지 않았습니다. 대상은 위 공식 Qwen3-8B revision이며 기존 `grounded_messages` 입력 경로를 재사용합니다.
+아래는 **8B를 실험용 후보로 고정한 로컬 학습 준비 단계의 기록**입니다. 이 단계에서는 원본의 기존 불합격 판정이나 최종 검증 기준을 바꾸지 않았으며, 추가 학습·GPU 임대·배포를 수행하지 않았습니다. 대상은 위 공식 Qwen3-8B revision이며 기존 `grounded_messages` 입력 경로를 재사용합니다. 이후 별도 승인으로 실행한 실제 학습 결과는 다음 절에 구분합니다.
 
 | 자료 | 문항 | 문서군 | 최대 전체 토큰 |
 | --- | ---: | ---: | ---: |
@@ -329,7 +329,36 @@ runs/mois-grounded-training-20261112T081606Z/verification-venv/bin/python \
   --context 3072 --answer-tokens 768 --output "$P/native-data-audit-replay.json"
 ```
 
-최종 준비 기록은 해당 실행 폴더의 `preparation-result.json`입니다. `semantic-review-aggregate-v2.json`, `source-reservation-admission-v2.json`, `source-partial-overlap-attribution-v2.json`, `cpu-random-smoke-v2.json`, `preparation-code-review-v2.json`에 근거를 보관합니다. 최초 후보·검토 실패·수정 전 코드도 보존했습니다. 후보 생성 시점의 `NOT_ADMITTED` 기록과 별도로 **로컬 입력 준비만 마감**했으며, 실제 학습에는 새 실행 계획과 한도가 정해진 승인이 필요합니다. 마지막 checkpoint를 최선으로 간주하거나 학습 loss만으로 모델을 선택하지 않습니다.
+최종 준비 기록은 해당 실행 폴더의 `preparation-result.json`입니다. `semantic-review-aggregate-v2.json`, `source-reservation-admission-v2.json`, `source-partial-overlap-attribution-v2.json`, `cpu-random-smoke-v2.json`, `preparation-code-review-v2.json`에 근거를 보관합니다. 최초 후보·검토 실패·수정 전 코드도 보존했습니다. 후보 생성 시점의 `NOT_ADMITTED` 기록과 별도로 **로컬 입력 준비만 마감**했으며, 당시 실제 학습은 새 실행 계획과 한도가 정해진 승인을 기다리는 상태였습니다. 마지막 checkpoint를 최선으로 간주하거나 학습 loss만으로 모델을 선택하지 않습니다.
+
+#### 8B 단기 SFT 실행 결과 · 후보 미채택
+
+별도 승인된 **L40S 1대·최대 4시간·세전 US$20 범위의 1회 실험**을 실행했습니다. 사전 보수적 계산액은 예비비를 포함해 US$19.785977이며, 실제 청구액이나 AWS 결제 차단 한도가 아닙니다. 자동 재시도·추가 임대·연장·배포는 하지 않았습니다.
+
+- 공식 Qwen3-8B에 BF16 LoRA(rank 8, alpha 16, dropout 0, 학습률 `1e-5`, seed 14)를 적용했습니다. 학습 24문항을 각 3회 사용해 총 72회 노출·36 optimizer step을 완료했고, 12·24·36단계의 가중치를 모두 회수했습니다.
+- 원본과 세 checkpoint에서 같은 개발 8문항, non-thinking·greedy 조건으로 **실제 답변 32개**를 생성했습니다. 학습 문맥은 3,072, 생성 문맥은 사전 입력 감사 후 공통 4,096, 응답 상한은 768토큰으로 고정했습니다. 32개 모두 상한에 잘리지 않고 EOS로 종료했습니다.
+- 두 독립 AI 채점자가 원본·checkpoint 식별정보를 가린 답변을 평가하고, 불일치 3건만 제3 채점자가 판정했습니다. 아래는 **개발 자료의 동결 판정**이며, 문서군의 과거 TRAIN 노출 때문에 독립 최종 평가나 일반 정확도로 해석하지 않습니다.
+
+| 구분 | 내용 정확 | 동결 종합 통과 | 중대 오류 문항 | 개발 loss |
+| --- | ---: | ---: | ---: | ---: |
+| 원본 | 5/8 | 2/8 | 1 | 별도 측정 없음 |
+| 12단계 | 1/8 | 1/8 | 4 | 1.71115 |
+| 24단계 | 5/8 | 2/8 | 1 | 1.63636 |
+| 36단계 | 3/8 | 2/8 | 3 | 1.61394 |
+
+종합 통과는 내용·형식·구조 검사 통과와 중대 오류 없음을 함께 요구합니다. 위 종합 수치는 아래 수치 표기 버그를 수정하기 전의 동결 판정입니다. **검사기 수정 여부와 무관하게 모든 후보가 내용 정확 최대 5/8·중대 오류 1건 이상**이어서, 사전에 고정한 종합 6/8 이상·중대 오류 0·행동별 회귀 금지 조건을 충족하지 못합니다. 어느 후보도 원본이 틀린 문항을 새로 맞히지 못했으며, loss가 가장 낮은 마지막 checkpoint도 채택하지 않았습니다.
+
+선택 결과는 `selected_step: null`입니다. 계획대로 **최종 24문항의 입력을 GPU에 전달하지 않고 최종 평가를 생략**했습니다. 기존 모델의 불합격 판정을 바꾸거나 새 모델을 `test.tridatum.co`에 배포하지 않았습니다.
+
+실행에서 드러난 코드 결함은 모델 판정과 분리해 수정했습니다.
+
+- 서빙의 수치 검사가 원문의 `②`와 답변의 `제2항`을 다르게 취급했습니다. 기존 학습 뷰와 같은 `①`–`⑳`를 독립적인 숫자로 추출하도록 수정했습니다. 인접한 표기 `①②`를 `12`로 합치거나, 인용하지 않은 근거의 수치를 허용하지 않습니다. 실제 저장 답변 32개를 다시 검사해 수치 표기 거부 7건만 해소되고, 잘못된 JSON 11건은 계속 거부됨을 확인했습니다. 이는 사후 구조 진단일 뿐 의미 재채점이 아니며, 답변을 자동 수선하거나 동결 점수를 교체하지 않았습니다.
+- macOS에서 같은 디렉터리의 NFC/NFD 경로 표기가 달라 채점 CLI가 실패했습니다. 문자열 정규화 대신 실제 동일 파일시스템 객체임이 확인된 조상 경로만 허용하며, 다른 디렉터리·symlink 탈출은 계속 거부합니다. 실패했던 상대 경로 CLI를 별도 출력 폴더로 실행해 성공과 동일한 선택 결과를 확인했습니다.
+- 회수 파일 재검사가 정상적인 0바이트 `runtime.log`를 거부했습니다. 해시 고정된 export 구성원만 빈 파일을 허용하도록 수정하고, 이미 회수한 350,044,160바이트 archive와 세 checkpoint를 **추가 AWS 호출 없이** 검증했습니다. 계획·승인·제어 입력의 비어 있지 않음 조건은 유지했습니다. 실패한 1회성 작업을 재실행하거나 실패 기록을 덮어쓰지 않았습니다.
+
+수정 후 관련 `unittest` 223건을 실행해 222건 통과·1건 조건부 skip을 확인했습니다. GPU 인스턴스와 루트 EBS 삭제, 이번 실행 전용 IAM·보안그룹·Scheduler 정리를 확인했습니다. 기존 보호 인스턴스는 변경하지 않았으며, S3 실험 자료는 승인된 30일 보존 규칙을 유지합니다.
+
+실제 실행 기록은 `runs/mois-eight-sft-20261114T071851Z`에 보관합니다. `development-score-breakdown.json`, `development-failure-diagnosis.json`, `post-fix-structure-replay.json`, `eight-execution-state/controller-result.json`, `owned-cleanup-audit/result.json`, `posthoc-export-verification.json`에 판정·진단·자원 정리 근거가 있습니다. 실행 당시 19개 소스의 정확한 바이트는 `executed-source.tar`로 보존했으며, 사후 검사기 수정으로 동결된 답변·채점·선택을 교체하지 않았습니다. 다음 개선은 GPU 반복보다 조건 누락·정보 부족 경계·출력 형식의 실패를 구분한 학습 자료 보강부터 진행해야 합니다.
 
 ### Packed-head 학습 엔진
 
