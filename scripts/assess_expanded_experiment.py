@@ -18,6 +18,8 @@ flagged IDs. Give reviewers only review-packet.json (or adjudication-packet.json
 never private-mapping.json, runtime files, or other reviewers' votes. Reference
 paraphrases are acceptable; JSON validity is not semantic evidence. Freeze writes
 resolved anonymous judgments before aggregate opens the arm mapping.
+Completed string responses, including empty/whitespace answers, remain in the
+denominator; structural failures are scored, not rejected as corrupt run records.
 
 For parallel review, give each reviewer only its shard-NNNN.json. Leaf reports use
 the child file SHA and their actual reviewer_id (no adjudication SHA even for third
@@ -270,7 +272,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None):
                     and row.get('prompt_token_ids') == prompt.get('prompt_token_ids')
                     and row.get('rendered_prompt_sha256') == prompt.get('rendered_prompt_sha256'),
                     'answer case/prompt binding differs')
-            require(isinstance(row.get('response_text'), str) and row['response_text'].strip()
+            require(isinstance(row.get('response_text'), str)
                     and not row.get('exception') and finite_seconds(row.get('elapsed_seconds')),
                     'missing answer or invalid latency')
             answers[(cid, arm)] = row

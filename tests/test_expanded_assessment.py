@@ -283,6 +283,39 @@ class ExpandedAssessmentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'already exists'):
             self.fixture.packet()
 
+    def test_immediate_eos_empty_answer_survives_packet_freeze_and_aggregation(self):
+        rows = self.fixture.rows(self.fixture.primary, ARMS[1])
+        rows[0].update(response_text='', output_token_ids=[4], generated_tokens=1,
+                       terminal_stop_token_id=4, termination_reason='eos')
+        cid = rows[0]['id']
+        self.fixture.write_rows(self.fixture.primary, ARMS[1], rows)
+        packet_path, mapping_path = self.fixture.packet()
+        packet, mapping = load(packet_path), load(mapping_path)
+        self.assertEqual(len(packet['rows']), 400)
+        self.assertEqual(len(mapping['rows']), 400)
+        sid = next(sid for sid, item in mapping['rows'].items()
+                   if item['case_id'] == cid and item['arm'] == ARMS[1])
+        selected = next(row for row in packet['rows'] if row['sample_id'] == sid)
+        self.assertEqual(selected['response'], '')
+        self.assertFalse(selected['structural']['pass'])
+        self.assertEqual(selected['structural']['reason'], 'empty_output')
+        self.assertEqual(sum(not row['structural']['pass'] for row in packet['rows']), 1)
+        votes = {row['sample_id']: vote() for row in packet['rows']}
+        votes[sid] = vote(False, False, reason='No answer or requested paragraph JSON was produced.')
+        judgments = self.fixture.freeze(packet_path, self.fixture.reports(packet_path, votes))
+        frozen = load(judgments)
+        self.assertEqual(len(frozen['judgments']), 400)
+        self.assertEqual(frozen['judgments'][sid], votes[sid])
+        primary = self.fixture.aggregate(judgments, mapping_path)['primary']
+        self.assertEqual((primary['cases'], primary['answers']), (200, 400))
+        for arm in ARMS:
+            self.assertEqual(primary['arms'][arm]['latency']['n'], 200)
+        for metric in ('structural_pass', 'semantic_pass', 'format_pass', 'joint_pass'):
+            self.assertEqual(primary['arms']['base'][metric], 200)
+            self.assertEqual(primary['arms'][ARMS[1]][metric], 199)
+            self.assertEqual(primary['paired'][metric]['regressions'], 1)
+            self.assertEqual(primary['paired'][metric]['net_fraction'], -1 / 200)
+
     def test_structurally_valid_false_answer_is_not_semantic_success(self):
         rows = self.fixture.rows(self.fixture.primary, ARMS[1])
         rows[0]['response_text'] = UNSUPPORTED
@@ -470,7 +503,7 @@ class ExpandedAssessmentTests(unittest.TestCase):
                          messages=[dict(role='user', content='Changed question')], prompt_sha256='0' * 64,
                          prompt_token_ids=[99], rendered_prompt_sha256='0' * 64,
                          generation=dict(GENERATION, seed=99),
-                         generation_config=dict(do_sample=True), elapsed_seconds=-1, response_text='')
+                         generation_config=dict(do_sample=True))
         for field, value in mutations.items():
             with self.subTest(field=field):
                 rows = copy.deepcopy(original)
@@ -478,6 +511,27 @@ class ExpandedAssessmentTests(unittest.TestCase):
                 self.fixture.write_rows(self.fixture.primary, 'base', rows)
                 with self.assertRaises(ValueError):
                     self.fixture.packet(name='wrong-' + field)
+
+    def test_invalid_response_exception_and_latency_records_are_rejected(self):
+        original = self.fixture.rows(self.fixture.primary)
+        variants = {
+            'missing-response': {},
+            'null-response': {'response_text': None},
+            'number-response': {'response_text': 0},
+            'list-response': {'response_text': []},
+            'object-response': {'response_text': {}},
+            'exception': {'response_text': '', 'exception': 'generation failed'},
+            'negative-latency': {'response_text': '', 'elapsed_seconds': -1},
+            'missing-latency-value': {'response_text': '', 'elapsed_seconds': None},
+        }
+        for name, fields in variants.items():
+            with self.subTest(name=name):
+                rows = copy.deepcopy(original)
+                del rows[0]['response_text']
+                rows[0].update(fields)
+                self.fixture.write_rows(self.fixture.primary, 'base', rows)
+                with self.assertRaisesRegex(ValueError, 'missing answer or invalid latency'):
+                    self.fixture.packet(name='invalid-' + name)
 
     def test_output_hash_duplicate_keys_and_nonfinite_json_are_rejected(self):
         path = self.fixture.primary / 'base-outputs.jsonl'
@@ -646,20 +700,22 @@ class ExpandedAssessmentTests(unittest.TestCase):
         rows[1]['response_text'] = '{"paragraphs":[{"text":"기한은 3일이다.","sources":["E2"]}]}'
         rows[2]['termination_reason'] = 'length'
         rows[2]['truncated_output'] = True
+        rows[3]['response_text'] = ' \t\n'
         self.fixture.write_rows(self.fixture.primary, ARMS[1], rows)
         packet_path, mapping_path = self.fixture.packet()
         packet = load(packet_path)
         failures = [row for row in packet['rows'] if not row['structural']['pass']]
         self.assertEqual(len(packet['rows']), 400)
-        self.assertEqual(len(failures), 3)
+        self.assertEqual(len(failures), 4)
         self.assertEqual({row['structural']['reason'] for row in failures},
-                         {'unsupported_numeric_value', 'invalid_citations', 'invalid_finish_or_input_metadata'})
+                         {'unsupported_numeric_value', 'invalid_citations', 'invalid_finish_or_input_metadata',
+                          'empty_output'})
         judgments = self.fixture.freeze(packet_path, self.fixture.reports(packet_path))
         primary = self.fixture.aggregate(judgments, mapping_path)['primary']
         self.assertEqual(primary['arms'][ARMS[1]]['semantic_pass'], 200)
-        self.assertEqual(primary['arms'][ARMS[1]]['structural_pass'], 197)
-        self.assertEqual(primary['arms'][ARMS[1]]['joint_pass'], 197)
-        self.assertEqual(primary['paired']['structural_pass']['regressions'], 3)
+        self.assertEqual(primary['arms'][ARMS[1]]['structural_pass'], 196)
+        self.assertEqual(primary['arms'][ARMS[1]]['joint_pass'], 196)
+        self.assertEqual(primary['paired']['structural_pass']['regressions'], 4)
         self.assertEqual((primary['cases'], primary['answers']), (200, 400))
 
     def test_packet_rejects_identity_or_votes_injected_before_review(self):
