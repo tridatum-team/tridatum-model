@@ -40,6 +40,8 @@ SOURCES = {'scripts/aws_eval/grounded_hf_lifecycle.py',
            'trid/text.py', 'trid/case_prompts.py'}
 SHA = re.compile('[0-9a-f]{64}')
 INFERENCE_SCHEMA = 'trid-ordered-hf-inference-v1'
+FOLLOWUP_SCHEMA = 'trid-hf14-followup-v1'
+FOLLOWUP_PHASES = dict(acquire14=900, dev14=2400, val14=2400)
 CHECKPOINT_MAX = 32 * 1024**2
 CHECKPOINT_CHANNEL_BYTES = CHECKPOINT_MAX + 3 * 1024**2
 ORDERED_PHASES = dict(acquire8=900, dev8=2400, val8=2400, parent_decision=300,
@@ -49,8 +51,16 @@ ORDERED_MODELS = {
     'qwen14': ('Qwen/Qwen3-14B', '40c069824f4251a91eefaf281ebe4c544efd3e18')}
 
 
-def inference_mode(plan):
+def ordered_mode(plan):
     return plan.get('schema') == INFERENCE_SCHEMA
+
+
+def followup_mode(plan):
+    return plan.get('schema') == FOLLOWUP_SCHEMA
+
+
+def inference_mode(plan):
+    return ordered_mode(plan) or followup_mode(plan)
 
 
 def success_field(plan):
@@ -66,8 +76,8 @@ def ordered_output_members(plan, model_key=None, selected_group=None):
     """All candidates for admission; exact selected membership for checkpoints."""
     require(selected_group in (None, 'nonthinking', 'thinking'), 'Unknown selected group')
     members = {'runtime.json', 'runtime.log'}
-    for key in ([model_key] if model_key else ORDERED_MODELS):
-        require(key in ORDERED_MODELS, 'Unknown ordered model')
+    for key in ([model_key] if model_key else plan['workload']['models']):
+        require(key in ORDERED_MODELS and key in plan['workload']['models'], 'Unknown admitted model')
         suffix = '8' if key == 'qwen8' else '14'
         members.update({f'acquire{suffix}-receipt.json', f'dev{suffix}-receipt.json',
                         f'val{suffix}-receipt.json', f'{key}-select.log', f'{key}-selection.json'})
@@ -79,18 +89,21 @@ def ordered_output_members(plan, model_key=None, selected_group=None):
                     members.update({stem + '.log', stem + '-outputs.jsonl', stem + '-receipt.json'})
                     if model_key is None and selected_group is None:
                         members.add(stem + '-receipt.json.pending')
-    if model_key is None:
+    if model_key is None and ordered_mode(plan):
         members.update({'parent-decision.json', 'parent_decision-receipt.json'})
     return members
 
 
 def validate_ordered_workload(plan, bundled):
     workload = plan['workload']
-    require(set(workload) == {'models', 'profiles', 'development_inputs', 'validation_inputs',
-                'development_references', 'development_case_ids', 'validation_case_ids',
-                'selection_policy', 'checkpoint_keys', 'phase_seconds', 'source_closure',
-                'backend', 'dtype', 'prefill', 'question_timeout_seconds'},
-            'Ordered workload requires exact inference-only fields')
+    fields = {'models', 'profiles', 'development_inputs', 'validation_inputs',
+              'development_references', 'development_case_ids', 'validation_case_ids',
+              'selection_policy', 'phase_seconds', 'source_closure',
+              'backend', 'dtype', 'prefill', 'question_timeout_seconds'}
+    fields.add('historical_evidence' if followup_mode(plan) else 'checkpoint_keys')
+    require(set(workload) == fields, 'Inference workload requires exact inference-only fields')
+    require(set(workload['models']) == ({'qwen14'} if followup_mode(plan) else set(ORDERED_MODELS)),
+            'Inference model membership differs')
     require(workload['backend'] == 'transformers' and workload['dtype'] == 'bfloat16'
             and workload['prefill'] == 'full_prompt' and workload['question_timeout_seconds'] == 180
             and all(m['dtype'] == 'bfloat16' for m in workload['models'].values()),
@@ -109,21 +122,28 @@ def validate_ordered_workload(plan, bundled):
                             'peak_cuda_allocated_bytes', 'lexical_group'],
                 validation_references_in_bundle=False), 'Frozen development-only selection policy differs')
     phases = workload['phase_seconds']
-    require(phases == ORDERED_PHASES and all(type(v) is int for v in phases.values())
+    require(phases == (FOLLOWUP_PHASES if followup_mode(plan) else ORDERED_PHASES)
+            and all(type(v) is int for v in phases.values())
             and sum(phases.values()) <= LIMITS['lifetime_seconds'] - LIMITS['reserve_seconds'] - 600,
             'Ordered shared lease allocations differ')
-    ident = plan['identity']
-    require(workload['checkpoint_keys'] == dict(archive=ident['output_prefix'] + 'qwen8-checkpoint.tar',
-                receipt=ident['output_prefix'] + 'qwen8-checkpoint.json',
-                decision=ident['code_prefix'] + 'parent-decision.json'),
-            'Checkpoint/decision keys must bind exact run prefixes')
+    if ordered_mode(plan):
+        ident = plan['identity']
+        require(workload['checkpoint_keys'] == dict(archive=ident['output_prefix'] + 'qwen8-checkpoint.tar',
+                    receipt=ident['output_prefix'] + 'qwen8-checkpoint.json',
+                    decision=ident['code_prefix'] + 'parent-decision.json'),
+                'Checkpoint/decision keys must bind exact run prefixes')
     data_paths = []
-    for key in ('development_inputs', 'validation_inputs', 'development_references', 'source_closure'):
+    data_keys = ['development_inputs', 'validation_inputs', 'development_references', 'source_closure']
+    if followup_mode(plan):
+        data_keys.append('historical_evidence')
+    for key in data_keys:
         pin = workload[key]
         pins([pin], 32 * 1024**2)
         require(set(pin) == {'path', 'bytes', 'sha256'} and pin['path'] in bundled
                 and pin == {k: bundled[pin['path']][k] for k in pin},
                 'Missing sealed ordered input/source pin')
+        if key == 'historical_evidence':
+            require(pin['bytes'] <= 1024**2, 'Historical evidence exceeds bounded envelope')
         data_paths.append(pin['path'])
     require(len(set(data_paths)) == len(data_paths), 'Input/reference/closure paths must be separate')
     dev, valid = workload['development_case_ids'], workload['validation_case_ids']
@@ -139,11 +159,16 @@ def validate_ordered_data(root, plan):
     workload = plan['workload']
     validate_ordered_workload(plan, {r['path']: r for r in plan['bundle']['files']})
     loaded = {}
-    for key in ('development_inputs', 'validation_inputs', 'development_references', 'source_closure'):
+    data_keys = ['development_inputs', 'validation_inputs', 'development_references', 'source_closure']
+    if followup_mode(plan):
+        data_keys.append('historical_evidence')
+    for key in data_keys:
         pin = workload[key]
         path = root / pin['path']
         require(not path.is_symlink() and path.stat().st_size == pin['bytes'], 'Ordered data envelope differs')
         loaded[key] = read_bound(path, pin['sha256'])
+    if followup_mode(plan):
+        validate_followup_history(loaded['historical_evidence'], plan)
     for cohort in ('development', 'validation'):
         rows = loaded[cohort + '_inputs']
         require(isinstance(rows, list) and [r['id'] for r in rows] == workload[cohort + '_case_ids'],
@@ -183,7 +208,25 @@ def validate_ordered_data(root, plan):
     return {key: loaded[key] for key in ('development_inputs', 'validation_inputs')}
 
 
+def validate_followup_history(history, plan):
+    fields = {'schema', 'source_run_id', 'source_plan_sha256', 'source_checkpoint_sha256',
+              'source_result_sha256', 'source_model_key', 'qualified', 'continuation_reason'}
+    require(followup_mode(plan) and isinstance(history, dict) and set(history) == fields,
+            'Exact followup historical provenance required')
+    require(history['schema'] == 'trid-hf14-followup-history-v1'
+            and isinstance(history['source_run_id'], str)
+            and re.fullmatch('[a-z][a-z0-9-]{8,49}', history['source_run_id'])
+            and history['source_run_id'] != plan['identity']['run_id']
+            and all(isinstance(history[k], str) and SHA.fullmatch(history[k]) for k in
+                    ('source_plan_sha256', 'source_checkpoint_sha256', 'source_result_sha256'))
+            and history['source_model_key'] == 'qwen8' and history['qualified'] is False
+            and history['continuation_reason'] == 'frozen_gate_failed',
+            'Historical evidence cannot authorize current execution or claim qualification')
+    return history
+
+
 def validate_parent_decision(decision, plan, plan_sha, checkpoint_sha):
+    require(ordered_mode(plan), 'Followup has no parent decision')
     require(isinstance(decision, dict) and set(decision) == {
                 'run_id', 'plan_sha256', 'checkpoint_sha256', 'decision', 'reason'}
             and decision['run_id'] == plan['identity']['run_id'] and decision['plan_sha256'] == plan_sha
@@ -196,7 +239,7 @@ def validate_parent_decision(decision, plan, plan_sha, checkpoint_sha):
 
 def validate_checkpoint_receipt(receipt, plan, plan_sha, instance_id):
     workload = plan['workload']
-    require(inference_mode(plan) and set(receipt) == {'run_id', 'plan_sha256', 'instance_id',
+    require(ordered_mode(plan) and set(receipt) == {'run_id', 'plan_sha256', 'instance_id',
                 'model_sha256', 'profiles_sha256', 'development_inputs_sha256',
                 'validation_inputs_sha256', 'phase', 'export', 'files', 'selected_group'}
             and receipt['run_id'] == plan['identity']['run_id'] and receipt['plan_sha256'] == plan_sha
@@ -222,6 +265,12 @@ def canonical(value):
 
 def object_sha(value):
     return hashlib.sha256(canonical(value)).hexdigest()
+
+
+def price_products_sha256(products):
+    """Pin ordered price products, excluding only catalog publication metadata."""
+    return object_sha([{key: value for key, value in product.items()
+                        if key not in ('publicationDate', 'version')} for product in products])
 
 
 def relative(name):
@@ -314,8 +363,10 @@ def cost_bound(plan):
     require(cost['get_requests'] >= 512 and cost['put_requests'] >= 16
             and cost['control_requests'] >= 1000 and cost['termination_grace_seconds'] >= 300,
             'Request/termination reserve does not cover bounded controller')
-    extra = CHECKPOINT_CHANNEL_BYTES if inference_mode(plan) else 0
+    extra = CHECKPOINT_CHANNEL_BYTES if ordered_mode(plan) else 0
     if inference_mode(plan):
+        require(cost['ancillary_bound_usd'] >= 5, 'Inference requires full USD5 ancillary reserve')
+    if ordered_mode(plan):
         require(cost['get_requests'] >= 579 and cost['put_requests'] >= 20
                 and cost['control_requests'] >= 1067 and cost['ancillary_bound_usd'] >= 5,
                 'Ordered checkpoint channel and ancillary reserve are not priced')
@@ -402,7 +453,7 @@ def validate_worker_policy(plan):
         f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
         dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
         f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])]
-    if inference_mode(plan):
+    if ordered_mode(plan):
         expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
             Resource=[f"arn:aws:s3:::{identity['bucket']}"],
             Condition={'StringEquals': {'s3:prefix': identity['code_prefix'] + 'parent-decision.json'}}))
@@ -412,7 +463,7 @@ def validate_worker_policy(plan):
 
 
 def validate_plan(plan, approval, plan_sha, *, now=None):
-    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA), 'Unknown plan schema')
+    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA), 'Unknown plan schema')
     ordered = inference_mode(plan)
     ident = plan['identity']
     run = ident['run_id']
@@ -435,7 +486,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         key_arn = ebs_key_arn(plan)
         require(not ({'recipe', 'data', 'evaluation', 'phase_seconds'} & set(plan)),
                 'Inference plan cannot admit training or legacy workload fields')
-        require(approval == dict(schema='trid-ordered-hf-inference-approval-v1', run_id=run,
+        approval_schema = ('trid-hf14-followup-approval-v1' if followup_mode(plan)
+                           else 'trid-ordered-hf-inference-approval-v1')
+        require(approval == dict(schema=approval_schema, run_id=run,
                     plan_sha256=plan_sha, instance_limit=1, additional_pretax_usd=20,
                     workload_sha256=object_sha(plan['workload']), limits=LIMITS,
                     ebs_kms_key_arn=key_arn, automatic_retry=False, approved=True),
@@ -461,8 +514,12 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
             'Only the parent-selected standard Ubuntu24 DLAMI is admitted; no newer/Ubuntu Pro fallback')
     if ordered:
         models = plan['workload']['models']
-        require(set(models) == set(ORDERED_MODELS), 'Exactly two registered model manifests required')
-        require('model' not in plan or plan['model'] == models['qwen8'], 'Initial model must be immutable 8B')
+        require(set(models) == ({'qwen14'} if followup_mode(plan) else set(ORDERED_MODELS)),
+                'Exact registered model manifests required')
+        if followup_mode(plan):
+            require('model' not in plan, 'Followup model belongs only in the sealed workload')
+        else:
+            require('model' not in plan or plan['model'] == models['qwen8'], 'Initial model must be immutable 8B')
     else:
         models = {'qwen14': plan['model']}
     file_count = 0
@@ -1237,7 +1294,7 @@ def live_preflight(plan, client):
             json.dumps([dict(Type='TERM_MATCH', Field=k, Value=v) for k, v in query['filters'].items()]),
             region='us-east-1')
         products = [json.loads(s) for s in result['PriceList']]
-        require(products and object_sha(products) == query['products_sha256'], 'Price product evidence changed')
+        require(products and price_products_sha256(products) == query['products_sha256'], 'Price product evidence changed')
         values = [float(d['pricePerUnit']['USD']) for p in products for term in p.get('terms', {}).get('OnDemand', {}).values()
                   for d in term['priceDimensions'].values() if d['unit'] == query['unit']]
         require(values and all(math.isfinite(v) and v >= 0 for v in values)
@@ -1354,7 +1411,7 @@ def bootstrap_text(plan, plan_sha, root):
 
 def collect_checkpoint(client, plan, plan_sha, state, *, clock=time.time, pause=time.sleep):
     """Finite read-only watcher; never releases or removes termination protection."""
-    require(inference_mode(plan), 'Checkpoint collection is inference-only')
+    require(ordered_mode(plan), 'Checkpoint collection is ordered-inference-only')
     state = Path(state)
     release = json.loads((state / 'release.json').read_text())
     instance_id = release['instance_id']
@@ -1476,6 +1533,72 @@ def validate_ordered_completion(completion, plan, plan_sha, instance_id, archive
             'Incomplete ordered native stage receipt')
 
 
+def validate_followup_completion(completion, plan, plan_sha, instance_id, archive, manifest):
+    """Authenticate a new 14B-only execution; history never supplies phase evidence."""
+    require(followup_mode(plan), 'Followup completion requires its distinct plan schema')
+    validate_ordered_workload(plan, {r['path']: r for r in plan['bundle']['files']})
+    identity = dict(run_id=plan['identity']['run_id'], plan_sha256=plan_sha, instance_id=instance_id)
+    require(set(completion) == set(identity) | {
+                'inference_success', 'stop_errors', 'runtime', 'runtime_unit', 'stages', 'export'}
+            and all(completion[k] == v for k, v in identity.items())
+            and completion['inference_success'] is True and completion['stop_errors'] == [],
+            'Followup requires new successful execution without checkpoint, decision, or guard errors')
+    require(manifest['run_id'] == identity['run_id'] and manifest['plan_sha256'] == plan_sha
+            and manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
+            'Followup manifest and terminal status differ')
+    pin = completion['export']
+    require(set(pin) == {'bytes', 'sha256'} and type(pin['bytes']) is int
+            and 0 < pin['bytes'] <= MAX_EXPORT and SHA.fullmatch(pin['sha256']),
+            'Followup export envelope differs')
+    with tarfile.open(archive, 'r:') as stream:
+        member = stream.getmember('export-manifest.json')
+        require(member.isfile() and member.size <= 8 * 1024**2, 'Followup manifest exceeds bound')
+        raw = stream.extractfile(member).read()
+    require(json.loads(raw) == manifest, 'Supplied followup manifest differs from archive')
+    rows = manifest['files'] + [dict(path='export-manifest.json', bytes=len(raw),
+                                     sha256=hashlib.sha256(raw).hexdigest())]
+    authenticate_archive(archive, dict(bytes=pin['bytes'], sha256=pin['sha256'],
+                         unpacked_bytes=LIMITS['output_bytes'], files=rows))
+    files = pins(manifest['files'], LIMITS['output_bytes'])
+    require(set(files) <= set(plan['output_allowlist']), 'Unregistered followup export member')
+    with tarfile.open(archive, 'r:') as stream:
+        def document(name):
+            member = stream.getmember(name)
+            require(member.isfile() and member.size <= 1024**2, 'Followup receipt exceeds bound')
+            return json.loads(stream.extractfile(member).read())
+        runtime = document('runtime.json')
+        expected_packages = {k.lower().replace('_', '-'): v for k, v in plan['runtime']['packages'].items()}
+        require(runtime == completion['runtime']
+                and all(runtime.get(k) == v for k, v in identity.items())
+                and runtime['packages'] == expected_packages
+                and runtime['torch'] == plan['runtime']['packages']['torch']
+                and runtime['cuda'] == plan['runtime']['torch_cuda']
+                and type(runtime['count']) is int and runtime['count'] == 1
+                and runtime['bf16'] is True and runtime['name'] == plan['runtime']['gpu_name'],
+                'Fresh followup runtime identity or native package/GPU proof differs')
+        unit = completion['runtime_unit']
+        require(all(unit.get(k) == v for k, v in identity.items())
+                and unit['phase'] == 'runtime' and unit['state'] == 'complete'
+                and unit['unit'] == identity['run_id'] + '-runtime'
+                and isinstance(unit['invocation'], str) and bool(unit['invocation']),
+                'Fresh followup runtime unit ownership differs')
+        verify_gpu_observation(unit['gpu'], plan)
+        phases = list(FOLLOWUP_PHASES)
+        require([stage['phase'] for stage in completion['stages']] == phases,
+                'Followup requires only acquire14/dev14/val14, never historical phases')
+        for stage in completion['stages']:
+            require(stage == document(stage['phase'] + '-receipt.json')
+                    and stage['state'] == 'complete' and 'error' not in stage
+                    and stage['run_id'] == identity['run_id'] and stage['plan_sha256'] == plan_sha
+                    and all(type(stage[k]) in (int, float) and math.isfinite(stage[k])
+                            for k in ('started_epoch', 'finished_epoch'))
+                    and stage['started_epoch'] <= stage['finished_epoch'],
+                    'Followup aggregate receipt is incomplete or not bound to new execution')
+        group = validate_ordered_model_evidence(plan, plan_sha, 'qwen14', None, files, document)
+        require(set(files) == ordered_output_members(plan, 'qwen14', group),
+                'Followup requires exact new runtime and selected 14B artifact membership')
+
+
 
 def collect_export(client, plan, plan_sha, state, instance_id):
     """Retrieve bounded evidence only; native completion is not quality acceptance."""
@@ -1504,13 +1627,16 @@ def collect_export(client, plan, plan_sha, state, instance_id):
     require(manifest['run_id'] == identity['run_id'] and manifest['plan_sha256'] == plan_sha
             and {r['path'] for r in manifest['files']} <= set(plan['output_allowlist']),
             'Export membership/identity differs')
-    rows = manifest['files'] + [dict(path='export-manifest.json', bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())]
-    authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
-        unpacked_bytes=LIMITS['output_bytes'], files=rows))
     native = completion[success_field(plan)] is True and not completion['stop_errors']
+    if not (native and followup_mode(plan)):
+        rows = manifest['files'] + [dict(path='export-manifest.json', bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())]
+        authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
+            unpacked_bytes=LIMITS['output_bytes'], files=rows))
     if inference_mode(plan):
         require('training_success' not in completion, 'Training completion cannot authorize inference')
-        if native:
+        if native and followup_mode(plan):
+            validate_followup_completion(completion, plan, plan_sha, instance_id, path, manifest)
+        elif native:
             for key, field in (('receipt', 'checkpoint'), ('decision', 'decision')):
                 proof_path = state / ('final-' + field + '.json')
                 client('s3api', 'get-object', '--bucket', identity['bucket'],

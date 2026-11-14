@@ -288,6 +288,12 @@ GPU 생성 요청 전 두 준비 오류를 확인했습니다. S3의 작업 인�
 
 별도로 실제 tokenizer와 임의 초기화한 작은 Qwen3 모델로 CPU 추론 스모크도 수행했습니다. 이 CPU 스모크 자체는 GPU 실행·사전학습 모델 품질의 증거가 아니며, 위 8B 점수는 실제 CUDA checkpoint에서 계산했습니다. **14B 추가 비교 → 통과 후보의 특화 학습·독립 회귀 검증 → 실제 반입 환경 검증**은 남아 있으며, 모델 교체·서비스 배포·반입 승인을 하지 않았습니다.
 
+**별도 승인된 14B-only 후속 계약:** 이후 사용자가 승인한 **“14B만 진행 · 최대 US$20”**은 `trid-hf14-followup-v1` 계획과 `trid-hf14-followup-approval-v1` 승인으로 구분합니다. 새 L40S **1대·1회 임대·최대 4시간·추가 세전 US$20**만 허용하며 자동 추가 임대·연장이나 소비된 과거 승인 재사용은 허용하지 않습니다. 기존 ordered 8B→14B 경로와 별개이며, 과거 8B 관문 미달 증거는 해시로 결박한 **출처 기록만** 사용합니다. 8B 재실행·새 8B checkpoint·부모 전환 결정 채널 없이 `acquire14 → dev14 → val14`만 수행하고, 과거 runtime·phase·출력을 새 실행 증거로 복사하지 않습니다.
+
+완료 수락에는 **새 실행의 실제 14B runtime·네 개발 프로필의 독립 선택·선정된 두 시드의 검증 영수증·해시와 정확한 구성 파일 목록을 인증한 export**가 필요합니다. 검증 정답의 로컬 격리, 고정 입력·프로필·자원 한도, 단일 dispatch, 소유 자원의 종료·삭제와 S3 보존 규칙은 유지하며 다른 세션의 자원은 변경하지 않습니다. 이 계약 추가는 **새 GPU 실행 성공이나 측정된 14B 품질의 보고가 아니며**, native 완료만으로 품질 통과·학습 진입·배포·반입 승인을 주장하지 않습니다.
+
+새 14B-only 실행은 인스턴스 생성 요청 전 읽기 전용 가격 사전 점검에서 멈췄습니다. 실패한 조회의 응답 본문은 저장되지 않았습니다. 이후 별도 1회 진단 조회를 기존 영수증과 비교했을 때 EBS 가격 상품의 최상위 `publicationDate`·`version`만 달랐고, SKU·상품 속성·요금 조건·가격 구간·통화·단가는 같았습니다. [AWS 가격 파일 정의](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/reading-service-price-list-file-for-services.html)에 따라 가격 상품 fingerprint는 `price_products_sha256`에서 **각 상품의 최상위 게시일·게시 버전 두 필드만 제외**하고 나머지 모든 필드와 상품 목록 순서를 그대로 결박하도록 수정했습니다. 파일 구조의 `formatVersion`, 가격 효력일인 `terms`의 `effectiveDate`, 중첩된 동명 필드와 실제 가격·상품 조건은 계속 비교하며 원본 조회 영수증의 바이트 해시도 보존합니다. 이 수정은 실제 14B 실행 성공의 증거가 아니며 **14B 품질은 여전히 미측정**입니다.
+
 근거 파일: `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`, `gpu8-checkpoint-scored.json`, `gpu8-prose-aggregate.json`, `stage-two-result.json`, `ordered-execution-state/generation-3/controller-result.json`, `owned-cleanup-actual-v1/result.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
 
 ### Packed-head 학습 엔진

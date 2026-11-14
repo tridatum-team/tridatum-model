@@ -24,11 +24,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from grounded_hf_lifecycle import (LIMITS, MAX_EXPORT, Client, authenticate_archive,
     canonical, digest, exclusive_intent, object_sha, pins, read_bound, relative,
     remaining, require, save, timestamp, validate_data, validate_cost_admission, validate_bootstrap_admission,
-    verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml)
+    verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml,
+    inference_mode, followup_mode)
 
 
 def ordered_module(plan):
-    if plan.get('schema') == 'trid-ordered-hf-inference-v1':
+    if inference_mode(plan):
         import ordered_hf_comparison
         return ordered_hf_comparison
     return None
@@ -236,7 +237,11 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, 
             if state['ActiveState'] in ('inactive', 'failed') or state.get('SubState') == 'exited':
                 require(cgroup_empty(state) and state['Result'] == 'success' and state['ExecMainStatus'] == '0',
                         'Native stage failed: ' + phase + ': ' + str(state))
-                return dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
+                receipt = dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
+                if followup_mode(plan):
+                    receipt.update(run_id=run, plan_sha256=digest(Path(base) / 'plan.json'),
+                                   instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
+                return receipt
             time.sleep(0.5)
     finally:
         stop_unit(unit, run, min(deadline + 15, time.time() + 30))
@@ -473,7 +478,7 @@ def bootstrap(plan, plan_sha, base):
         require(ticket is not None, 'No independently verified termination ticket; no bootstrap downloads')
         deadline = verify_termination_ticket(ticket, plan, plan_sha, identity['instanceId'], time.time())
         client.deadline = deadline - 30
-        acquire_phase = 'acquire8' if ordered else 'acquire'
+        acquire_phase = 'acquire14' if followup_mode(plan) else ('acquire8' if ordered else 'acquire')
         allocations = plan['workload']['phase_seconds'] if ordered else plan['phase_seconds']
         acquisition_deadline = min(deadline - 1800, time.time() + allocations[acquire_phase])
         budget = [plan['cost']['download_requests']]
@@ -646,8 +651,12 @@ def runtime_stage(plan, base):
     expected = {k.lower().replace('_', '-'): v for k, v in plan['runtime']['packages'].items()}
     require(actual == expected, 'Installed package inventory differs (including transitive/bootstrap distributions)')
     torch = native_runtime(plan, base)
-    save(Path(base) / 'output/runtime.json', dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
-        count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0)))
+    receipt = dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
+        count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0))
+    if followup_mode(plan):
+        receipt.update(run_id=plan['identity']['run_id'], plan_sha256=digest(Path(base) / 'plan.json'),
+                       instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
+    save(Path(base) / 'output/runtime.json', receipt)
 
 
 def trainer_module(base):

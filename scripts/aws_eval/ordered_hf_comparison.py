@@ -10,7 +10,8 @@ import tarfile
 import time
 
 from grounded_hf_lifecycle import (LIMITS, canonical, digest, exclusive_intent,
-                                  object_sha, relative, remaining, require, save)
+                                  object_sha, relative, remaining, require, save,
+                                  inference_mode, followup_mode)
 
 SCHEMA = 'trid-ordered-hf-inference-v1'
 CHECKPOINT_MAX = 32 * 1024 ** 2
@@ -23,19 +24,19 @@ def is_ordered(plan):
 
 
 def phase_seconds(plan):
-    return plan['workload']['phase_seconds'] if is_ordered(plan) else plan['phase_seconds']
+    return plan['workload']['phase_seconds'] if inference_mode(plan) else plan['phase_seconds']
 
 
 def profiles_for(plan, model_key):
-    require(model_key in ('qwen8', 'qwen14'), 'Unknown model')
+    require(model_key in ('qwen8', 'qwen14') and model_key in plan['workload']['models'], 'Unknown admitted model')
     return [dict(profile, name=profile['name'].replace('qwen8-', model_key + '-', 1))
             for profile in plan['workload']['profiles']]
 
 
 def phase_kind(plan, phase):
-    if not is_ordered(plan):
+    if not inference_mode(plan):
         return None
-    for key in ('qwen8', 'qwen14'):
+    for key in plan['workload']['models']:
         if phase == key + '-select':
             return 'select'
         for cohort in ('dev', 'val'):
@@ -341,6 +342,7 @@ def aggregate(base, report, phase, action):
 
 def make_checkpoint(worker, plan, base, report, client, deadline):
     from grounded_hf_lifecycle import ordered_output_members, validate_checkpoint_receipt
+    require(is_ordered(plan), 'Followup has no checkpoint')
     base = Path(base)
     selection = json.loads((base / 'output/qwen8-selection.json').read_text())
     members = ordered_output_members(plan, model_key='qwen8', selected_group=selection['selected_group'])
@@ -377,6 +379,7 @@ def make_checkpoint(worker, plan, base, report, client, deadline):
 
 def await_decision(plan, base, client, checkpoint, deadline):
     from grounded_hf_lifecycle import validate_parent_decision
+    require(is_ordered(plan), 'Followup has no parent decision')
     base = Path(base)
     target = base / 'parent-decision-download.json'
     bucket, key = plan['identity']['bucket'], plan['workload']['checkpoint_keys']['decision']
@@ -422,10 +425,12 @@ def await_decision(plan, base, client, checkpoint, deadline):
 def run_ordered(worker, plan, base, report, client, gpu, account, work_deadline,
                 acquisition_deadline, budget, hosts, units):
     base = Path(base)
+    require(inference_mode(plan), 'Native comparison requires an inference plan')
     def run_model(model_key):
         suffix = '8' if model_key == 'qwen8' else '14'
         phase = 'acquire' + suffix
-        end = acquisition_deadline if model_key == 'qwen8' else min(work_deadline, time.time() + phase_seconds(plan)[phase])
+        initial = followup_mode(plan) or model_key == 'qwen8'
+        end = acquisition_deadline if initial else min(work_deadline, time.time() + phase_seconds(plan)[phase])
         def acquire():
             exclusive_intent(base / (phase + '-dispatch.json'), dict(model_sha256=object_sha(plan['workload']['models'][model_key])))
             directory = base / 'model' / model_key
@@ -454,6 +459,9 @@ def run_ordered(worker, plan, base, report, client, gpu, account, work_deadline,
                     worker.supervise_phase(plan, base, model_key + '-select', gpu,
                         account.pw_uid, account.pw_gid, end, units, seconds=min(60, int(remaining(end))))
             aggregate(base, report, phase, cohort_work)
+    if followup_mode(plan):
+        run_model('qwen14')
+        return
     run_model('qwen8')
     checkpoint = make_checkpoint(worker, plan, base, report, client, work_deadline)
     report['checkpoint'] = checkpoint

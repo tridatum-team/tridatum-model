@@ -1,4 +1,4 @@
-"""CPU-only behavioral coverage for the inference-only ordered worker; no cloud calls."""
+"""CPU-only behavioral coverage for ordered and 14B followup inference; no cloud calls."""
 import json
 import os
 from pathlib import Path
@@ -33,6 +33,17 @@ def plan_fixture():
             phase_seconds=dict(acquire8=900, dev8=2400, val8=2400, parent_decision=300,
                                acquire14=900, dev14=2400, val14=2400),
             checkpoint_keys=dict(decision='code/parent-decision.json')))
+
+
+def followup_plan_fixture():
+    plan = plan_fixture()
+    plan['schema'] = L.FOLLOWUP_SCHEMA
+    plan['identity']['run_id'] = 'followup-fixture'
+    work = plan['workload']
+    del work['models']['qwen8']
+    del work['checkpoint_keys']
+    work['phase_seconds'] = dict(acquire14=900, dev14=2400, val14=2400)
+    return plan
 
 
 def decision_listing(*, present=True, **overrides):
@@ -153,8 +164,8 @@ class GuardTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
-    def setup_development(self, base):
-        plan = plan_fixture()
+    def setup_development(self, base, plan=None, model_key='qwen8'):
+        plan = plan_fixture() if plan is None else plan
         work = plan['workload']
         (base / 'code').mkdir()
         (base / 'output').mkdir()
@@ -167,17 +178,17 @@ class SelectionTests(unittest.TestCase):
             path = base / 'code' / (key + '.json')
             path.write_text(json.dumps(data))
             work[key] = dict(path=path.name, bytes=path.stat().st_size, sha256=O.digest(path))
-        for p in work['profiles']:
-            stem = O.profile_phase('qwen8', 'dev', p)
+        for p in O.profiles_for(plan, model_key):
+            stem = O.profile_phase(model_key, 'dev', p)
             path = base / 'output' / (stem + '-outputs.jsonl')
             rows = [dict(response(), id=c['id'], profile_parameters=p,
                          prompt_sha256=O.object_sha(c['messages']),
-                         model_sha256=O.object_sha(work['models']['qwen8']),
+                         model_sha256=O.object_sha(work['models'][model_key]),
                          elapsed_seconds=2 if p['thinking'] else 1,
                          memory={'peak_cuda_allocated_bytes': 100}) for c in inputs]
             path.write_text(''.join(json.dumps(r) + '\n' for r in rows))
             receipt = dict(state='complete', completed_case_ids=work['development_case_ids'], profile=p,
-                plan_sha256=O.digest(base / 'plan.json'), model_sha256=O.object_sha(work['models']['qwen8']),
+                plan_sha256=O.digest(base / 'plan.json'), model_sha256=O.object_sha(work['models'][model_key]),
                 input_sha256=work['development_inputs']['sha256'], output_sha256=O.digest(path),
                 output_bytes=path.stat().st_size)
             (base / 'output' / (stem + '-receipt.json')).write_text(json.dumps(receipt))
@@ -197,6 +208,43 @@ class SelectionTests(unittest.TestCase):
             receipt.write_text(json.dumps(value))
             with self.assertRaisesRegex(RuntimeError, 'cannot be scored'):
                 O.selection_stage(plan, base, 'qwen8')
+
+    def test_followup_selects_independently_from_all_four_current_14b_development_outputs(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(O.os, 'geteuid', return_value=1001), \
+                patch.dict(O.os.environ, {'CUDA_VISIBLE_DEVICES': ''}, clear=True):
+            base = Path(temp)
+            plan = self.setup_development(base, followup_plan_fixture(), 'qwen14')
+            # There is deliberately no 8B selection, history output, validation input,
+            # or model directory available to the CPU selector.
+            O.selection_stage(plan, base, 'qwen14')
+            selected = json.loads((base / 'output/qwen14-selection.json').read_text())
+            self.assertEqual(selected['run_id'], plan['identity']['run_id'])
+            self.assertEqual(selected['plan_sha256'], O.digest(base / 'plan.json'))
+            self.assertEqual(selected['model_key'], 'qwen14')
+            self.assertEqual(selected['model_sha256'], O.object_sha(plan['workload']['models']['qwen14']))
+            self.assertEqual(selected['selected_profiles'],
+                             ['qwen14-nonthinking-seed14', 'qwen14-nonthinking-seed29'])
+            self.assertEqual([row['path'] for row in selected['dev_outputs']], [
+                O.profile_phase('qwen14', 'dev', p) + '-outputs.jsonl'
+                for p in O.profiles_for(plan, 'qwen14')])
+            self.assertEqual(len(selected['groups']), 2)
+            self.assertTrue(all(group['minimum_correct'] == 6 and group['combined_correct'] == 12
+                                for group in selected['groups']))
+
+    def test_followup_selector_rejects_each_prior_plan_development_receipt(self):
+        for p in O.profiles_for(followup_plan_fixture(), 'qwen14'):
+            with self.subTest(profile=p['name']), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(O.os, 'geteuid', return_value=1001), \
+                    patch.dict(O.os.environ, {'CUDA_VISIBLE_DEVICES': ''}, clear=True):
+                base = Path(temp)
+                plan = self.setup_development(base, followup_plan_fixture(), 'qwen14')
+                path = base / 'output' / (O.profile_phase('qwen14', 'dev', p) + '-receipt.json')
+                receipt = json.loads(path.read_text())
+                receipt['plan_sha256'] = '0' * 64
+                path.write_text(json.dumps(receipt))
+                with self.assertRaisesRegex(RuntimeError, 'cannot be scored'):
+                    O.selection_stage(plan, base, 'qwen14')
+                self.assertFalse((base / 'output/qwen14-selection.json').exists())
 
 
 class ConditionalTransitionTests(unittest.TestCase):
@@ -399,6 +447,185 @@ class ConditionalTransitionTests(unittest.TestCase):
             self.assertEqual(client.requests, 1)
             run.assert_called_once()
             self.assertEqual(client.deadline, 2000)
+
+
+class FollowupTransitionTests(unittest.TestCase):
+    def phases(self, thinking=False):
+        group = 'thinking' if thinking else 'nonthinking'
+        return [
+            'qwen14-dev-nonthinking-seed14', 'qwen14-dev-nonthinking-seed29',
+            'qwen14-dev-thinking-seed14', 'qwen14-dev-thinking-seed29', 'qwen14-select',
+            f'qwen14-val-{group}-seed14', f'qwen14-val-{group}-seed29',
+        ]
+
+    def run_followup(self, *, thinking=False, fail_phase=None, replay=False,
+                     now=1800, acquisition_deadline=1900):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'model').mkdir()
+            (base / 'output').mkdir()
+            plan = followup_plan_fixture()
+            files = [dict(path='config.json'), dict(path='model.safetensors')]
+            plan['workload']['models']['qwen14']['files'] = files
+            calls, deadlines = [], []
+            budget, hosts, units = [100], {'models.example'}, []
+            worker, client = Mock(), Mock()
+            report = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                          instance_id='i-followup', stages=[])
+
+            def download(row, directory, allowed_hosts, deadline, request_budget):
+                deadlines.append(deadline)
+                self.assertEqual(directory, base / 'model/qwen14')
+                self.assertIs(allowed_hosts, hosts)
+                self.assertIs(request_budget, budget)
+                L.remaining(deadline)
+                if fail_phase == 'acquire14':
+                    raise RuntimeError('registered phase failed')
+
+            def supervise(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, seconds):
+                calls.append(phase)
+                self.assertEqual((uid, gid), (1001, 1001))
+                self.assertIs(owned_units, units)
+                self.assertEqual(deadline, min(10000, now + 2400))
+                self.assertEqual(seconds, 60 if phase.endswith('-select') else 2400)
+                self.assertEqual(stat.S_IMODE((base / 'model/qwen14').stat().st_mode), 0o755)
+                if phase == fail_phase:
+                    raise RuntimeError('registered phase failed')
+                if phase.endswith('-select'):
+                    selected = [p['name'] for p in O.profiles_for(plan, 'qwen14')
+                                if p['thinking'] == thinking]
+                    (base / 'output/qwen14-selection.json').write_text(json.dumps(
+                        dict(state='complete', selected_profiles=selected)))
+
+            worker.download.side_effect = download
+            worker.supervise_phase.side_effect = supervise
+            args = (worker, plan, base, report, client, {}, SimpleNamespace(pw_uid=1001, pw_gid=1001),
+                    10000, acquisition_deadline, budget, hosts, units)
+            with patch.object(O.time, 'time', return_value=now), \
+                    patch.object(O, 'make_checkpoint') as checkpoint, \
+                    patch.object(O, 'await_decision') as decision:
+                if fail_phase or acquisition_deadline <= now:
+                    with self.assertRaisesRegex(RuntimeError, 'registered phase failed|deadline'):
+                        O.run_ordered(*args)
+                    self.assertEqual(report['stages'][-1]['state'], 'incomplete')
+                else:
+                    O.run_ordered(*args)
+                first_stages = [dict(stage) for stage in report['stages']]
+                if replay:
+                    before = (worker.download.call_count, worker.validate_model.call_count,
+                              worker.supervise_phase.call_count)
+                    with self.assertRaises(FileExistsError):
+                        O.run_ordered(*args)
+                    self.assertEqual(before, (worker.download.call_count, worker.validate_model.call_count,
+                                              worker.supervise_phase.call_count))
+                checkpoint.assert_not_called()
+                decision.assert_not_called()
+            client.assert_not_called()
+            self.assertEqual(client.mock_calls, [])
+            worker.capacity_stage.assert_not_called()
+            worker.train_stage.assert_not_called()
+            self.assertFalse((base / 'model/qwen8').exists())
+            self.assertNotIn('checkpoint', report)
+            self.assertNotIn('decision', report)
+            self.assertEqual(json.loads((base / 'acquire14-dispatch.json').read_text()),
+                             dict(model_sha256=O.object_sha(plan['workload']['models']['qwen14'])))
+            for stage in first_stages:
+                if not replay:
+                    self.assertEqual(json.loads((base / 'output' / (stage['phase'] + '-receipt.json')).read_text()),
+                                     stage)
+            return calls, deadlines, first_stages, worker
+
+    def test_only_14b_acquisition_four_development_selector_and_selected_validation_run(self):
+        for thinking in (False, True):
+            with self.subTest(thinking=thinking):
+                calls, deadlines, stages, worker = self.run_followup(thinking=thinking)
+                self.assertEqual(calls, self.phases(thinking))
+                self.assertEqual([stage['phase'] for stage in stages], ['acquire14', 'dev14', 'val14'])
+                self.assertTrue(all(stage['state'] == 'complete' for stage in stages))
+                self.assertEqual(deadlines, [1900, 1900])
+                worker.validate_model.assert_called_once()
+                self.assertEqual(set(worker.validate_model.call_args.args[1]['workload']['models']), {'qwen14'})
+
+    def test_acquisition_failure_never_retries_validates_or_starts_development(self):
+        calls, deadlines, stages, worker = self.run_followup(fail_phase='acquire14')
+        self.assertEqual(calls, [])
+        self.assertEqual(deadlines, [1900])
+        self.assertEqual([stage['phase'] for stage in stages], ['acquire14'])
+        worker.validate_model.assert_not_called()
+
+    def test_every_child_failure_stops_without_retry_or_next_cohort(self):
+        phases = self.phases()
+        for index, failed in enumerate(phases):
+            with self.subTest(failed=failed):
+                calls, _, stages, _ = self.run_followup(fail_phase=failed)
+                self.assertEqual(calls, phases[:index + 1])
+                expected = ['acquire14', 'dev14'] + (['val14'] if '-val-' in failed else [])
+                self.assertEqual([stage['phase'] for stage in stages], expected)
+                self.assertTrue(all(stage['state'] == 'complete' for stage in stages[:-1]))
+                self.assertIn('registered phase failed', stages[-1]['error'])
+
+    def test_initial_acquisition_deadline_is_not_renewed_after_bootstrap(self):
+        calls, deadlines, stages, worker = self.run_followup(now=2000, acquisition_deadline=1900)
+        self.assertEqual(deadlines, [1900])
+        self.assertEqual(calls, [])
+        self.assertEqual([stage['phase'] for stage in stages], ['acquire14'])
+        worker.validate_model.assert_not_called()
+
+    def test_acquisition_dispatch_cannot_be_reused_after_success_or_failure(self):
+        for failure in (None, 'acquire14', 'qwen14-dev-nonthinking-seed14'):
+            with self.subTest(failure=failure):
+                self.run_followup(fail_phase=failure, replay=True)
+
+
+class FollowupGuardTests(unittest.TestCase):
+    def test_selector_and_each_inference_cohort_keep_distinct_isolation(self):
+        plan = followup_plan_fixture()
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'plan.json').write_text(json.dumps(plan))
+            gpu = dict(uuid='GPU-followup', minor=3)
+            selector = W.stage_argv(plan, base, 'qwen14-select', 60, gpu, 1001, 1001)
+            self.assertIn('CUDA_VISIBLE_DEVICES=', selector)
+            self.assertFalse(any(arg.startswith('DeviceAllow=') for arg in selector))
+            self.assertIn('InaccessiblePaths=' + str(base / 'model'), selector)
+            for cohort in ('dev', 'val'):
+                for p in O.profiles_for(plan, 'qwen14'):
+                    phase = O.profile_phase('qwen14', cohort, p)
+                    argv = W.stage_argv(plan, base, phase, 300, gpu, 1001, 1001)
+                    self.assertIn('InaccessiblePaths=' + str(base / 'code/dev-references.json'), argv)
+                    self.assertIn('DeviceAllow=/dev/nvidia3 rw', argv)
+                    self.assertIn('CUDA_VISIBLE_DEVICES=GPU-followup', argv)
+                    for command in (selector, argv):
+                        for boundary in ('PrivateNetwork=yes', 'MemorySwapMax=0', 'DevicePolicy=closed',
+                                         'NoNewPrivileges=yes', 'ProtectSystem=strict',
+                                         'AWS_EC2_METADATA_DISABLED=true', 'HF_HUB_OFFLINE=1'):
+                            self.assertIn(boundary, command)
+                        self.assertEqual(command[command.index('--uid') + 1], '1001')
+                        self.assertEqual(command[command.index('--gid') + 1], '1001')
+
+    def test_followup_rejects_8b_training_and_parent_channel_dispatch(self):
+        plan = followup_plan_fixture()
+        for phase in ('qwen8-select', 'qwen8-dev-nonthinking-seed14', 'qwen8-val-thinking-seed29',
+                      'capacity', 'baseline', 'train', 'adapter', 'parent_decision', 'checkpoint'):
+            with self.subTest(phase=phase):
+                with self.assertRaisesRegex(RuntimeError, 'forbids training/capacity/unknown'):
+                    O.child_stage(Mock(), plan, '.', phase)
+                with self.assertRaisesRegex(RuntimeError, 'Invalid phase/deadline'):
+                    W.stage_argv(plan, '.', phase, 60, {}, 1001, 1001)
+        with self.assertRaisesRegex(RuntimeError, 'Followup has no checkpoint'):
+            O.make_checkpoint(Mock(), plan, '.', {}, Mock(), 1000)
+        with self.assertRaisesRegex(RuntimeError, 'Followup has no parent decision'):
+            O.await_decision(plan, '.', Mock(), {}, 1000)
+
+    def test_followup_selector_refuses_root_gpu_and_cloud_credentials(self):
+        for uid, environment in ((0, {'CUDA_VISIBLE_DEVICES': ''}),
+                                 (1001, {'CUDA_VISIBLE_DEVICES': 'GPU-followup'}),
+                                 (1001, {'CUDA_VISIBLE_DEVICES': '', 'AWS_ACCESS_KEY_ID': 'fixture'})):
+            with self.subTest(uid=uid, environment=environment), \
+                    patch.object(O.os, 'geteuid', return_value=uid), \
+                    patch.dict(O.os.environ, environment, clear=True):
+                with self.assertRaisesRegex(RuntimeError, 'CPU-only, credential-free'):
+                    O.selection_stage(followup_plan_fixture(), '.', 'qwen14')
 
 
 class DecisionPolicyTests(unittest.TestCase):
