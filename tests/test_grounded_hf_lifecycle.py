@@ -482,8 +482,12 @@ class LaunchTests(unittest.TestCase):
             ebs_kms_key_arn='arn:aws:kms:ap-northeast-2:148761639313:key/11111111-2222-3333-4444-555555555555')
         return plan
 
-    def run_launch(self, temp, *, ambiguous=False, schedule_wrong=False, prerequisites_wrong=False, root_key_override=None):
+    def run_launch(self, temp, *, ambiguous=False, schedule_wrong=False, prerequisites_wrong=False,
+                   root_key_override=None, ordered=False, state_name='state', dispatch_state=None,
+                   preflight_error=None, remote_intent_error=False, remote_intent_delay=0):
         plan = self.fixture(temp); clock = Clock(); events = []
+        if ordered:
+            plan['schema'] = L.INFERENCE_SCHEMA
         row = instance(plan['identity'])
         cloud = dict(launched=False, terminated=False, released=False, schedule=None,
                      root_key='arn:aws:kms:ap-northeast-2:148761639313:key/ffffffff-ffff-ffff-ffff-ffffffffffff')
@@ -506,6 +510,12 @@ class LaunchTests(unittest.TestCase):
                 pin = {'bytes': 100, 'sha256': 'a' * 64} if key.endswith('plan.json') else plan['bundle']
                 return {'ContentLength': pin['bytes'], 'Metadata': {'sha256': pin['sha256']}}
             if operation == 'run-instances':
+                if L.inference_mode(plan):
+                    persisted = json.loads((state / 'controller-result.json').read_text())
+                    self.assertTrue(persisted['dispatch_attempted'])
+                    self.assertTrue(persisted['remote_intent_attempted'])
+                    self.assertEqual(persisted['phase'], 'run_instances')
+                    self.assertTrue((state / 'launch-dispatched.json').exists())
                 request = json.loads(args[args.index('--cli-input-json') + 1])
                 # EC2 otherwise uses the account default, which deliberately
                 # differs from the approved key in this behavioral transport.
@@ -533,9 +543,18 @@ class LaunchTests(unittest.TestCase):
                 return {'InstanceInitiatedShutdownBehavior': {'Value': 'terminate'}}
             if operation == 'create-schedule':
                 cloud['schedule'] = json.loads(args[args.index('--cli-input-json') + 1])
+                if L.inference_mode(plan):
+                    return {'ScheduleArn': (f"arn:aws:scheduler:{plan['identity']['region']}:"
+                        f"{plan['identity']['account']}:schedule/{plan['identity']['schedule_group']}/"
+                        f"{plan['identity']['run_id']}")}
                 return {}
             if operation == 'get-schedule':
                 observed = copy.deepcopy(cloud['schedule'])
+                if L.inference_mode(plan):
+                    observed.update(
+                        Arn=(f"arn:aws:scheduler:{plan['identity']['region']}:{plan['identity']['account']}:"
+                             f"schedule/{plan['identity']['schedule_group']}/{plan['identity']['run_id']}"),
+                        CreationDate='2026-11-13T01:00:00Z', LastModificationDate='2026-11-13T01:00:00Z')
                 if schedule_wrong:
                     observed['State'] = 'DISABLED'
                 return observed
@@ -552,21 +571,33 @@ class LaunchTests(unittest.TestCase):
                 raise RuntimeError('Synthetic transport has no native completion evidence')
             if operation == 'put-object':
                 key = args[args.index('--key') + 1]
+                if key.endswith('approval-consumed.json') and L.inference_mode(plan):
+                    persisted = json.loads((state / 'controller-result.json').read_text())
+                    self.assertTrue(persisted['remote_intent_attempted'])
+                    self.assertFalse(persisted['dispatch_attempted'])
+                    self.assertEqual(persisted['phase'], 'remote_launch_intent')
+                    self.assertTrue(((Path(dispatch_state) if dispatch_state is not None else state)
+                                     / 'dispatch-authorization.json').exists())
+                    clock.sleep(remote_intent_delay)
+                if key.endswith('approval-consumed.json') and remote_intent_error:
+                    raise TimeoutError('Synthetic ambiguous remote intent response')
                 if key.endswith('release.json'):
                     self.assertIsNotNone(cloud['schedule'])
                     cloud['released'] = True
                 return {}
             raise AssertionError((service, operation, args))
 
-        state = Path(temp) / 'state'
+        state = Path(temp) / state_name
         with patch.object(L, 'validate_plan', return_value={}), patch.object(L, 'validate_data', return_value=[]), \
              patch.object(L, 'validate_cost_admission', return_value={}), \
              patch.object(L, 'validate_bootstrap_admission', return_value=expectations), \
-             patch.object(L, 'live_preflight', return_value={'synthetic': True}), \
+             patch.object(L, 'live_preflight', return_value={'synthetic': True}, side_effect=preflight_error), \
              patch.object(L, 'bootstrap_text', return_value='#!/bin/bash\nexit 0\n'):
-            result = L.launch(plan, {}, 'a' * 64, temp, state, transport, clock=clock, pause=clock.sleep)
+            result = L.launch(plan, {}, 'a' * 64, temp, state, transport,
+                              dispatch_state=dispatch_state, clock=clock, pause=clock.sleep)
             with self.assertRaises(FileExistsError):
-                L.launch(plan, {}, 'a' * 64, temp, state, transport, clock=clock, pause=clock.sleep)
+                L.launch(plan, {}, 'a' * 64, temp, state, transport,
+                         dispatch_state=dispatch_state, clock=clock, pause=clock.sleep)
         return result, events
 
     def test_ambiguous_launch_is_never_resent_and_owned_resource_is_reconciled(self):
@@ -818,6 +849,242 @@ class DownloadBoundaryTests(unittest.TestCase):
                 W.download(dict(path='weight', url='https://approved/file', bytes=1, sha256='a' * 64),
                            temp, {'approved'}, 9999999999, [0])
             opened.assert_not_called()
+
+
+class PriceProductFingerprintTests(unittest.TestCase):
+    def fixture(self):
+        return [dict(
+            publicationDate='2026-11-12T00:00:00Z', version='20261112000000',
+            serviceCode='AmazonEC2', formatVersion='aws_v1',
+            product=dict(sku=sku, productFamily='Compute Instance',
+                attributes=dict(instanceType='g6e.2xlarge', location='Asia Pacific (Seoul)',
+                    publicationDate='nested-product-date', version='nested-product-version')),
+            terms={'OnDemand': {sku + '.synthetic-term': dict(
+                sku=sku, offerTermCode='synthetic-term', effectiveDate='2026-11-01T00:00:00Z',
+                publicationDate='nested-term-date', version='nested-term-version',
+                termAttributes={},
+                priceDimensions={sku + '.synthetic-term.hour': dict(
+                    rateCode=sku + '.synthetic-term.hour', description='Synthetic hourly rate',
+                    beginRange='0', endRange='Inf', unit='Hrs', pricePerUnit={'USD': rate},
+                    appliesTo=['synthetic-first', 'synthetic-second'],
+                    publicationDate='nested-dimension-date', version='nested-dimension-version')})}})
+            for sku, rate in (('synthetic-sku-a', '3.0000000000'), ('synthetic-sku-b', '4.0000000000'))]
+
+    def test_top_level_catalog_metadata_changes_preserve_fingerprint_not_raw_hashes(self):
+        for fields in (('publicationDate',), ('version',), ('publicationDate', 'version')):
+            for operation in ('change', 'add', 'remove'):
+                with self.subTest(fields=fields, operation=operation):
+                    original = self.fixture()
+                    if operation == 'add':
+                        for product in original:
+                            for field in fields:
+                                del product[field]
+                    changed = copy.deepcopy(original)
+                    for product in changed:
+                        for field in fields:
+                            if operation == 'remove':
+                                del product[field]
+                            else:
+                                product[field] = ('2026-11-14T00:00:00Z' if field == 'publicationDate'
+                                                  else '20261114000000')
+                    self.assertEqual(L.on_demand_price_products_sha256(original),
+                                     L.on_demand_price_products_sha256(changed))
+                    self.assertNotEqual(L.canonical(original), L.canonical(changed))
+                    self.assertNotEqual(L.object_sha(original), L.object_sha(changed))
+                    self.assertNotEqual(hashlib.sha256(L.canonical(original)).hexdigest(),
+                                        hashlib.sha256(L.canonical(changed)).hexdigest())
+
+    def test_reserved_offer_changes_preserve_on_demand_fingerprint_not_raw_hashes(self):
+        for operation in ('add', 'remove', 'date', 'price', 'order', 'offer_order'):
+            with self.subTest(operation=operation):
+                original = self.fixture()
+                reserved = copy.deepcopy(original[0]['terms']['OnDemand'])
+                offer = reserved['synthetic-sku-a.synthetic-term']
+                offer['termAttributes'] = {'LeaseContractLength': '1yr'}
+                reserved['synthetic-second-reserved-term'] = copy.deepcopy(offer)
+                original[0]['terms']['Reserved'] = reserved
+                if operation == 'add':
+                    del original[0]['terms']['Reserved']
+                changed = copy.deepcopy(original)
+                if operation == 'add':
+                    changed[0]['terms']['Reserved'] = reserved
+                elif operation == 'remove':
+                    del changed[0]['terms']['Reserved']
+                else:
+                    changed_reserved = changed[0]['terms']['Reserved']
+                    changed_offer = changed_reserved['synthetic-sku-a.synthetic-term']
+                    dimension = changed_offer['priceDimensions']['synthetic-sku-a.synthetic-term.hour']
+                    if operation == 'date':
+                        changed_offer['effectiveDate'] = '2026-11-14T00:00:00Z'
+                    elif operation == 'price':
+                        dimension['pricePerUnit']['USD'] = '99.0000000000'
+                    elif operation == 'order':
+                        dimension['appliesTo'].reverse()
+                    else:
+                        changed[0]['terms']['Reserved'] = dict(reversed(list(changed_reserved.items())))
+                self.assertEqual(L.on_demand_price_products_sha256(original),
+                                 L.on_demand_price_products_sha256(changed))
+                self.assertNotEqual(json.dumps(original), json.dumps(changed))
+                if operation != 'offer_order':
+                    self.assertNotEqual(L.object_sha(original), L.object_sha(changed))
+
+    def test_only_on_demand_terms_are_projected(self):
+        original = self.fixture()
+        changed = copy.deepcopy(original)
+        changed[0]['terms'].update(Reserved={'offer': {'effectiveDate': 'changed'}},
+                                   SavingsPlan={'offer': {'price': 'changed'}})
+        self.assertEqual(L.on_demand_price_products_sha256(original),
+                         L.on_demand_price_products_sha256(changed))
+
+    def test_invalid_product_lists_fail_closed(self):
+        for products in (None, {}, (), '', 0, False, []):
+            with self.subTest(products=products), self.assertRaises(RuntimeError):
+                L.on_demand_price_products_sha256(products)
+        for value in (None, [], '', 0, False):
+            for index in range(2):
+                with self.subTest(value=value, index=index), self.assertRaises(RuntimeError):
+                    products = self.fixture()
+                    products[index] = value
+                    L.on_demand_price_products_sha256(products)
+
+    def test_missing_or_malformed_on_demand_terms_fail_closed(self):
+        for path in (('terms',), ('terms', 'OnDemand')):
+            for operation in ('remove', 'replace'):
+                for value in (None, {}, [], '', 0, False):
+                    for index in range(2):
+                        with self.subTest(path=path, operation=operation, value=value, index=index):
+                            products = self.fixture()
+                            products[index]['terms']['Reserved'] = {'offer': {'sku': 'reserved-only'}}
+                            target = products[index]
+                            for key in path[:-1]:
+                                target = target[key]
+                            if operation == 'remove':
+                                del target[path[-1]]
+                            else:
+                                target[path[-1]] = value
+                            with self.assertRaises(RuntimeError):
+                                L.on_demand_price_products_sha256(products)
+        products = self.fixture()
+        terms = products[0]['terms']
+        terms['OnDemand-changed'] = terms.pop('OnDemand')
+        with self.assertRaises(RuntimeError):
+            L.on_demand_price_products_sha256(products)
+
+    def test_empty_or_nondict_on_demand_offers_fail_closed(self):
+        for value in (None, {}, [], '', 0, False):
+            for index in range(2):
+                for operation in ('replace', 'add'):
+                    with self.subTest(value=value, index=index, operation=operation):
+                        products = self.fixture()
+                        offers = products[index]['terms']['OnDemand']
+                        key = next(iter(offers)) if operation == 'replace' else 'malformed-extra-offer'
+                        offers[key] = value
+                        with self.assertRaises(RuntimeError):
+                            L.on_demand_price_products_sha256(products)
+
+    def test_nonmetadata_values_remain_bound(self):
+        term = ('terms', 'OnDemand', 'synthetic-sku-a.synthetic-term')
+        dimension = term + ('priceDimensions', 'synthetic-sku-a.synthetic-term.hour')
+        changes = [
+            (('serviceCode',), 'AmazonS3'),
+            (('formatVersion',), 'aws_v2'),
+            (('product', 'sku'), 'different-sku'),
+            (('product', 'productFamily'), 'Storage'),
+            (('product', 'attributes', 'instanceType'), 'g6e.4xlarge'),
+            (('product', 'attributes', 'location'), 'US East (N. Virginia)'),
+            (term + ('sku',), 'different-sku'),
+            (term + ('offerTermCode',), 'different-term'),
+            (term + ('effectiveDate',), '2026-11-14T00:00:00Z'),
+            (term + ('termAttributes',), {'LeaseContractLength': '1yr'}),
+            (dimension + ('rateCode',), 'different-rate'),
+            (dimension + ('description',), 'Different rate description'),
+            (dimension + ('pricePerUnit', 'USD'), '3.1000000000'),
+            (dimension + ('pricePerUnit',), {'KRW': '3.0000000000'}),
+            (dimension + ('beginRange',), '1'),
+            (dimension + ('endRange',), '100'),
+            (dimension + ('unit',), 'GB-Mo'),
+        ]
+        original = self.fixture()
+        expected = L.on_demand_price_products_sha256(original)
+        for path, value in changes:
+            with self.subTest(path=path):
+                changed = copy.deepcopy(original)
+                target = changed[0]
+                for key in path[:-1]:
+                    target = target[key]
+                target[path[-1]] = value
+                self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
+
+    def test_term_and_dimension_mapping_identities_remain_bound(self):
+        term = ('terms', 'OnDemand', 'synthetic-sku-a.synthetic-term')
+        for path in (('terms', 'OnDemand'), term + ('priceDimensions',)):
+            with self.subTest(path=path):
+                original = self.fixture()
+                changed = copy.deepcopy(original)
+                target = changed[0]
+                for key in path:
+                    target = target[key]
+                key = next(iter(target))
+                target[key + '-changed'] = target.pop(key)
+                self.assertNotEqual(L.on_demand_price_products_sha256(original),
+                                    L.on_demand_price_products_sha256(changed))
+
+    def test_nested_catalog_field_names_are_not_excluded(self):
+        term = ('terms', 'OnDemand', 'synthetic-sku-a.synthetic-term')
+        paths = [('product', 'attributes'), term,
+                 term + ('priceDimensions', 'synthetic-sku-a.synthetic-term.hour')]
+        original = self.fixture()
+        expected = L.on_demand_price_products_sha256(original)
+        for path in paths:
+            for field in ('publicationDate', 'version'):
+                for operation in ('change', 'remove'):
+                    with self.subTest(path=path, field=field, operation=operation):
+                        changed = copy.deepcopy(original)
+                        target = changed[0]
+                        for key in path:
+                            target = target[key]
+                        if operation == 'remove':
+                            del target[field]
+                        else:
+                            target[field] = 'changed-nested-value'
+                        self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
+
+    def test_product_and_nested_list_order_remain_bound(self):
+        original = self.fixture()
+        expected = L.on_demand_price_products_sha256(original)
+        changed = copy.deepcopy(original)
+        changed.reverse()
+        self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
+        changed = copy.deepcopy(original)
+        dimension = changed[0]['terms']['OnDemand']['synthetic-sku-a.synthetic-term'][
+            'priceDimensions']['synthetic-sku-a.synthetic-term.hour']
+        dimension['appliesTo'].reverse()
+        self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
+
+    def test_product_insertion_removal_and_duplication_remain_bound(self):
+        original = self.fixture()
+        expected = L.on_demand_price_products_sha256(original)
+        for operation in ('insert', 'remove', 'duplicate'):
+            with self.subTest(operation=operation):
+                changed = copy.deepcopy(original)
+                if operation == 'remove':
+                    changed.pop()
+                else:
+                    product = copy.deepcopy(original[0])
+                    if operation == 'insert':
+                        product['product']['sku'] = 'synthetic-sku-c'
+                    changed.insert(1, product)
+                self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
+
+    def test_fingerprinting_does_not_mutate_input(self):
+        products = self.fixture()
+        original = copy.deepcopy(products)
+        original_bytes = L.canonical(products)
+        first = L.on_demand_price_products_sha256(products)
+        self.assertEqual(products, original)
+        self.assertEqual(L.canonical(products), original_bytes)
+        self.assertEqual(L.on_demand_price_products_sha256(products), first)
+        self.assertEqual(products, original)
 
 
 class CostClosureTests(unittest.TestCase):
@@ -1145,6 +1412,1113 @@ class EBSKeyAdmissionTests(unittest.TestCase):
             automatic_retry=False, approved=True)
         with self.assertRaisesRegex(RuntimeError, 'Exact new final approval'):
             L.validate_plan(plan, approval, 'a' * 64, now=1000)
+
+class OrderedInferenceAdmissionTests(unittest.TestCase):
+    def fixture(self, directory):
+        root = Path(directory)
+        plan = release_plan()
+        plan.update(schema=L.INFERENCE_SCHEMA, limits=L.LIMITS, instance_type='g6e.2xlarge',
+            vcpus=8, host_mib=65536, architecture='x86_64',
+            checked_at=dt.datetime.fromtimestamp(1000, dt.timezone.utc).isoformat(),
+            ami=dict(ImageId='ami-040ebe879ae70cc30', OwnerId='898082745236', root_volume_gib=75),
+            ebs_kms_key_arn='arn:aws:kms:ap-northeast-2:148761639313:key/11111111-2222-3333-4444-555555555555',
+            disk_os_reserve_bytes=20 * L.GIB)
+        plan.update(CostClosureTests().fixture())
+        plan['cost'].update(cap_usd=20, ancillary_bound_usd=5, get_requests=579, put_requests=20,
+            control_requests=1067, download_requests=200,
+            network_egress_bytes=4 * L.GIB + 2 * L.CHECKPOINT_CHANNEL_BYTES)
+        plan['network'].update(download_hosts=['huggingface.co'],
+                               egress_byte_cap=2 * L.GIB + L.CHECKPOINT_CHANNEL_BYTES)
+        rows = []
+
+        def pin(name, value):
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(value))
+            row = dict(path=name, bytes=path.stat().st_size, sha256=L.digest(path))
+            rows.append(row)
+            return row
+
+        profiles = [dict(name=f'qwen8-{"thinking" if thinking else "nonthinking"}-seed{seed}',
+            thinking=thinking, temperature=.6 if thinking else .7, top_p=.95 if thinking else .8,
+            top_k=20, min_p=0., presence_penalty=0., repetition_penalty=1., penalty_context_size=0,
+            seed=seed, max_new_tokens=4096 if thinking else 1024, context_tokens=8192, prefill_step_size=128)
+            for thinking in (False, True) for seed in (14, 29)]
+        workload = dict(models={}, profiles=profiles, phase_seconds=dict(L.ORDERED_PHASES),
+            backend='transformers', dtype='bfloat16', prefill='full_prompt', question_timeout_seconds=180,
+            selection_policy=dict(metric='joint_correct', require_both_seeds=True,
+                tie_breaks=['minimum_correct', 'combined_correct', 'mean_elapsed_seconds',
+                            'peak_cuda_allocated_bytes', 'lexical_group'], validation_references_in_bundle=False),
+            checkpoint_keys=dict(archive=plan['identity']['output_prefix'] + 'qwen8-checkpoint.tar',
+                receipt=plan['identity']['output_prefix'] + 'qwen8-checkpoint.json',
+                decision=plan['identity']['code_prefix'] + 'parent-decision.json'))
+        ident = plan['identity']
+        plan['iam']['instance_role'] = {'inline': {'ExactRunOnly': {'Statement': [
+            dict(Effect='Allow', Action=['s3:GetObject'],
+                 Resource=[f"arn:aws:s3:::{ident['bucket']}/{ident['code_prefix']}*"]),
+            dict(Effect='Allow', Action=['s3:PutObject'],
+                 Resource=[f"arn:aws:s3:::{ident['bucket']}/{ident['output_prefix']}*"]),
+            dict(Effect='Allow', Action=['s3:ListBucket'], Resource=[f"arn:aws:s3:::{ident['bucket']}"],
+                 Condition={'StringEquals': {'s3:prefix': workload['checkpoint_keys']['decision']}}),
+        ]}}}
+        for key, (model_id, revision) in L.ORDERED_MODELS.items():
+            files = [dict(path=name, bytes=1, sha256='b' * 64,
+                url=f'https://huggingface.co/{model_id}/resolve/{revision}/{name}')
+                for name in ('config.json', 'tokenizer_config.json', 'tokenizer.json',
+                             'model.safetensors.index.json', 'LICENSE', 'model-00001.safetensors')]
+            workload['models'][key] = dict(id=model_id, revision=revision, trust_remote_code=False,
+                                           dtype='bfloat16', files=files, max_bytes=L.GIB)
+        for cohort, count in (('development', 6), ('validation', 16)):
+            workload[cohort + '_case_ids'] = [f'{cohort}-{index}' for index in range(count)]
+            workload[cohort + '_inputs'] = pin(cohort + '-inputs.json', [
+                dict(id=case_id, messages=[dict(role='user', content='Synthetic input, no labels.')])
+                for case_id in workload[cohort + '_case_ids']])
+        workload['development_references'] = pin('development-references.json',
+            dict(cases=[dict(id=case_id, reference={},
+                messages=[dict(role='user', content='Synthetic input, no labels.')])
+                for case_id in workload['development_case_ids']]))
+        workload['source_closure'] = pin('source-closure.json', dict(
+            schema='trid-ordered-source-closure-v1', run_id=plan['identity']['run_id'],
+            development_inputs_sha256=workload['development_inputs']['sha256'],
+            validation_inputs_sha256=workload['validation_inputs']['sha256'],
+            development_references_sha256=workload['development_references']['sha256'],
+            development_case_ids=workload['development_case_ids'], validation_case_ids=workload['validation_case_ids'],
+            validation_references_in_bundle=False, source_verified=True, protected_sets_excluded=True,
+            scorer_sha256='0c25aaeee6075d49f90b06c06f2f4389c698c7a543ab6500e72c5a262c8c3e8a',
+            provenance={key: dict(path=f'private/{key}.json', bytes=1,
+                sha256='0c25aaeee6075d49f90b06c06f2f4389c698c7a543ab6500e72c5a262c8c3e8a'
+                if key == 'scorer' else 'c' * 64)
+                for key in ('comparison_protocol', 'case_review', 'reference_validation', 'scope', 'scorer')}))
+        plan['workload'] = workload
+        plan['sources'] = {}
+        for name in L.ordered_sources():
+            source_pin = dict(path=name, bytes=1, sha256='c' * 64)
+            rows.append(source_pin)
+            plan['sources'][name] = source_pin['sha256']
+        admission = pin('bootstrap.json', {})
+        plan['runtime'].update(python_version='3.12.3', torch_cuda='synthetic',
+            packages={key: 'synthetic' for key in
+                ('torch', 'transformers', 'tokenizers', 'safetensors', 'accelerate', 'psutil')},
+            wheels=[dict(path='synthetic.whl', bytes=1, sha256='d' * 64, url='https://example.test/synthetic.whl')],
+            max_bytes=L.GIB, download_hosts=['example.test'],
+            bootstrap=dict(admission=admission, nvidia_modprobe=dict(
+                path='nvidia-modprobe.deb', bytes=1, sha256='e' * 64, package='nvidia-modprobe',
+                architecture='amd64', version='620.70.06-1ubuntu1', url='https://example.test/modprobe.deb',
+                member=dict(path='usr/bin/nvidia-modprobe', bytes=1, sha256='f' * 64),
+                max_unpacked_bytes=1024)))
+        plan['bundle'].update(files=rows, unpacked_bytes=1024**2)
+        plan['ancillary_evidence'] = pin('ancillary.json', {})
+        region = plan['identity']['region']
+        specs = {
+            'ec2_hour': ('AmazonEC2', 'Hrs', dict(regionCode=region, instanceType='g6e.2xlarge',
+                operatingSystem='Linux', tenancy='Shared', preInstalledSw='NA', capacitystatus='Used')),
+            'ebs_gb_month': ('AmazonEC2', 'GB-Mo', dict(regionCode=region, volumeApiName='gp3', productFamily='Storage')),
+            'ipv4_hour': ('AmazonVPC', 'Hrs', dict(regionCode=region, usagetype='APN2-PublicIPv4:InUseAddress')),
+            'egress_gb': ('AWSDataTransfer', 'GB', dict(fromLocation='Asia Pacific (Seoul)',
+                toLocation='External', transferType='AWS Outbound')),
+            's3_gb_month': ('AmazonS3', 'GB-Mo', dict(regionCode=region, productFamily='Storage', volumeType='Standard')),
+            's3_get': ('AmazonS3', 'Requests', dict(regionCode=region, group='S3-API-Tier2')),
+            's3_put': ('AmazonS3', 'Requests', dict(regionCode=region, group='S3-API-Tier1')),
+            'scheduler_invocation': ('synthetic', 'Requests', {})}
+        plan['price_queries'] = {key: dict(service=service, unit=unit, filters=filters)
+                                 for key, (service, unit, filters) in specs.items()}
+        plan['output_allowlist'] = sorted(L.ordered_output_members(plan))
+        approval = dict(schema='trid-ordered-hf-inference-approval-v1', run_id=plan['identity']['run_id'],
+            plan_sha256='a' * 64, instance_limit=1, additional_pretax_usd=20,
+            workload_sha256=L.object_sha(workload), limits=L.LIMITS,
+            ebs_kms_key_arn=plan['ebs_kms_key_arn'], automatic_retry=False, approved=True)
+        return plan, approval
+
+    def test_sealed_inference_plan_admits_without_training_fields(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, approval = self.fixture(temp)
+            result = L.validate_plan(plan, approval, 'a' * 64, now=1000)
+            self.assertLess(result['additional_pretax_bound_usd'], 20)
+            self.assertEqual(len(L.validate_data(temp, plan)['validation_inputs']), 16)
+            self.assertNotIn('recipe', plan)
+            self.assertNotIn('peft', plan['runtime']['packages'])
+
+    def test_ordered_plan_without_exact_decision_listing_permission_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original, approval = self.fixture(temp)
+            for prefix in (None, original['identity']['code_prefix'], '*'):
+                with self.subTest(prefix=prefix):
+                    plan = copy.deepcopy(original)
+                    statements = plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement']
+                    if prefix is None:
+                        statements.pop()
+                    else:
+                        statements[-1]['Condition']['StringEquals']['s3:prefix'] = prefix
+                    with self.assertRaisesRegex(RuntimeError, 'exact-decision listing'):
+                        L.validate_plan(plan, approval, 'a' * 64, now=1000)
+
+    def test_old_grant_or_changed_workload_cannot_admit_inference(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, approval = self.fixture(temp)
+            for key, value in (('additional_pretax_usd', 50), ('schema', 'trid-grounded-hf-approval-v1'),
+                               ('automatic_retry', True), ('workload_sha256', '0' * 64)):
+                with self.subTest(key=key), self.assertRaisesRegex(RuntimeError, 'USD20'):
+                    L.validate_plan(plan, {**approval, key: value}, 'a' * 64, now=1000)
+            plan['recipe'] = dict(L.RECIPE)
+            with self.assertRaisesRegex(RuntimeError, 'cannot admit training'):
+                L.validate_plan(plan, approval, 'a' * 64, now=1000)
+
+    def test_changed_model_profile_allocation_or_checkpoint_key_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original, approval = self.fixture(temp)
+            changes = [
+                lambda w: w['models']['qwen14'].update(revision='0' * 40),
+                lambda w: w['models']['qwen8'].update(dtype='float16'),
+                lambda w: w['profiles'][0].update(seed=15),
+                lambda w: w['phase_seconds'].update(parent_decision=301),
+                lambda w: w['checkpoint_keys'].update(decision='code/another-run/parent-decision.json'),
+                lambda w: w['selection_policy'].update(require_both_seeds=False)]
+            for change in changes:
+                plan = copy.deepcopy(original)
+                change(plan['workload'])
+                current = {**approval, 'workload_sha256': L.object_sha(plan['workload'])}
+                with self.subTest(change=change), self.assertRaises(RuntimeError):
+                    L.validate_plan(plan, current, 'a' * 64, now=1000)
+
+    def test_validation_labels_and_reference_overlap_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            pin = plan['workload']['validation_inputs']
+            path = Path(temp) / pin['path']
+            rows = json.loads(path.read_text())
+            rows[0]['expected'] = 'forbidden'
+            path.write_text(json.dumps(rows))
+            pin.update(bytes=path.stat().st_size, sha256=L.digest(path))
+            with self.assertRaisesRegex(RuntimeError, 'labels'):
+                L.validate_data(temp, plan)
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            plan['workload']['development_case_ids'][0] = plan['workload']['validation_case_ids'][0]
+            with self.assertRaisesRegex(RuntimeError, 'Disjoint'):
+                L.validate_ordered_workload(plan, {r['path']: r for r in plan['bundle']['files']})
+
+    def test_development_reference_required_fields_and_messages_are_admitted_before_generation(self):
+        for change, error in (
+                (lambda row: row.pop('reference'), 'reference fields'),
+                (lambda row: row.pop('messages'), 'reference fields'),
+                (lambda row: row['messages'][0].update(content='Different question.'), 'messages differ')):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                reference_pin = plan['workload']['development_references']
+                path = Path(temp) / reference_pin['path']
+                references = json.loads(path.read_text())
+                change(references['cases'][0])
+                path.write_text(json.dumps(references))
+                reference_pin.update(bytes=path.stat().st_size, sha256=L.digest(path))
+                with self.assertRaisesRegex(RuntimeError, error):
+                    L.validate_data(temp, plan)
+
+    def test_checkpoint_channel_quantities_and_usd20_are_mandatory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original, _ = self.fixture(temp)
+            for key, value in (('cap_usd', 50), ('get_requests', 512), ('put_requests', 16),
+                               ('control_requests', 1000), ('ancillary_bound_usd', 4),
+                               ('network_egress_bytes', 4 * L.GIB)):
+                plan = copy.deepcopy(original)
+                plan['cost'][key] = value
+                with self.subTest(key=key), self.assertRaises(RuntimeError):
+                    L.cost_bound(plan)
+            original['cost']['rates']['ec2_hour'] = 4
+            with self.assertRaisesRegex(RuntimeError, 'USD20'):
+                L.cost_bound(original)
+
+    def model_artifacts(self, plan, model_key='qwen8', group='nonthinking'):
+        workload = plan['workload']
+        content = {name: b'{}' for name in L.ordered_output_members(plan, model_key, group)}
+        identity_fields = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64)
+        profiles = [{**p, 'name': p['name'].replace('qwen8-', model_key + '-', 1)}
+                    for p in workload['profiles']]
+        dev_outputs = []
+        for cohort, input_key in (('dev', 'development'), ('val', 'validation')):
+            for profile in profiles:
+                profile_group = 'thinking' if profile['thinking'] else 'nonthinking'
+                if cohort == 'val' and profile_group != group:
+                    continue
+                stem = f'{model_key}-{cohort}-{profile_group}-seed{profile["seed"]}'
+                output = dict(path=stem + '-outputs.jsonl', bytes=2, sha256=hashlib.sha256(b'{}').hexdigest())
+                receipt = dict(**identity_fields, state='complete', phase=stem, model_key=model_key,
+                    model_sha256=L.object_sha(workload['models'][model_key]), profile=profile,
+                    input_sha256=workload[input_key + '_inputs']['sha256'],
+                    completed_case_ids=workload[input_key + '_case_ids'], question_deadline_epoch=None,
+                    output_sha256=output['sha256'], output_bytes=output['bytes'])
+                content[stem + '-receipt.json'] = L.canonical(receipt)
+                if cohort == 'dev':
+                    dev_outputs.append(output)
+        selection = dict(**identity_fields, state='complete', model_key=model_key,
+            model_sha256=L.object_sha(workload['models'][model_key]), profiles_sha256=L.object_sha(profiles),
+            development_inputs_sha256=workload['development_inputs']['sha256'],
+            development_references_sha256=workload['development_references']['sha256'],
+            selection_policy=workload['selection_policy'], selected_group=group,
+            selected_profiles=[f'{model_key}-{group}-seed{seed}' for seed in (14, 29)], dev_outputs=dev_outputs)
+        content[model_key + '-selection.json'] = L.canonical(selection)
+        suffix = '8' if model_key == 'qwen8' else '14'
+        for phase in ('acquire' + suffix, 'dev' + suffix, 'val' + suffix):
+            content[phase + '-receipt.json'] = L.canonical(dict(**identity_fields, phase=phase, state='complete'))
+        return content
+
+    def checkpoint(self, plan, directory):
+        content = self.model_artifacts(plan)
+        archive, pin = archive_fixture(directory, [
+            (name, payload, tarfile.REGTYPE) for name, payload in sorted(content.items())])
+        workload = plan['workload']
+        receipt = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+            instance_id=instance(plan['identity'])['InstanceId'], phase='val8', selected_group='nonthinking',
+            model_sha256=L.object_sha(workload['models']['qwen8']),
+            profiles_sha256=L.object_sha(workload['profiles']),
+            development_inputs_sha256=workload['development_inputs']['sha256'],
+            validation_inputs_sha256=workload['validation_inputs']['sha256'],
+            export={key: pin[key] for key in ('bytes', 'sha256')}, files=pin['files'])
+        return archive, receipt
+
+    def test_checkpoint_binds_exact_members_and_every_identity_dimension(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            _, receipt = self.checkpoint(plan, temp)
+            instance_id = receipt['instance_id']
+            self.assertEqual(L.validate_checkpoint_receipt(receipt, plan, 'a' * 64, instance_id), receipt['export'])
+            for key in ('run_id', 'plan_sha256', 'instance_id', 'model_sha256', 'profiles_sha256',
+                        'development_inputs_sha256', 'validation_inputs_sha256', 'phase'):
+                altered = copy.deepcopy(receipt)
+                altered[key] = 'wrong'
+                with self.subTest(key=key), self.assertRaises(RuntimeError):
+                    L.validate_checkpoint_receipt(altered, plan, 'a' * 64, instance_id)
+            for change in (lambda r: r['files'].pop(),
+                           lambda r: r['files'].append(r['files'][0]),
+                           lambda r: r['export'].update(bytes=L.CHECKPOINT_MAX + 1)):
+                altered = copy.deepcopy(receipt)
+                change(altered)
+                with self.assertRaises(RuntimeError):
+                    L.validate_checkpoint_receipt(altered, plan, 'a' * 64, instance_id)
+
+    def test_readonly_checkpoint_watcher_returns_while_protection_remains_armed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            archive, receipt = self.checkpoint(plan, temp)
+            payload = archive.read_bytes()
+            state = Path(temp) / 'state'
+            state.mkdir()
+            token = release(plan)
+            (state / 'release.json').write_text(json.dumps(token))
+            calls = []
+            clock = Clock()
+
+            def transport(service, operation, *args):
+                calls.append((service, operation))
+                self.assertEqual((service, operation), ('s3api', 'get-object'))
+                if len(calls) == 1:
+                    raise L.AWSCallError(service, operation, 'An error occurred (NoSuchKey)')
+                if args[args.index('--key') + 1].endswith('.json'):
+                    Path(args[-1]).write_text(json.dumps(receipt))
+                else:
+                    Path(args[-1]).write_bytes(payload)
+
+            result = L.collect_checkpoint(transport, plan, 'a' * 64, state, clock=clock, pause=clock.sleep)
+            self.assertEqual(result['state'], 'checkpoint_collected')
+            self.assertEqual(json.loads((state / 'release.json').read_text()), token)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(clock.now, 1120)
+            self.assertNotIn('inference_success', result)
+
+    def test_checkpoint_watcher_does_not_retry_malformed_or_denied_receipt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            state = Path(temp) / 'state'
+            state.mkdir()
+            (state / 'release.json').write_text(json.dumps(release(plan)))
+            calls = []
+
+            def denied(*args):
+                calls.append(args)
+                raise L.AWSCallError('s3api', 'get-object', 'An error occurred (AccessDenied)')
+
+            with self.assertRaisesRegex(RuntimeError, 'only missing'):
+                L.collect_checkpoint(denied, plan, 'a' * 64, state, clock=Clock())
+            self.assertEqual(len(calls), 1)
+
+    def test_parent_decision_never_accepts_wrong_run_or_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            decision = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                            checkpoint_sha256='b' * 64, decision='complete', reason='Independent review.')
+            self.assertEqual(L.validate_parent_decision(decision, plan, 'a' * 64, 'b' * 64), decision)
+            for key, value in (('run_id', 'wrong'), ('checkpoint_sha256', 'c' * 64),
+                               ('decision', 'retry'), ('reason', '')):
+                with self.subTest(key=key), self.assertRaises(RuntimeError):
+                    L.validate_parent_decision({**decision, key: value}, plan, 'a' * 64, 'b' * 64)
+
+    def test_native_completion_requires_exact_conditional_members_and_bound_profile_receipts(self):
+        for decision_name in ('complete', 'compare14'):
+            with self.subTest(decision=decision_name), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                _, checkpoint = self.checkpoint(plan, temp)
+                content = self.model_artifacts(plan)
+                phases = ['acquire8', 'dev8', 'val8', 'parent_decision']
+                if decision_name == 'compare14':
+                    content.update(self.model_artifacts(plan, 'qwen14', 'thinking'))
+                    phases += ['acquire14', 'dev14', 'val14']
+                decision = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                    checkpoint_sha256=checkpoint['export']['sha256'], decision=decision_name,
+                    reason='Independent synthetic review.')
+                content['parent-decision.json'] = L.canonical(decision)
+                content['parent_decision-receipt.json'] = b'{}'
+                completion = dict(inference_success=True, checkpoint=checkpoint, decision=decision,
+                    stages=[dict(phase=phase, state='complete', run_id=plan['identity']['run_id'],
+                                 plan_sha256='a' * 64) for phase in phases])
+                path, archive_pin = archive_fixture(temp, [
+                    (name, payload, tarfile.REGTYPE) for name, payload in sorted(content.items())])
+                L.validate_ordered_completion(completion, plan, 'a' * 64, checkpoint['instance_id'],
+                                              path, archive_pin)
+                incomplete = copy.deepcopy(completion)
+                incomplete['stages'][-1]['state'] = 'incomplete'
+                with self.assertRaisesRegex(RuntimeError, 'Incomplete'):
+                    L.validate_ordered_completion(incomplete, plan, 'a' * 64,
+                                                  checkpoint['instance_id'], path, archive_pin)
+                altered = copy.deepcopy(archive_pin)
+                altered['files'].append(dict(path='qwen14-val-unregistered.json', bytes=1, sha256='a' * 64))
+                with self.assertRaisesRegex(RuntimeError, 'exact conditional'):
+                    L.validate_ordered_completion(completion, plan, 'a' * 64,
+                                                  checkpoint['instance_id'], path, altered)
+                bad_profile = copy.deepcopy(content)
+                name = 'qwen8-val-nonthinking-seed14-receipt.json'
+                receipt = json.loads(bad_profile[name])
+                receipt['output_sha256'] = 'f' * 64
+                bad_profile[name] = L.canonical(receipt)
+                path, bad_pin = archive_fixture(temp, [
+                    (name, payload, tarfile.REGTYPE) for name, payload in sorted(bad_profile.items())])
+                with self.assertRaisesRegex(RuntimeError, 'Profile completion'):
+                    L.validate_ordered_completion(completion, plan, 'a' * 64,
+                                                  checkpoint['instance_id'], path, bad_pin)
+
+    def test_collect_export_authenticates_parent_owned_decision_and_uses_inference_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            _, checkpoint = self.checkpoint(plan, temp)
+            content = self.model_artifacts(plan)
+            decision = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                checkpoint_sha256=checkpoint['export']['sha256'], decision='complete',
+                reason='Independent synthetic review.')
+            content['parent-decision.json'] = L.canonical(decision)
+            content['parent_decision-receipt.json'] = b'{}'
+            files = [dict(path=name, bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+                     for name, payload in sorted(content.items())]
+            manifest = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64, files=files)
+            content['export-manifest.json'] = L.canonical(manifest)
+            archive, pin = archive_fixture(temp, [
+                (name, payload, tarfile.REGTYPE) for name, payload in sorted(content.items())])
+            payload = archive.read_bytes()
+            completion = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                instance_id=checkpoint['instance_id'], inference_success=True, stop_errors=[],
+                checkpoint=checkpoint, decision=decision, runtime_unit=dict(gpu=gpu()),
+                export={key: pin[key] for key in ('bytes', 'sha256')},
+                stages=[dict(phase=phase, state='complete', run_id=plan['identity']['run_id'],
+                             plan_sha256='a' * 64)
+                        for phase in ('acquire8', 'dev8', 'val8', 'parent_decision')])
+            state = Path(temp) / 'state'
+            state.mkdir()
+            (state / 'release.json').write_text(json.dumps(release(plan)))
+            objects = {
+                plan['identity']['output_prefix'] + 'completion.json': L.canonical(completion),
+                plan['identity']['output_prefix'] + 'export.tar': payload,
+                plan['workload']['checkpoint_keys']['receipt']: L.canonical(checkpoint),
+                plan['workload']['checkpoint_keys']['decision']: L.canonical(decision)}
+            calls = []
+
+            def transport(service, operation, *args):
+                self.assertEqual((service, operation), ('s3api', 'get-object'))
+                key = args[args.index('--key') + 1]
+                calls.append(key)
+                Path(args[-1]).write_bytes(objects[key])
+
+            result = L.collect_export(transport, plan, 'a' * 64, state, checkpoint['instance_id'])
+            self.assertTrue(result['native_pipeline_success'])
+            self.assertEqual(result['semantic_acceptance'], 'not_evaluated')
+            self.assertIn(plan['workload']['checkpoint_keys']['decision'], calls)
+            objects[plan['workload']['checkpoint_keys']['decision']] = L.canonical({**decision, 'run_id': 'wrong'})
+            with self.assertRaisesRegex(RuntimeError, 'independently retrieved'):
+                L.collect_export(transport, plan, 'a' * 64, state, checkpoint['instance_id'])
+
+    def test_ordered_mode_uses_same_one_shot_release_and_cleanup_path(self):
+        case = LaunchTests()
+        fixture = case.fixture
+
+        def ordered_fixture(root):
+            plan = fixture(root)
+            plan['schema'] = L.INFERENCE_SCHEMA
+            return plan
+
+        with tempfile.TemporaryDirectory() as temp, patch.object(case, 'fixture', side_effect=ordered_fixture):
+            result, events = case.run_launch(temp)
+        self.assertEqual(sum(op == 'run-instances' for op, _ in events), 1)
+        self.assertEqual(result['cleanup']['cleanup_state'], 'complete')
+        self.assertFalse(result['inference_success'])
+        self.assertNotIn('training_success', result)
+        self.assertTrue(any(op == 'put-object' and any(str(a).endswith('release.json') for a in args)
+                            for op, args in events))
+
+    def test_transport_pins_standard_s3_endpoint_and_ignores_configured_overrides(self):
+        response = L.subprocess.CompletedProcess(['aws'], 0, stdout='{}', stderr='')
+        with patch.dict(os.environ, {'AWS_ENDPOINT_URL': 'https://unpriced.example',
+                                    'AWS_ENDPOINT_URL_S3': 'https://unpriced-s3.example'}), \
+             patch.object(L.subprocess, 'run', return_value=response) as run:
+            L.Client(identity())('s3api', 'head-object', '--bucket', 'synthetic', '--key', 'key')
+            command = run.call_args.args[0]
+            self.assertEqual(command[command.index('--endpoint-url') + 1],
+                             'https://s3.ap-northeast-2.amazonaws.com')
+            self.assertEqual(run.call_args.kwargs['env']['AWS_IGNORE_CONFIGURED_ENDPOINT_URLS'], 'true')
+            L.Client(identity())('ec2', 'describe-instances')
+            self.assertNotIn('--endpoint-url', run.call_args.args[0])
+            self.assertEqual(run.call_args.kwargs['env']['AWS_IGNORE_CONFIGURED_ENDPOINT_URLS'], 'true')
+
+    def test_ordered_schedule_rejects_extra_target_configuration_before_release(self):
+        plan = release_plan()
+        spec = L.schedule_spec(plan, 'i-0123456789abcdef0', 1000)
+        observed = dict(spec, Arn=(f"arn:aws:scheduler:{plan['identity']['region']}:"
+            f"{plan['identity']['account']}:schedule/{plan['identity']['schedule_group']}/"
+            f"{plan['identity']['run_id']}"),
+            CreationDate='2026-11-13T01:00:00Z', LastModificationDate='2026-11-13T01:00:00Z')
+        self.assertEqual(L.ordered_schedule_readback(observed, spec, plan['identity']), observed)
+        observed = copy.deepcopy(observed)
+        observed['Target']['DeadLetterConfig'] = {'Arn': 'arn:aws:sqs:ap-northeast-2:148761639313:unapproved'}
+        with self.assertRaisesRegex(RuntimeError, 'complete configuration'):
+            L.ordered_schedule_readback(observed, spec, plan['identity'])
+
+    def test_ordered_schedule_cleanup_requires_unchanged_actual_creation_and_readback(self):
+        for mutation in ('none', 'created_date', 'modified_date', 'extra_target', 'extra_top_level',
+                         'missing_created', 'missing_readback', 'wrong_create_arn'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                state = Path(temp)
+                plan = release_plan()
+                plan['schema'] = L.INFERENCE_SCHEMA
+                ident = plan['identity']
+                instance_id = 'i-0123456789abcdef0'
+                spec = L.schedule_spec(plan, instance_id, 1000)
+                snapshot = dict(spec, Arn=(f"arn:aws:scheduler:{ident['region']}:{ident['account']}:"
+                    f"schedule/{ident['schedule_group']}/{ident['run_id']}"),
+                    CreationDate='2026-11-13T01:00:00Z', LastModificationDate='2026-11-13T01:00:00Z')
+                L.save(state / 'schedule-intent.json', spec)
+                L.save(state / 'approval-consumed.json', dict(run_id=ident['run_id'], plan_sha256='a' * 64))
+                if mutation != 'missing_created':
+                    L.save(state / 'schedule-created.json', {'ScheduleArn':
+                        'arn:wrong' if mutation == 'wrong_create_arn' else snapshot['Arn']})
+                if mutation != 'missing_readback':
+                    L.save(state / 'schedule-readback.json', snapshot)
+                observed = copy.deepcopy(snapshot)
+                if mutation == 'created_date':
+                    observed['CreationDate'] = '2026-11-13T02:00:00Z'
+                    observed['LastModificationDate'] = '2026-11-13T02:00:00Z'
+                elif mutation == 'modified_date':
+                    observed['LastModificationDate'] = '2026-11-13T02:00:00Z'
+                elif mutation == 'extra_target':
+                    observed['Target']['DeadLetterConfig'] = {'Arn': 'arn:unapproved'}
+                elif mutation == 'extra_top_level':
+                    observed['Description'] = 'Changed after creation'
+                observed['ResponseMetadata'] = {'RequestId': 'fresh-read'}
+                cleanup = dict(cleanup_state='complete', instance_terminated=True, instance_id=instance_id,
+                    root_volume_ids=['vol-synthetic'], recorded_volume_ids=['vol-synthetic'],
+                    absent_volume_ids=['vol-synthetic'], remaining_volumes=[])
+                calls = []
+
+                def transport(service, operation, *args):
+                    calls.append(operation)
+                    return observed if operation == 'get-schedule' else {}
+
+                if mutation == 'none':
+                    L.cleanup_schedule(transport, ident, state, cleanup, plan=plan, plan_sha='a' * 64)
+                    self.assertEqual(calls, ['get-schedule', 'delete-schedule'])
+                else:
+                    with self.assertRaises((RuntimeError, FileNotFoundError)):
+                        L.cleanup_schedule(transport, ident, state, cleanup, plan=plan, plan_sha='a' * 64)
+                    self.assertNotIn('delete-schedule', calls)
+
+    def test_put_json_caps_actual_serialized_bytes_and_retains_oversized_diagnostic(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'oversized-control.json'
+            value = {'rows': [0] * 180000}
+            self.assertLess(len(L.canonical(value)), 1024**2)
+            calls = []
+            with self.assertRaisesRegex(RuntimeError, 'Serialized control document'):
+                L.put_json(lambda *args: calls.append(args), identity(), 'code/control.json', value, path)
+            self.assertTrue(path.is_file())
+            self.assertGreater(path.stat().st_size, 1024**2)
+            self.assertEqual(calls, [])
+            small = Path(temp) / 'small-control.json'
+            L.put_json(lambda *args: calls.append(args), identity(), 'code/control.json',
+                       {'decision': 'complete'}, small)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][:2], ('s3api', 'put-object'))
+            self.assertIn('--if-none-match', calls[0])
+
+    def test_reconcile_caps_each_client_call_and_restores_previous_deadline(self):
+        for previous, expected_timeouts in ((None, [12, 5]), (1007, [7]), (1020, [12, 5])):
+            with self.subTest(previous=previous):
+                clock = Clock()
+                client = L.Client(identity(), deadline=previous)
+                timeouts = []
+                effective = min(previous, 1012) if previous is not None else 1012
+
+                def transport(command, **kwargs):
+                    self.assertEqual(client.deadline, effective)
+                    self.assertEqual(kwargs['timeout'], effective - clock())
+                    timeouts.append(kwargs['timeout'])
+                    clock.sleep(2)
+                    return L.subprocess.CompletedProcess(command, 0, stdout='{"Reservations":[]}', stderr='')
+
+                evidence = L.volume_identity(identity(), 'a' * 64, '/dev/sda1')
+                with patch.object(L.time, 'time', side_effect=clock), \
+                     patch.object(L.subprocess, 'run', side_effect=transport), \
+                     patch.object(L, 'Client', return_value=client):
+                    result = L.reconcile(client, identity(), None, 1012, evidence=evidence,
+                                         clock=clock, pause=clock.sleep)
+                self.assertEqual(result['cleanup_state'], 'unresolved')
+                self.assertEqual(timeouts, expected_timeouts)
+                self.assertEqual(client.deadline, previous)
+                self.assertEqual(clock(), effective)
+
+    def test_reconcile_restores_client_deadline_when_identity_validation_raises(self):
+        client = L.Client(identity(), deadline=1030)
+        evidence = L.volume_identity(identity(), 'a' * 64, '/dev/sda1')
+        evidence['instance_id'] = 'i-foreign'
+        with self.assertRaisesRegex(RuntimeError, 'identity conflict'):
+            L.reconcile(client, identity(), 'i-expected', 1012, evidence=evidence, clock=Clock())
+        self.assertEqual(client.deadline, 1030)
+
+    def test_ordered_cleanup_cutoff_never_renews_grace_for_ambiguous_or_late_launch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp)
+            plan = release_plan()
+            plan.update(schema=L.INFERENCE_SCHEMA, cost={'termination_grace_seconds': 1800})
+            L.save(state / 'approval-consumed.json', dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64))
+            L.save(state / 'launch-dispatched.json', dict(run_id=plan['identity']['run_id'],
+                plan_sha256='a' * 64, request_sha256='b' * 64, at=1000))
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, state), 17200)
+            # Later successful visibility must not move the already registered cutoff.
+            observed = release(plan)
+            observed.update(launch_time=1005, deadline=15405,
+                schedule=L.schedule_spec(plan, observed['instance_id'], 1005))
+            L.save(state / 'termination.json', observed)
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, state), 17200)
+            clock = Clock()
+            clock.now = 17201
+            calls = []
+            evidence = L.volume_identity(plan['identity'], 'a' * 64, '/dev/sda1')
+            result = L.reconcile(lambda *args: calls.append(args), plan['identity'], None,
+                min(clock() + 1800, L.cleanup_cutoff(plan, 'a' * 64, state)),
+                evidence=evidence, clock=clock, pause=clock.sleep)
+            self.assertEqual(result['cleanup_state'], 'unresolved')
+            self.assertEqual(calls, [])
+            observed['plan_sha256'] = 'c' * 64
+            L.save(state / 'termination.json', observed)
+            with self.assertRaisesRegex(RuntimeError, 'launch evidence'):
+                L.cleanup_cutoff(plan, 'a' * 64, state)
+            with self.assertRaisesRegex(RuntimeError, 'consumed approval'):
+                L.cleanup_cutoff(plan, 'c' * 64, state)
+
+    def test_catalog_workload_permutation_is_semantic_and_does_not_mutate_evidence(self):
+        plan = release_plan()
+        device = dict(Name='L40S', Manufacturer='NVIDIA', Count=1, LogicalGpuCount=1,
+            GpuPartitionSize=1.0, MemoryInfo={'SizeInMiB': 45776}, Workloads=['graphics', 'ml-ai'])
+        plan['gpu_type_observation'] = [device]
+        observation = dict(Gpus=[{**device, 'Workloads': ['ml-ai', 'graphics']}], TotalGpuMemoryInMiB=45776)
+        original_plan, original_observation = copy.deepcopy(plan), copy.deepcopy(observation)
+        L.verify_gpu_catalog(plan, observation)
+        self.assertEqual(plan, original_plan)
+        self.assertEqual(observation, original_observation)
+
+    def test_catalog_still_rejects_capacity_values_multiplicity_presence_and_other_fields(self):
+        plan = release_plan()
+        plan['gpu_type_observation'] = [dict(Name='L40S', Manufacturer='NVIDIA', Count=1,
+            LogicalGpuCount=1, GpuPartitionSize=1.0, MemoryInfo={'SizeInMiB': 45776},
+            Workloads=['graphics', 'ml-ai'])]
+        observation = dict(Gpus=copy.deepcopy(plan['gpu_type_observation']), TotalGpuMemoryInMiB=45776)
+        mutations = (
+            lambda value: value['Gpus'][0].update(Workloads=['graphics']),
+            lambda value: value['Gpus'][0].update(Workloads=['graphics', 'ml-ai', 'ml-ai']),
+            lambda value: value['Gpus'][0].update(Workloads=['graphics', 'other']),
+            lambda value: value['Gpus'][0].pop('Workloads'),
+            lambda value: value['Gpus'][0].update(Workloads='graphics'),
+            lambda value: value['Gpus'][0].update(Name='L4'),
+            lambda value: value['Gpus'][0].update(Count=2),
+            lambda value: value['Gpus'][0].update(LogicalGpuCount=2),
+            lambda value: value['Gpus'][0].update(GpuPartitionSize=.5),
+            lambda value: value['Gpus'][0]['MemoryInfo'].update(SizeInMiB=48000),
+            lambda value: value['Gpus'][0].update(Unexpected=True),
+            lambda value: value.update(TotalGpuMemoryInMiB=48000))
+        for mutate in mutations:
+            altered = copy.deepcopy(observation)
+            mutate(altered)
+            with self.subTest(mutate=mutate), self.assertRaises(RuntimeError):
+                L.verify_gpu_catalog(plan, altered)
+
+    def test_ordered_readonly_failure_does_not_consume_dispatch_authorization(self):
+        with tempfile.TemporaryDirectory() as temp:
+            result, events = LaunchTests().run_launch(temp, ordered=True,
+                preflight_error=RuntimeError('Synthetic read-only preflight rejection'))
+            state = Path(temp) / 'state'
+            self.assertEqual(events, [])
+            self.assertEqual(result['state'], 'failed')
+            self.assertEqual(result['phase'], 'readonly_preflight')
+            self.assertFalse(result['dispatch_attempted'])
+            self.assertFalse(result['remote_intent_attempted'])
+            self.assertTrue((state / 'controller-invocation.json').exists())
+            for name in ('approval-consumed.json', 'dispatch-authorization.json',
+                         'remote-approval-intent.json', 'launch-dispatched.json'):
+                self.assertFalse((state / name).exists(), name)
+            L.require_no_dispatch_evidence(state)
+
+    def test_generation_continuation_preserves_history_and_blocks_after_remote_intent_ambiguity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            historical_approval = b'{"historical":true}'
+            (root / 'approval-consumed.json').write_bytes(historical_approval)
+            (root / 'controller-result.json').write_text('{"state":"failed"}')
+            L.require_no_dispatch_evidence(root)
+            result, events = LaunchTests().run_launch(temp, ordered=True, state_name='generation-3',
+                dispatch_state=root, remote_intent_error=True)
+            self.assertEqual((root / 'approval-consumed.json').read_bytes(), historical_approval)
+            self.assertTrue((root / 'dispatch-authorization.json').exists())
+            self.assertTrue((root / 'generation-3/approval-consumed.json').exists())
+            self.assertEqual(result['phase'], 'remote_launch_intent')
+            self.assertTrue(result['remote_intent_attempted'])
+            self.assertFalse(result['dispatch_attempted'])
+            self.assertFalse(any(operation == 'run-instances' for operation, _ in events))
+            with self.assertRaises(FileExistsError):
+                LaunchTests().run_launch(temp, ordered=True, state_name='generation-4', dispatch_state=root)
+
+    def test_possible_run_instances_dispatch_is_marked_and_cannot_cross_generations(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result, events = LaunchTests().run_launch(temp, ordered=True, state_name='generation-3',
+                dispatch_state=root, ambiguous=True, remote_intent_delay=7)
+            self.assertTrue(result['dispatch_attempted'])
+            self.assertTrue(result['remote_intent_attempted'])
+            self.assertTrue((root / 'generation-3/launch-dispatched.json').exists())
+            global_record = json.loads((root / 'dispatch-authorization.json').read_text())
+            local_record = json.loads((root / 'generation-3/launch-dispatched.json').read_text())
+            self.assertEqual(local_record, global_record)
+            self.assertEqual(local_record['at'], 1000)
+            plan = dict(schema=L.INFERENCE_SCHEMA, identity=identity(),
+                        cost={'termination_grace_seconds': 20})
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, root / 'generation-3'), 15420)
+            self.assertEqual(sum(operation == 'run-instances' for operation, _ in events), 1)
+            with self.assertRaises(FileExistsError):
+                LaunchTests().run_launch(temp, ordered=True, state_name='generation-4', dispatch_state=root)
+
+
+
+class FollowupInferenceAdmissionTests(unittest.TestCase):
+    """Synthetic new-lease evidence, never recycled ordered execution receipts."""
+
+    def fixture(self, directory):
+        plan, approval = OrderedInferenceAdmissionTests().fixture(directory)
+        plan['schema'] = L.FOLLOWUP_SCHEMA
+        workload = plan['workload']
+        del workload['models']['qwen8']
+        del workload['checkpoint_keys']
+        workload['phase_seconds'] = dict(L.FOLLOWUP_PHASES)
+        history = dict(schema='trid-hf14-followup-history-v1',
+            source_run_id='historical-synthetic-test', source_plan_sha256='1' * 64,
+            source_checkpoint_sha256='2' * 64, source_result_sha256='3' * 64,
+            source_model_key='qwen8', qualified=False, continuation_reason='frozen_gate_failed')
+        path = Path(directory) / 'historical-evidence.json'
+        path.write_bytes(L.canonical(history))
+        workload['historical_evidence'] = dict(
+            path=path.name, bytes=path.stat().st_size, sha256=L.digest(path))
+        plan['bundle']['files'].append(workload['historical_evidence'])
+        plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement'].pop()
+        plan['output_allowlist'] = sorted(L.ordered_output_members(plan))
+        approval.update(schema='trid-hf14-followup-approval-v1',
+                        workload_sha256=L.object_sha(workload))
+        return plan, approval
+
+    def reseal_data(self, directory, plan, key, value):
+        pin = plan['workload'][key]
+        path = Path(directory) / pin['path']
+        path.write_bytes(L.canonical(value))
+        pin.update(bytes=path.stat().st_size, sha256=L.digest(path))
+
+    def completion_fixture(self, plan, group='nonthinking'):
+        content = OrderedInferenceAdmissionTests().model_artifacts(plan, 'qwen14', group)
+        bound = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                     instance_id=instance(plan['identity'])['InstanceId'])
+        runtime = dict(**bound, packages=plan['runtime']['packages'],
+            torch=plan['runtime']['packages']['torch'], cuda=plan['runtime']['torch_cuda'],
+            count=1, bf16=True, name=plan['runtime']['gpu_name'])
+        content['runtime.json'] = L.canonical(runtime)
+        stages = []
+        for index, phase in enumerate(L.FOLLOWUP_PHASES):
+            stage = dict(run_id=bound['run_id'], plan_sha256=bound['plan_sha256'],
+                phase=phase, state='complete', started_epoch=1100 + index * 100,
+                finished_epoch=1190 + index * 100)
+            stages.append(stage)
+            content[phase + '-receipt.json'] = L.canonical(stage)
+        completion = dict(**bound, inference_success=True, stop_errors=[], runtime=runtime,
+            runtime_unit=dict(**bound, phase='runtime', state='complete',
+                unit=bound['run_id'] + '-runtime', invocation='new-synthetic-invocation', gpu=gpu()),
+            stages=stages)
+        return completion, content
+
+    def export_archive(self, directory, plan, completion, content):
+        manifest = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+            status=copy.deepcopy({k: v for k, v in completion.items() if k != 'export'}),
+            files=[dict(path=name, bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+                   for name, payload in sorted(content.items())])
+        members = {**content, 'export-manifest.json': L.canonical(manifest)}
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode='w:', format=tarfile.USTAR_FORMAT) as archive:
+            for name, payload in sorted(members.items()):
+                member = tarfile.TarInfo(name)
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+        payload = buffer.getvalue()
+        path = Path(directory) / 'followup-export.tar'
+        path.write_bytes(payload)
+        completion['export'] = dict(bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+        return path, manifest
+
+    def validate_completion(self, plan, completion, path, manifest):
+        return L.validate_followup_completion(completion, plan, 'a' * 64,
+            instance(plan['identity'])['InstanceId'], path, manifest)
+
+    def test_new_fourteen_only_plan_and_blind_data_admit_with_exact_read_write_policy(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, approval = self.fixture(temp)
+            result = L.validate_plan(plan, approval, 'a' * 64, now=1000)
+            loaded = L.validate_data(temp, plan)
+            self.assertLessEqual(result['additional_pretax_bound_usd'], 20)
+            self.assertEqual(set(plan['workload']['models']), {'qwen14'})
+            self.assertEqual(plan['workload']['phase_seconds'],
+                             dict(acquire14=900, dev14=2400, val14=2400))
+            self.assertEqual({key: len(rows) for key, rows in loaded.items()},
+                             dict(development_inputs=6, validation_inputs=16))
+            self.assertTrue(L.inference_mode(plan))
+            self.assertTrue(L.followup_mode(plan))
+            self.assertFalse(L.ordered_mode(plan))
+            self.assertNotIn('checkpoint_keys', plan['workload'])
+            self.assertNotIn('recipe', plan)
+            self.assertNotIn('parent-decision.json', plan['output_allowlist'])
+            statements = plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement']
+            self.assertEqual([row['Action'] for row in statements],
+                             [['s3:GetObject'], ['s3:PutObject']])
+
+    def test_old_or_expanded_approval_cannot_authorize_new_lease(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, approval = self.fixture(temp)
+            for key, value in (
+                    ('schema', 'trid-ordered-hf-inference-approval-v1'),
+                    ('schema', 'trid-grounded-hf-approval-v1'),
+                    ('run_id', 'historical-synthetic-test'), ('plan_sha256', '1' * 64),
+                    ('workload_sha256', '2' * 64), ('instance_limit', 2),
+                    ('additional_pretax_usd', 50), ('automatic_retry', True), ('approved', False),
+                    ('limits', {**L.LIMITS, 'lifetime_seconds': 14401})):
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(RuntimeError, 'USD20'):
+                    L.validate_plan(plan, {**approval, key: value}, 'a' * 64, now=1000)
+
+    def test_followup_rejects_reintroduced_eight_model_phase_and_decision_channel(self):
+        changes = [
+            lambda w: w['models'].update(qwen8=copy.deepcopy(w['models']['qwen14'])),
+            lambda w: w['models']['qwen14'].update(revision='0' * 40),
+            lambda w: w.update(checkpoint_keys={}),
+            lambda w: w.pop('historical_evidence'),
+            lambda w: w['phase_seconds'].update(acquire8=900),
+            lambda w: w['phase_seconds'].update(parent_decision=300),
+            lambda w: w['phase_seconds'].update(dev14=2401),
+            lambda w: w['profiles'][0].update(seed=15),
+            lambda w: w['selection_policy'].update(require_both_seeds=False),
+        ]
+        for index, change in enumerate(changes):
+            with self.subTest(change=index), tempfile.TemporaryDirectory() as temp:
+                plan, approval = self.fixture(temp)
+                change(plan['workload'])
+                approval['workload_sha256'] = L.object_sha(plan['workload'])
+                with self.assertRaises(RuntimeError):
+                    L.validate_plan(plan, approval, 'a' * 64, now=1000)
+        for field in ('recipe', 'data', 'evaluation', 'phase_seconds', 'model'):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp:
+                plan, approval = self.fixture(temp)
+                plan[field] = {}
+                with self.assertRaises(RuntimeError):
+                    L.validate_plan(plan, approval, 'a' * 64, now=1000)
+
+    def test_followup_worker_rejects_listing_missing_write_and_foreign_prefix(self):
+        for mutation in ('listing', 'missing_write', 'foreign_read', 'broad_write'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                plan, approval = self.fixture(temp)
+                statements = plan['iam']['instance_role']['inline']['ExactRunOnly']['Statement']
+                if mutation == 'listing':
+                    ident = plan['identity']
+                    statements.append(dict(Effect='Allow', Action=['s3:ListBucket'],
+                        Resource=[f"arn:aws:s3:::{ident['bucket']}"],
+                        Condition={'StringEquals': {'s3:prefix': ident['code_prefix'] + 'parent-decision.json'}}))
+                elif mutation == 'missing_write':
+                    statements.pop()
+                elif mutation == 'foreign_read':
+                    statements[0]['Resource'] = ['arn:aws:s3:::synthetic-bucket/code/historical/*']
+                else:
+                    statements[1]['Resource'] = ['*']
+                with self.assertRaisesRegex(RuntimeError, 'Worker role'):
+                    L.validate_plan(plan, approval, 'a' * 64, now=1000)
+
+    def test_history_requires_exact_failed_eight_provenance_from_different_run(self):
+        mutations = [
+            lambda h, p: h.update(schema='trid-ordered-hf-inference-v1'),
+            lambda h, p: h.update(source_run_id=p['identity']['run_id']),
+            lambda h, p: h.update(source_run_id='../historical'),
+            lambda h, p: h.update(source_model_key='qwen14'),
+            lambda h, p: h.update(qualified=True),
+            lambda h, p: h.update(qualified=0),
+            lambda h, p: h.update(continuation_reason='passed'),
+            lambda h, p: h.update(runtime={'state': 'complete'}),
+            lambda h, p: h.pop('source_result_sha256'),
+        ]
+        for field in ('source_plan_sha256', 'source_checkpoint_sha256', 'source_result_sha256'):
+            mutations.append(lambda h, p, field=field: h.update({field: 'not-a-sha256'}))
+        for index, change in enumerate(mutations):
+            with self.subTest(change=index), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                history = json.loads((Path(temp) / plan['workload']['historical_evidence']['path']).read_text())
+                change(history, plan)
+                self.reseal_data(temp, plan, 'historical_evidence', history)
+                with self.assertRaisesRegex(RuntimeError, 'historical provenance|Historical evidence'):
+                    L.validate_data(temp, plan)
+
+    def test_history_file_hash_size_bundle_pin_and_bound_are_required(self):
+        for mutation in ('hash', 'size', 'bundle_pin', 'over_bound'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                pin = plan['workload']['historical_evidence']
+                path = Path(temp) / pin['path']
+                if mutation == 'hash':
+                    path.write_bytes(path.read_bytes().replace(b'1' * 64, b'9' * 64))
+                elif mutation == 'size':
+                    path.write_bytes(path.read_bytes() + b' ')
+                elif mutation == 'bundle_pin':
+                    plan['workload']['historical_evidence'] = {**pin, 'sha256': '9' * 64}
+                else:
+                    pin['bytes'] = 1024**2 + 1
+                with self.assertRaises(RuntimeError):
+                    L.validate_data(temp, plan)
+
+    def test_followup_data_still_rejects_labels_overlap_and_changed_reference_messages(self):
+        for mutation in ('labels', 'overlap', 'reference_messages', 'closure'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                key = {'labels': 'validation_inputs', 'reference_messages': 'development_references',
+                       'closure': 'source_closure'}.get(mutation)
+                if mutation == 'overlap':
+                    plan['workload']['development_case_ids'][0] = plan['workload']['validation_case_ids'][0]
+                else:
+                    value = json.loads((Path(temp) / plan['workload'][key]['path']).read_text())
+                    if mutation == 'labels':
+                        value[0]['expected'] = 'Never export a private answer.'
+                    elif mutation == 'reference_messages':
+                        value['cases'][0]['messages'][0]['content'] = 'Different development input.'
+                    else:
+                        value['run_id'] = 'historical-synthetic-test'
+                    self.reseal_data(temp, plan, key, value)
+                with self.assertRaises(RuntimeError):
+                    L.validate_data(temp, plan)
+
+    def test_actual_tar_completion_admits_both_independently_selected_profile_groups(self):
+        for group in ('nonthinking', 'thinking'):
+            with self.subTest(group=group), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                completion, content = self.completion_fixture(plan, group)
+                path, manifest = self.export_archive(temp, plan, completion, content)
+                self.validate_completion(plan, completion, path, manifest)
+                self.assertEqual([s['phase'] for s in completion['stages']], ['acquire14', 'dev14', 'val14'])
+                self.assertEqual(len([name for name in content if name.startswith('qwen14-dev-')
+                                      and name.endswith('-receipt.json')]), 4)
+                self.assertEqual(len([name for name in content if name.startswith('qwen14-val-')
+                                      and name.endswith('-receipt.json')]), 2)
+                self.assertFalse(any(name.startswith('qwen8') or 'parent' in name for name in content))
+
+    def test_forged_historical_runtime_or_runtime_unit_is_not_new_execution(self):
+        for target, field, value in (
+                ('runtime', 'run_id', 'historical-synthetic-test'),
+                ('runtime', 'plan_sha256', '1' * 64),
+                ('runtime', 'instance_id', 'i-11111111111111111'),
+                ('runtime', 'bf16', False), ('runtime', 'count', 2),
+                ('runtime', 'packages', {}), ('runtime', 'cuda', 'historical-cuda'),
+                ('runtime_unit', 'run_id', 'historical-synthetic-test'),
+                ('runtime_unit', 'plan_sha256', '1' * 64),
+                ('runtime_unit', 'instance_id', 'i-11111111111111111'),
+                ('runtime_unit', 'unit', 'historical-synthetic-test-runtime'),
+                ('runtime_unit', 'invocation', ''), ('runtime_unit', 'state', 'failed')):
+            with self.subTest(target=target, field=field), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                completion, content = self.completion_fixture(plan)
+                completion[target][field] = value
+                content['runtime.json'] = L.canonical(completion['runtime'])
+                path, manifest = self.export_archive(temp, plan, completion, content)
+                with self.assertRaisesRegex(RuntimeError, 'runtime'):
+                    self.validate_completion(plan, completion, path, manifest)
+
+    def test_old_checkpoint_decision_training_and_eight_phases_cannot_supply_completion(self):
+        for mutation in ('checkpoint', 'decision', 'training_success', 'acquire8', 'dev8',
+                         'val8', 'parent_decision', 'incomplete', 'stop_error', 'stage_identity',
+                         'stage_time', 'archived_stage'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                completion, content = self.completion_fixture(plan)
+                if mutation in ('checkpoint', 'decision', 'training_success'):
+                    completion[mutation] = True if mutation == 'training_success' else {'run_id': 'historical-synthetic-test'}
+                elif mutation in ('acquire8', 'dev8', 'val8', 'parent_decision'):
+                    completion['stages'].insert(0, dict(phase=mutation, state='complete'))
+                elif mutation == 'stop_error':
+                    completion['stop_errors'] = ['synthetic unreaped child']
+                else:
+                    stage = completion['stages'][-1]
+                    if mutation == 'incomplete':
+                        stage['state'] = 'incomplete'
+                    elif mutation == 'stage_identity':
+                        stage['run_id'] = 'historical-synthetic-test'
+                    elif mutation == 'stage_time':
+                        stage['finished_epoch'] = stage['started_epoch'] - 1
+                    else:
+                        stage['finished_epoch'] += 1
+                    if mutation != 'archived_stage':
+                        content['val14-receipt.json'] = L.canonical(stage)
+                path, manifest = self.export_archive(temp, plan, completion, content)
+                with self.assertRaises(RuntimeError):
+                    self.validate_completion(plan, completion, path, manifest)
+
+    def test_archive_bytes_manifest_and_exact_member_binding_reject_tampering(self):
+        for mutation in ('bytes', 'manifest_status', 'supplied_manifest', 'member_bytes',
+                         'missing_log', 'old_member', 'extra_selected_group'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                completion, content = self.completion_fixture(plan)
+                if mutation == 'missing_log':
+                    del content['runtime.log']
+                elif mutation == 'old_member':
+                    content['qwen8-checkpoint.json'] = b'{}'
+                elif mutation == 'extra_selected_group':
+                    content['qwen14-val-thinking-seed14.log'] = b'synthetic extra group'
+                path, manifest = self.export_archive(temp, plan, completion, content)
+                if mutation == 'bytes':
+                    payload = bytearray(path.read_bytes())
+                    payload[-1] ^= 1
+                    path.write_bytes(payload)
+                elif mutation == 'manifest_status':
+                    completion['runtime_unit']['invocation'] = 'different-terminal-unit'
+                elif mutation == 'supplied_manifest':
+                    manifest['files'][0]['sha256'] = 'f' * 64
+                elif mutation == 'member_bytes':
+                    with tarfile.open(path, 'r:') as archive:
+                        offset = archive.getmember('runtime.log').offset_data
+                    payload = bytearray(path.read_bytes())
+                    payload[offset] ^= 1
+                    path.write_bytes(payload)
+                    completion['export']['sha256'] = L.digest(path)
+                with self.assertRaises(RuntimeError):
+                    self.validate_completion(plan, completion, path, manifest)
+
+    def test_all_six_profile_receipts_bind_current_identity_model_input_output_and_cases(self):
+        fields = dict(run_id='historical-synthetic-test', plan_sha256='1' * 64,
+            model_sha256='2' * 64, input_sha256='3' * 64, output_sha256='4' * 64,
+            output_bytes=3, completed_case_ids=[], question_deadline_epoch=1234, profile={},
+            model_key='qwen8', state='incomplete', phase='val8')
+        for cohort, group, seed in (
+                ('dev', 'nonthinking', 14), ('dev', 'nonthinking', 29),
+                ('dev', 'thinking', 14), ('dev', 'thinking', 29),
+                ('val', 'nonthinking', 14), ('val', 'nonthinking', 29)):
+            for field, value in fields.items():
+                with self.subTest(cohort=cohort, group=group, seed=seed, field=field), \
+                        tempfile.TemporaryDirectory() as temp:
+                    plan, _ = self.fixture(temp)
+                    completion, content = self.completion_fixture(plan)
+                    name = f'qwen14-{cohort}-{group}-seed{seed}-receipt.json'
+                    receipt = json.loads(content[name])
+                    receipt[field] = value
+                    content[name] = L.canonical(receipt)
+                    path, manifest = self.export_archive(temp, plan, completion, content)
+                    with self.assertRaisesRegex(RuntimeError, 'Profile completion'):
+                        self.validate_completion(plan, completion, path, manifest)
+
+    def test_selection_cannot_reuse_historical_or_validation_evidence(self):
+        for field, value in (
+                ('run_id', 'historical-synthetic-test'), ('model_key', 'qwen8'),
+                ('profiles_sha256', '1' * 64), ('development_inputs_sha256', '2' * 64),
+                ('development_references_sha256', '3' * 64), ('selected_profiles', []),
+                ('dev_outputs', []), ('selection_policy', {})):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp:
+                plan, _ = self.fixture(temp)
+                completion, content = self.completion_fixture(plan)
+                selection = json.loads(content['qwen14-selection.json'])
+                selection[field] = value
+                content['qwen14-selection.json'] = L.canonical(selection)
+                path, manifest = self.export_archive(temp, plan, completion, content)
+                with self.assertRaises(RuntimeError):
+                    self.validate_completion(plan, completion, path, manifest)
+
+    def test_collect_export_success_fetches_only_new_completion_and_export(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plan, _ = self.fixture(temp)
+            completion, content = self.completion_fixture(plan)
+            path, _ = self.export_archive(temp, plan, completion, content)
+            state = Path(temp) / 'state'
+            state.mkdir()
+            (state / 'release.json').write_bytes(L.canonical(release(plan)))
+            prefix = plan['identity']['output_prefix']
+            objects = {prefix + 'completion.json': L.canonical(completion),
+                       prefix + 'export.tar': path.read_bytes()}
+            calls = []
+
+            def transport(service, operation, *args):
+                self.assertEqual((service, operation), ('s3api', 'get-object'))
+                key = args[args.index('--key') + 1]
+                self.assertIn(key, objects, 'Followup must never fetch checkpoint or parent decision')
+                calls.append(key)
+                Path(args[-1]).write_bytes(objects[key])
+
+            result = L.collect_export(transport, plan, 'a' * 64, state, completion['instance_id'])
+            self.assertTrue(result['native_pipeline_success'])
+            self.assertEqual(result['semantic_acceptance'], 'not_evaluated')
+            self.assertEqual(result['export_sha256'], completion['export']['sha256'])
+            self.assertEqual(calls, [prefix + 'completion.json', prefix + 'export.tar'])
+
+    def test_followup_shared_launch_release_cleanup_and_error_boundaries_are_one_shot(self):
+        for boundary in ('release', 'ambiguous', 'schedule_wrong', 'prerequisites_wrong',
+                         'preflight_error', 'remote_intent_error'):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temp:
+                case = LaunchTests()
+                fixture = case.fixture
+
+                def followup_fixture(root):
+                    plan = fixture(root)
+                    plan['schema'] = L.FOLLOWUP_SCHEMA
+                    return plan
+
+                options = {} if boundary == 'release' else {boundary: True}
+                if boundary == 'preflight_error':
+                    options[boundary] = RuntimeError('Synthetic read-only rejection')
+                with patch.object(case, 'fixture', side_effect=followup_fixture):
+                    result, events = case.run_launch(temp, **options)
+                dispatched = boundary not in ('preflight_error', 'remote_intent_error')
+                self.assertEqual(sum(op == 'run-instances' for op, _ in events), int(dispatched))
+                released = [args for op, args in events if op == 'put-object'
+                            and any(str(arg).endswith('release.json') for arg in args)]
+                self.assertEqual(bool(released), boundary == 'release')
+                self.assertFalse(result['inference_success'])
+                self.assertNotIn('training_success', result)
+                if dispatched:
+                    self.assertEqual(result['cleanup']['cleanup_state'], 'complete')
+                    self.assertTrue(result['cleanup']['instance_terminated'])
+                    self.assertEqual(result['cleanup']['remaining_volumes'], [])
+                if boundary == 'preflight_error':
+                    self.assertEqual(events, [])
+                    self.assertFalse(result['dispatch_attempted'])
+                    self.assertFalse(result['remote_intent_attempted'])
+                    L.require_no_dispatch_evidence(Path(temp) / 'state')
+                elif boundary == 'remote_intent_error':
+                    self.assertTrue(result['remote_intent_attempted'])
+                    self.assertFalse(result['dispatch_attempted'])
+                    self.assertTrue((Path(temp) / 'state/dispatch-authorization.json').exists())
 
 
 if __name__ == '__main__':

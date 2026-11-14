@@ -179,7 +179,157 @@ Git 독자는 [공개 검증 요약](reports/mois-graph-v0.2-verification.json)�
 
 실행·검토 근거는 `runs/mois-local-mlx-balanced-20261113T020154Z/`의 `plan.json`, `local-quality-registration-v2.json`, `guard-*-receipt.json`, `results/*-receipt.json`, `execution-measurements.json`, `scoring-preparation-verification.json`, 두 correction record와 `blind-aggregate-final.json`에 보관합니다. 최종 adapter SHA256은 `f9ef041b176a7d8b90e718032fa216c9e03c2b40d426a7bcf33e6362174ea7a0`입니다. 실제 tiny MLX 혼합 2-epoch·토크나이저/EOS·감시자 검사 **48개**, 격리된 채점 계약 검사 **13개**, 경로 동일성/필드 변환 검사 **15개/11개**를 통과했고, 별도로 실제 4B 학습과 익명 비교의 준비·집계를 실행했습니다. 모델·데이터·실행 자료는 로컬 보관 대상이며 Git에 포함된다고 가정하지 않습니다.
 
-14B 클라우드 실험은 GPU 제원 사전 검사 실패 후 보류한 상태입니다. 이전 준비 단계에서 IAM·보안그룹·S3 객체는 생성했지만 새 GPU 인스턴스는 실행하지 않았습니다. 이번 두 로컬 실행에서는 추가 AWS 변경·GPU 임대·운영 배포를 하지 않았습니다. 다음 개선은 형식 준수와 내용 정확도를 분리하고, 기본 모델 추론 경로·계산·조건 해석의 실패를 진단한 뒤 별도의 학습 자료와 새 평가로 검증해야 합니다. 같은 자료를 더 반복하거나 파라미터만 늘리면 해결된다고 판단하지 않습니다.
+14B 클라우드 실험은 GPU 제원 사전 검사 실패 후 보류한 상태입니다. 이전 준비 단계에서 IAM·보안그룹·S3 객체는 생성했지만 새 GPU 인스턴스는 실행하지 않았습니다. 이번 두 로컬 실행에서는 추가 AWS 변경·GPU 임대·운영 배포를 하지 않았습니다. 후속 추론·반입 비교는 아래에 기록합니다. 같은 자료를 더 반복하거나 파라미터만 늘리면 해결된다고 판단하지 않습니다.
+
+#### 오프라인 반입용 MLX 추론 개선
+
+**추론·반입 코드는 수정하고 실제 실행했지만, 새 모델의 품질 승격은 보류했습니다.** 추가 학습 성공이나 운영 모델 교체로 표시하지 않습니다. 이번 작업에서도 AWS 변경·GPU 임대·`test.tridatum.co` 배포는 하지 않았습니다.
+
+- `scripts/mlx_inference.py`로 native template·샘플링·생각 모드·생성 길이·문맥·seed·penalty 설정을 명시합니다. 실제 원본 4B의 6문항은 기존 greedy 설정과 MLX 공식 `generate_step` 경로의 출력 토큰이 모두 일치했습니다. 손실 정렬·정답 마스킹·LoRA 갱신에서 명백한 결함은 확인되지 않았으며, 원래 경로가 잘못된 토큰을 생성했다는 결론은 내리지 않습니다.
+- 실제 tokenizer의 added-token 등록·원자적 왕복·template 근거로 생각 구간의 종료를 판별합니다. 원본 Qwen3의 일반 assistant 시작과 Qwen3.5의 열린 생각 구간을 구별하고, 생각 모드를 지원하지 않는 template은 거부합니다. EOS·생각 종료·최종 답변을 분리하며, 잘린 출력을 수선하거나 닫는 태그를 강제로 넣지 않습니다.
+- `scripts/diagnose_mlx_inference.py`는 모델·adapter·입력·소스·프로필 해시와 원본 토큰·최종 답변·중단 사유를 보존합니다. 매 질문의 seed와 KV cache를 초기화하고 penalty는 생성 토큰에만 적용합니다. 기존 `trid-local-mlx-v2` 출력의 다섯 decoder 필드는 그대로 유지합니다.
+- 모델 비교에는 원본 Qwen3-4B, 기존 학습 adapter, Qwen3-4B-Instruct-2507, Qwen3.5-4B를 포함했습니다. 개발 문항과 두 seed를 먼저 고정했으며, 완료된 비교에서 선택한 후보는 `mlx-community/Qwen3-4B-Instruct-2507-4bit` revision `50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b`입니다. **새 공개 기반 모델 후보이지, 새로 학습한 TRID adapter가 아닙니다.** 기존 adapter를 다른 기반 모델에 붙이지 않았습니다.
+- 후보 설정은 no-thinking, temperature `0.7`, top-p `0.8`, top-k `20`, min-p `0`, presence/repetition penalty `0/1`, seed `14`, 문맥 상한 `8192`, 생성 상한 `1024`입니다. 문맥에는 입력과 생성 예산이 함께 포함되며 초과 입력을 자르지 않고 거부합니다. 이 설정 상한 전체의 부하 검증을 마쳤다는 뜻은 아닙니다.
+
+최종 비교는 macOS 전체 메모리 압력 경고로 일부 중단됐습니다. 모델 작업의 관측 RSS·MLX 사용량은 6GiB 미만이었고 스왑 증가도 없었지만, 별도 호스트 관측에서는 압축 메모리가 약 11.15GiB였습니다. 안전장치를 낮추거나 사용자 앱을 종료하지 않았습니다. Qwen3.5 개발 비교도 27/36 응답 후 중단돼 **품질이 낮다고 판정한 것이 아니라 실행 수락 대상에서 제외**했으며, 그 부분 답변은 선택에 사용하지 않았습니다.
+
+아래는 중단 후 별도로 선언한 **기록된 답변의 참고 분석이며 정식 수락 점수가 아닙니다.** 구조화 문항은 JSON 객체·정확한 자료형/내용·종료를 함께 확인했습니다. 설명 문항은 고정된 의미·문체 기준으로 두 독립 세션이 익명 검토했습니다. 미관측 답변을 오답으로 표시하거나 분모에서 없애지 않았습니다.
+
+| 경로 | 완료 응답/계획 | 구조화 12문항 참고 일치 | 설명 4문항 참고 일치 | 전체 감시 실행 |
+|---|---:|---:|---|---|
+| 기존 원본·greedy | 0/16 | 미관측 | 미관측 | 첫 prefill 중 메모리 압력 중단 |
+| 기존 2차 학습본·greedy | 16/16 | 5/12 | 3/4 | 완료 |
+| 새 후보·seed14 | 16/16 | 7/12 | 3/4 | 두 seed를 묶은 전체 실행은 중단 |
+| 새 후보·seed29 | 13/16 | 7/12 | 1/4 — 3개 미관측 | 메모리 압력 중단 |
+
+새 후보 seed14는 가상 규칙에 없는 **퇴장·재입장 제한**을 추가했습니다. 형식이 맞거나 문장이 자연스러워도 근거 충실성이 확보된 것은 아닙니다. 실제로 읽을 수 있는 설명 9답변의 69개 판정 중 67개가 일치했고, 차이 2개만 원문·고정 기준으로 조정했습니다. 중단된 후보의 정식 품질 점수는 미확정, 수락 credit은 0으로 유지합니다. 이 작은 가상 진단과 사후 참고 분석을 전체 행정안전부 지식·실제 법령·일반 정확도 개선으로 해석하지 않습니다.
+
+**반입 패키지와 실행 범위**
+
+`scripts/mlx_offline.py`는 모델·tokenizer·프로필·실행 코드·라이선스·고정 wheel 34개를 실제 파일로 복사하고 해시로 결박합니다. 선택적 adapter는 패키지 내 base 해시와 결박하고 로딩 시 tensor key/shape 전체를 검사합니다. 이는 알 수 없는 adapter의 학습 출처를 증명한다는 뜻은 아닙니다. 임의 remote code·pickle 가중치·경로 이탈·symlink·누락/추가/변조 파일을 거부하며, 가중치를 fuse하거나 다시 양자화하지 않습니다.
+
+실제 패키지는 `runs/mois-offline-quality-20261113T035409Z/bundle/`에 있으며 논리 크기는 약 **2.23GiB**입니다. 대상은 **macOS 26+ arm64·CPython 3.12·pip**이고 Apple M5에서 검증했습니다. Linux/GGUF 반입물은 아닙니다. 모델·wheel·실행 자료는 Git에 포함하지 않으므로 저장소 clone만으로 이 경로가 생기지는 않습니다.
+
+패키지를 원래 위치에서 옮긴 뒤 새 venv에 외부 네트워크·원 저장소 읽기를 OS 수준에서 차단하고 wheel 34개를 설치했으며, 사전 무결성 검사·설치 후 호환성 검사·의존성 검사를 통과했습니다. 지원 CLI의 실제 모델 실행은 `28-3`에 `{"value": 25}`를 출력했고 기존 개발 실행과 입력·출력 토큰이 일치했습니다. 별도의 **OS 차단 native worker 실행은 메모리 압력으로 중단**됐으므로 그 강화 격리 조건까지 완전 수락한 것은 아닙니다. 처음 전체 supervisor를 OS sandbox 안에 넣은 시도는 `/bin/ps` 실행 권한 문제로 실패해 기록을 보존했으며, 후속 시도에서는 감시자를 밖에 두고 worker만 격리했습니다. 일반 CLI의 Python 네트워크 차단을 OS sandbox와 동일시하지 않습니다.
+
+사용 전 launcher와 manifest 해시를 **패키지와 별도의 신뢰 경로**에서 받아 먼저 대조해야 합니다. 변경되지 않은 launcher도 비격리 실행에서는 같은 디렉터리의 모듈에 가려질 수 있어 CLI는 `-I`를 강제합니다. 설치 전에는 `-I -S`의 표준 라이브러리 전용 `--integrity-only` 검사로 lockfile·wheel까지 인증하며, 이 검사는 플랫폼·모델 품질 수락이 아닙니다. 신뢰할 수 있는 Python과 검사 중 변경되지 않는 로컬 파일시스템이 전제입니다.
+
+다음 내용을 `messages.json`으로 저장한 뒤 실행합니다. 기존 출력 파일은 덮어쓰지 않습니다.
+
+```json
+[
+  {"role":"system","content":"제공된 가상 문제를 정확히 풀고 요청된 JSON 객체만 답하세요. 외부 사실을 보태지 마세요."},
+  {"role":"user","content":"뺄셈 28-3의 결과를 value 하나만 있는 JSON 객체로 답하세요."}
+]
+```
+
+```sh
+(
+  set -eu
+  BUNDLE="$PWD/runs/mois-offline-quality-20261113T035409Z/bundle"
+  MANIFEST="fc070f0ce45bca426a4bb52391ed30ebee8bcf8fb2d7ec4b5993cdb5b21bc1f8"
+  printf '%s  %s\n' \
+    "aa1fefe457f61be8de24fe63ef43c58ee18ec890e07fccd21e1b9e2528b14650" "$BUNDLE/runtime/mlx_offline.py" \
+    "$MANIFEST" "$BUNDLE/manifest.json" | shasum -a 256 -c -
+  python3.12 -I -S "$BUNDLE/runtime/mlx_offline.py" verify "$BUNDLE" \
+    --manifest-sha256 "$MANIFEST" --integrity-only
+  test ! -e .trid-offline-venv
+  python3.12 -I -m venv .trid-offline-venv
+  PY="$PWD/.trid-offline-venv/bin/python"
+  "$PY" -I -m pip --isolated install --no-index --no-deps --only-binary=:all: \
+    --require-hashes --find-links "$BUNDLE/wheelhouse" -r "$BUNDLE/requirements.lock"
+  "$PY" -I "$BUNDLE/runtime/mlx_offline.py" verify "$BUNDLE" --manifest-sha256 "$MANIFEST"
+  "$PY" -I "$BUNDLE/runtime/mlx_offline.py" run "$BUNDLE" \
+    --manifest-sha256 "$MANIFEST" --messages messages.json --output answer.json
+)
+```
+
+관련 native/tokenizer·기존 출력 계약·감시자·반입 보안 **108개 검사**를 통과했습니다. 원래 실험·중단 기록은 덮어쓰지 않았습니다. 개발 출력 생성 후 발견한 채점기의 gold 인증 누락은 별도 correction record로 공개하고, 정답/입력 해시·문항 분모를 고정하는 검사만 추가했습니다. 기존 채점 수치와 후보 선택은 변하지 않았고 답변도 재생성하지 않았습니다. 과거 학습 실행을 재현할 때는 당시 기록된 소스/Git 버전을 사용해야 합니다.
+
+실행 근거는 같은 run의 `comparison-protocol.json`, `candidate-selection.json`, 각 phase의 guard/분류 기록, `scoring-integrity-correction.json`, `posthoc-observation-protocol.json`, `posthoc-observed-heldout-diagnostics.json`, `posthoc-prose-aggregate.json`, `offline-runtime-evidence.json`, `relocation-evidence/`, `offline-final-runtime-tests.log`에 보관합니다.
+
+설정·구현 판단에는 [Qwen3 모델 카드](https://huggingface.co/Qwen/Qwen3-4B), [Instruct-2507 카드](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507), [Qwen3.5 카드](https://huggingface.co/Qwen/Qwen3.5-4B), [MLX-LM 0.32.2](https://github.com/ml-explore/mlx-lm/tree/v0.32.2)를 사용했습니다. [Qwen3 보고서](https://arxiv.org/abs/2505.09388), [LoRA Learns Less and Forgets Less](https://arxiv.org/abs/2405.09673), [regularized replay 연구](https://arxiv.org/abs/2512.22337), [pretraining replay 연구](https://arxiv.org/abs/2603.04964)도 검토했지만, 이를 작은 기존 SFT의 효과 보증으로 해석하거나 검증되지 않은 replay/KL 학습을 추가하지는 않았습니다.
+
+#### 프로필을 분리한 후속 비교와 자원 제약
+
+후속 실행은 `runs/mois-ordered-models-20261113T062501Z/`에 별도로 보존했습니다. 새로운 가상 사례 **개발 6문항·검증 JSON 12문항·설명형 4문항**을 사용했으며, 이전 절의 문항 집합과 다르므로 두 실행의 정답 수를 직접 비교해 개선·퇴보를 판정하지 않습니다. 이 검증 집합도 **후보 선택용 진단**이지 독립적인 최종 반입 승인 자료가 아닙니다. 구조화된 정답 18개는 참조 계산과 독립 검토로 확인했습니다.
+
+Qwen3.5-4B의 non-thinking 두 설정과 thinking 설정을 각각 시드 14·29의 **독립 프로세스**로 실행했습니다. 프로필마다 RSS/MLX 각 6GiB, 메모리 압력 정상 단계, swap 증가 256MiB, 문항 180초·phase 1,800초 제한을 유지했습니다. Thinking 시드 14는 개발 5/6문항을 통과했지만 나머지 1문항은 생성이 완료되지 않았습니다. 시드 29는 메모리 압력 경고로 중단됐으므로 그 답변은 채점하지 않았습니다. 따라서 thinking 품질은 검증 미완료이며, 완료된 두 시드를 갖춘 non-thinking 후보 중 사전 정의된 동률 규칙으로 `presence_penalty=0` 설정을 골랐습니다.
+
+| 완료된 검증 arm | JSON 정답·완료 12문항 | 설명형 의미·문체·완료 4문항 | 열거된 중대 오류가 있는 설명형 문항 |
+| --- | ---: | ---: | ---: |
+| 원본 Qwen3-4B-Instruct-2507 · 기존 greedy | 1/12 | 1/4 | 2 |
+| 이전 업무 특화 adapter · 기존 greedy | 1/12 | 2/4 | 1 |
+| Qwen3.5-4B · 선정 설정 · 시드 14 | 1/12 | 1/4 | 1 |
+| Qwen3.5-4B · 선정 설정 · 시드 29 | 3/12 | 3/4 | 0 |
+
+설명형 16개 답변은 모델 정체를 가린 **두 독립 AI 채점자**가 검토했고, 불일치 3개는 문서의 의무 주체·조건·답변 내 모순을 근거로 판정했습니다. 사람 전문가 평가를 대신하지 않습니다. 열거된 중대 오류가 0이라는 것도 환각이 없다는 보장은 아닙니다. 원문에 없는 원본 제출 요건을 추가한 답변은 기존 오류 목록을 사후 확장해 점수를 바꾸지 않고 별도 기록했습니다. 후보는 시드별 **JSON 10/12 이상·설명형 3/4 이상·열거된 중대 오류 0·완료된 원본/adapter 대조군보다 낮지 않은 점수**라는 잠정 관문을 통과하지 못했습니다. 이 결과로 후속 특화 학습에 진입하지 않았습니다.
+
+다음 후보 [Qwen3-8B-4bit](https://huggingface.co/mlx-community/Qwen3-8B-4bit/tree/545dc4251c05440727734bcd94334791f6ab0192)는 고정 revision의 파일 크기와 해시를 확인해 확보했습니다. 첫 non-thinking 개발 phase는 로딩 중 **3.54초에 `pressure_not_1`로 중단**됐습니다. 프로세스 그룹 RSS 최대 4,889,608,192바이트, swap 증가 0이며, 소유 프로세스의 종료·정리를 확인했습니다. MLX peak 0 기록은 로드 완료 측정을 받지 못했다는 뜻이지 실제 할당이 없었다는 뜻이 아닙니다. **이 MLX 4bit 경로의 8B 품질은 미측정**이고, 나머지 세 프로필은 자원 문제가 해결되기 전 실행하지 않았습니다. 같은 실패를 반복 실행하거나 6GiB 제한을 올리지 않았습니다.
+
+대체 16GiB Mac도 조회 당시 메모리 압력 경고 상태여서 모델을 실행하지 않았습니다. 검토한 14B 4bit 가중치만 약 7.74GiB이므로 현 제한에서는 실행할 수 없습니다. 이후 사용자가 **새 L40S 인스턴스 1대·최대 4시간·추가 세전 US$20 예산**을 승인했습니다. 다른 세션의 인스턴스는 시작하거나 변경하지 않습니다. 예산 계산에는 예비비를 포함하지만 AWS 청구 자체를 강제로 제한하는 장치는 아닙니다.
+
+초기 CUDA 계획은 공식 Qwen3-8B BF16을 먼저 비교하고, 사전 관문을 통과하지 못하면 **같은 임대 안에서만** Qwen3-14B BF16을 비교하도록 했습니다. 개발 프로필 선택과 검증을 분리하고 두 시드를 유지하며, 검증 정답은 GPU 실행 묶음에 넣지 않습니다. MLX 4bit와 backend·정밀도가 모두 다르므로 결과 차이를 파라미터 수만의 효과로 해석하지 않습니다. 이 경로는 추론 비교용이며 학습이나 서비스 배포를 수행하지 않습니다.
+
+GPU 생성 요청 전 두 준비 오류를 확인했습니다. S3의 작업 인수에 중복된 endpoint 옵션을 넣어 정상적인 ‘설정 없음’ 응답을 잘못 거부했고, EC2의 `Workloads` 목록 순서만 바뀐 것을 하드웨어 변경으로 판정했습니다. 작업 인수를 정규화하고 해당 목록의 순서만 무시하도록 수정했습니다. 실제 기록된 목록 순서 변경은 통과하고 GPU 수·메모리·지원 용도 값 변경은 거부하는 스모크를 확인했습니다. 생성 전 조회 실패와 실제 생성 요청을 구분하며, 생성 가능성이 생긴 이후에는 새 승인처럼 재시도하지 않습니다. 원래 기록을 보존하는 명시적 미생성 복구 경로를 사용했습니다.
+
+업무 특화 학습을 하지 않은 공식 원본 [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B/tree/b968826d9c46dd6066d109eabc6255188de91218)와, 이후 별도 승인받은 [Qwen3-14B](https://huggingface.co/Qwen/Qwen3-14B/tree/40c069824f4251a91eefaf281ebe4c544efd3e18)의 **CUDA BF16 비교를 완료**했습니다. 각각 별도 L40S 임대에서 네 개발 프로필을 비교해 thinking을 선택했고, 모델별 두 검증 프로필 모두 같은 16문항의 답변을 끝까지 생성했습니다. 학습으로 얻은 개선이나 독립적인 최종 반입 검증 결과는 아닙니다.
+
+| 원본 모델 · thinking | 시드 | JSON 정답·완료 12문항 | 설명형 의미·문체·완료 4문항 | 중대 오류 문항 | 문항 생성 중앙값 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Qwen3-8B | 14 | 12/12 | 2/4 | 0 | 19.1초 |
+| Qwen3-8B | 29 | 12/12 | 2/4 | 1 | 19.6초 |
+| Qwen3-14B | 14 | 12/12 | 3/4 | 0 | 20.3초 |
+| Qwen3-14B | 29 | 12/12 | 1/4 | 1 | 22.0초 |
+
+시간은 각 검증 프로필 16문항의 `elapsed_seconds` 중앙값이며 웹서비스의 체감 응답시간 측정치는 아닙니다. 모델별 설명형 8개 답변은 각각 두 독립 AI 채점자가 평가했고 판정은 모두 일치했습니다. 14B는 모델·프로필·시드 식별 정보를 가린 별도 익명 패킷으로 채점했습니다. 8B는 과거 자료 파일명에 모델 크기가 드러날 수 있어 완전한 모델 블라인드로 표현하지 않습니다. 문체는 모두 통과했지만, 8B는 권장 사항·예외 없는 제한을 누락하거나 확인되지 않은 방문 접수 가능 여부를 단정했습니다. 14B도 사진 미첨부에 따른 접수 거절의 범위와 예외 없는 제한을 누락했고, 기한·제재 정보가 없는 진단문항에서 **“불이익이 발생할 가능성은 없습니다”라고 보장**했습니다. **두 시드 모두 설명형 3/4 이상·중대 오류 0이라는 사전 관문을 충족한 모델은 없으므로 특화 학습에 진입하지 않았습니다.** 이 작은 진단에서는 14B로 교체할 근거를 얻지 못했으며, 모델 전반의 우열이나 실제 기관 업무 정확도로 일반화하지 않습니다.
+
+첫 8B 임대에서는 14B 전환 명령의 저장은 성공했지만 **14B가 시작되지 않았습니다**. Worker가 명령 게시를 기다리면서 아직 없는 S3 객체를 바로 `GetObject`했고, 원래 역할에 `ListBucket` 권한이 없어 `AccessDenied`로 종료됐습니다. 명령 게시 성공을 실제 worker 수신·실행으로 간주하지 않습니다. 8B의 완료된 checkpoint와 원래 실패 기록은 보존했습니다. 그 임대의 GPU·root volume·IAM 역할/프로필·scheduler group·security group 삭제를 확인했으며 다른 세션의 리소스와 S3 보존 규칙은 변경하지 않았습니다. 위 14B 점수는 이 실패 phase가 아니라, 아래의 별도 승인·새 실행 계획으로 수행한 후속 임대에서 얻었습니다. 완료된 8B를 다시 실행하거나 과거 phase를 새 실행처럼 복사하지 않았습니다.
+
+전환 대기는 `ordered_hf_comparison.await_decision`에서 **정확한 명령 key를 prefix로 한 제한된 목록 조회 → 객체가 있을 때만 크기가 제한된 GET**으로 수정했습니다. 새 ordered 실행은 해당 prefix만 허용하는 `ListBucket` 정책을 사전에 요구하며, 권한 누락·넓은 목록 권한·실제 접근 거부는 거절합니다. 실제 과거 오류와 저장된 명령 바이트를 사용한 네트워크 없는 before/after 스모크에서 과거 코드는 즉시 실패하고 수정 코드는 대기 후 명령을 인증했습니다. 이 수정 당시 통합 검사 **197개 중 196개 통과·MLX 전용 1개 건너뜀**을 확인했습니다. 목록 요청이 추가되므로 **과거 비용 계산·IAM 관측·계획·승인을 재사용할 수 없습니다**. 후속 14B-only 경로에는 이 전환 채널이 없으므로, 수정된 8B→14B 전환 자체를 GPU에서 재검증한 것은 아닙니다.
+
+별도로 실제 tokenizer와 임의 초기화한 작은 Qwen3 모델로 CPU 추론 스모크도 수행했습니다. 이 CPU 스모크 자체는 GPU 실행·사전학습 모델 품질의 증거가 아니며, 위 점수는 실제 CUDA 출력에서 계산했습니다. **8B·14B 비교는 끝났지만, 특화 학습·독립 회귀 검증과 실제 반입 환경 검증은 완료하지 않았습니다.** 기준을 낮추거나 불합격 후보를 학습·배포·반입 승인으로 넘기지 않았고, `test.tridatum.co`의 모델도 교체하지 않았습니다.
+
+**별도 승인된 14B-only 후속 계약:** 이후 사용자가 승인한 **“14B만 진행 · 최대 US$20”**은 `trid-hf14-followup-v1` 계획과 `trid-hf14-followup-approval-v1` 승인으로 구분합니다. 새 L40S **1대·1회 임대·최대 4시간·추가 세전 US$20**만 허용하며 자동 추가 임대·연장이나 소비된 과거 승인 재사용은 허용하지 않습니다. 기존 ordered 8B→14B 경로와 별개이며, 과거 8B 관문 미달 증거는 해시로 결박한 **출처 기록만** 사용합니다. 8B 재실행·새 8B checkpoint·부모 전환 결정 채널 없이 `acquire14 → dev14 → val14`만 수행하고, 과거 runtime·phase·출력을 새 실행 증거로 복사하지 않습니다.
+
+후속 실행의 **실제 14B runtime·네 개발 프로필의 독립 선택·선정된 두 시드의 검증 영수증·해시와 정확한 구성 파일 목록을 인증한 export**를 확인했습니다. 검증 정답의 로컬 격리, 고정 입력·프로필·자원 한도와 단일 dispatch를 유지했습니다. GPU 인스턴스의 종료와 기록된 root volume의 삭제도 확인했습니다. native 실행 완료와 품질 관문 통과는 별개이며, 이번 완료를 학습 진입·배포·반입 승인으로 해석하지 않습니다.
+
+후속 14B 실행에 앞선 두 가격 사전 점검은 모두 인스턴스 생성 요청 전에 멈췄습니다. 첫 실패의 응답 본문은 저장되지 않았습니다. 이후 별도 1회 진단 조회를 기존 영수증과 비교했을 때 EBS 가격 상품의 최상위 `publicationDate`·`version`만 달랐고, SKU·상품 속성·요금 조건·가격 구간·통화·단가는 같았습니다. 게시 메타데이터를 제외한 다음 세대의 사전 점검도 생성 요청 전에 멈췄으며, 이후 등록된 나머지 가격을 각각 한 번 조회한 진단에서는 EC2의 미사용 Reserved 제안 12개의 `effectiveDate`만 달랐습니다. 상품·SKU·OnDemand 조건과 단가는 같았고 나머지 여섯 가격 fingerprint도 일치했습니다. 이 진단을 저장되지 않은 실패 응답 본문 자체로 간주하지 않습니다.
+
+가격 fingerprint는 [AWS 가격 파일 정의](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/reading-service-price-list-file-for-services.html)와 실제 OnDemand 임대 비용 계산에 맞춰 `on_demand_price_products_sha256`로 통일합니다. **각 상품의 최상위 `publicationDate`·`version`만 제외하고, `terms`에서는 실제 소비하는 비어 있지 않은 `OnDemand` 매핑만 결박**합니다. Reserved 제안은 구매하거나 비용 계산에 사용하지 않으므로 fingerprint에서 제외합니다. 나머지 상품 필드·SKU·`formatVersion`, 모든 OnDemand 조건과 가격 효력일 `effectiveDate`·구간·단위·통화·단가·중첩 필드, 상품 목록의 순서와 중복은 계속 비교합니다. OnDemand가 없거나 잘못된 형태면 거절하며 원본 조회 영수증의 바이트 해시는 보존합니다. 수정 후 통합 검사 **239개 중 238개 통과·MLX 전용 1개 건너뜀**을 확인했고, 실제 가격 응답 여덟 쌍을 사용한 스모크에서 소비하지 않는 제안의 갱신은 허용하고 실제 단가 변경은 거부했습니다. 모델 품질 판정은 이 코드 검사와 분리해 위 CUDA 결과로 수행했습니다.
+
+근거 파일: 기존 `runs/mois-ordered-models-20261113T062501Z/`의 `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`, `gpu8-checkpoint-scored.json`, `gpu8-prose-aggregate.json`, `stage-two-result.json`, `ordered-execution-state/generation-3/controller-result.json`, `owned-cleanup-actual-v1/result.json`; 후속 `runs/mois-fourteen-followup-20261114T014951Z/`의 `gpu14-final-scored.json`, `gpu14-prose-aggregate.json`, `gpu14-qualification.json`, `fourteen-execution-state/generation-3/controller-result.json`, `on-demand-pricing-smoke.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
+
+#### 8B 실험 학습 준비 · GPU 미사용
+
+사용자가 선택한 후속 작업은 **8B를 실험용 후보로 고정한 로컬 학습 준비**입니다. 원본의 기존 불합격 판정이나 최종 검증 기준을 바꾸지 않았으며, 8B 사전학습 가중치의 추가 학습·GPU 임대·배포는 수행하지 않았습니다. 대상은 위 공식 Qwen3-8B revision이며 기존 `grounded_messages` 입력 경로를 재사용합니다.
+
+| 자료 | 문항 | 문서군 | 최대 전체 토큰 |
+| --- | ---: | ---: | ---: |
+| 학습용 | 24 | 2 | 1,354 |
+| 개발용 | 8 | 1 | 1,334 |
+
+전체 토큰은 입력+정답+EOS입니다. 조건의 동시 충족, 예외 범위, 의무와 재량의 구별, 정보 부족의 경계를 다루는 새 질문·설명형 정답을 만들었습니다. 시험·채용 문서군은 학습용, 계약 문서군은 개발용으로 분리했습니다. **계약 문서군은 과거 다른 실험의 TRAIN에 노출됐으므로, 이번 실험 안에서만 문서군이 분리된 개발 자료이며 독립 최종 평가가 아닙니다.** 예약된 평가 질문·정답을 새 학습·개발 자료로 사용하지 않았습니다.
+
+- 두 독립 AI 검토에서 발견한 조건·자격 범위 누락을 보완했습니다. 네 정답을 수정하고 나머지 28개의 입력·정답 동일성을 확인했으며, 최종 32개 모두 두 검토를 통과했습니다. 이는 **저작된 정답 자료의 검토 결과이지 모델 정답률이 아닙니다.**
+- 1,000개 예약 문서군의 메타데이터, 네 서명 묶음, 고정 평가 원문의 서명과 대조했습니다. 설정된 기준의 일치·후보 부분 일치 보고는 없었지만, 별도 세부 대조에서 채용 문항의 근거에 일반적인 자격 표현의 8단어 서명 3개가 공유됨을 확인했습니다. 출처 검토에서 좁게 판정한 예외이며 **겹침이 전혀 없다는 주장이나 문서군 전체의 사용 허가가 아닙니다.** 긴급채용·별지 등 기존 제외 범위와 수집본의 현행성 제한은 유지합니다.
+- 실제 8B 토크나이저로 전체 입력 마스킹, 현재 정답+EOS만의 감독, 3,072 문맥·768 정답 토큰 한도를 확인했습니다. 누락·잘라내기 없이 32개가 통과했습니다. 기존 HF trainer는 `enable_thinking=False`이므로 **non-thinking SFT 준비**이며, 이후 학습 효과는 같은 설정의 원본·학습본으로 비교해야 합니다. 앞의 thinking 점수를 그대로 학습 전 기준점으로 쓰지 않습니다.
+- 임의 초기화한 소형 Qwen3를 CPU에서만 사용해 최장 학습 입력의 실제 `batch_loss`·역전파·AdamW 1단계와 최장 개발 입력의 loss 계산을 실행했습니다. **8B 모델의 학습 성공·메모리 용량·답변 성능을 검증한 것은 아닙니다.**
+
+`scripts/prepare_grounded_experiment.py`는 `materialize`, `audit`, `cpu-random-smoke`를 제공합니다. `materialize`는 명시적인 `--contract-sha256`을 요구하며, 기존 trainer가 읽는 해시 고정 manifest의 `valid`에 개발 자료를 넣습니다. 기존 서빙 검증에서 거절되는 정답과 ID·행동 분류만 다른 동일 입력/정답을 거부합니다. 서빙의 수치·인용 검사를 의미적 정확성 검사로 바꾸어 부르지 않습니다. **관련 통합 테스트 40개 통과**와 실제 자료의 실패 전/수정 후 검사를 확인했습니다.
+
+보유한 로컬 입력으로 토큰·입력 계약을 다시 확인하려면 새 출력 파일을 지정합니다. 아래 명령은 가중치를 읽거나 학습하지 않습니다.
+
+```bash
+P=runs/mois-eight-experiment-prep-20261114T053819Z
+runs/mois-grounded-training-20261112T081606Z/verification-venv/bin/python \
+  scripts/prepare_grounded_experiment.py audit \
+  --manifest "$P/materialized-v2/native-train-manifest.json" \
+  --tokenizer runs/mois-ordered-models-20261113T062501Z/qwen8-native-metadata \
+  --context 3072 --answer-tokens 768 --output "$P/native-data-audit-replay.json"
+```
+
+최종 준비 기록은 해당 실행 폴더의 `preparation-result.json`입니다. `semantic-review-aggregate-v2.json`, `source-reservation-admission-v2.json`, `source-partial-overlap-attribution-v2.json`, `cpu-random-smoke-v2.json`, `preparation-code-review-v2.json`에 근거를 보관합니다. 최초 후보·검토 실패·수정 전 코드도 보존했습니다. 후보 생성 시점의 `NOT_ADMITTED` 기록과 별도로 **로컬 입력 준비만 마감**했으며, 실제 학습에는 새 실행 계획과 한도가 정해진 승인이 필요합니다. 마지막 checkpoint를 최선으로 간주하거나 학습 loss만으로 모델을 선택하지 않습니다.
 
 ### Packed-head 학습 엔진
 

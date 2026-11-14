@@ -24,7 +24,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from grounded_hf_lifecycle import (LIMITS, MAX_EXPORT, Client, authenticate_archive,
     canonical, digest, exclusive_intent, object_sha, pins, read_bound, relative,
     remaining, require, save, timestamp, validate_data, validate_cost_admission, validate_bootstrap_admission,
-    verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml)
+    verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml,
+    inference_mode, followup_mode)
+
+
+def ordered_module(plan):
+    if inference_mode(plan):
+        import ordered_hf_comparison
+        return ordered_hf_comparison
+    return None
 
 
 class DownloadRedirects(urllib.request.HTTPRedirectHandler):
@@ -113,8 +121,10 @@ def gpu_observation(deadline, *, with_usage=False):
 
 
 def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
-    require(phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter') and 0 < seconds <= 12600,
-            'Invalid phase/deadline')
+    ordered = ordered_module(plan)
+    allowed = (phase == 'runtime' or ordered.phase_kind(plan, phase) is not None) if ordered else (
+        phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter'))
+    require(allowed and 0 < seconds <= 12600, 'Invalid phase/deadline')
     base = Path(base)
     unit = plan['identity']['run_id'] + '-' + phase
     properties = ['Type=exec', 'RemainAfterExit=yes', 'KillMode=control-group', 'SendSIGKILL=yes', 'TimeoutStopSec=10',
@@ -127,12 +137,18 @@ def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
         'InaccessiblePaths=/root /home /run/credentials /var/lib/cloud',
         f'StandardOutput=append:{base / "output" / (phase + ".log")}',
         f'StandardError=append:{base / "output" / (phase + ".log")}']
-    properties += [f'DeviceAllow={path} rw' for path in
-                   [f'/dev/nvidia{gpu["minor"]}', '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-uvm-tools']]
+    selector = ordered is not None and ordered.phase_kind(plan, phase) == 'select'
+    if ordered:
+        hidden = [base / 'model'] if selector else [
+            base / 'code' / plan['workload']['development_references']['path']]
+        properties.append('InaccessiblePaths=' + ' '.join(str(path) for path in hidden))
+    if not selector:
+        properties += [f'DeviceAllow={path} rw' for path in
+                       [f'/dev/nvidia{gpu["minor"]}', '/dev/nvidiactl', '/dev/nvidia-uvm', '/dev/nvidia-uvm-tools']]
     argv = ['systemd-run', '--quiet', '--unit', unit, '--uid', str(uid), '--gid', str(gid)]
     for prop in properties:
         argv += ['--property', prop]
-    for value in [f'CUDA_VISIBLE_DEVICES={gpu["uuid"]}', 'HF_HUB_OFFLINE=1', 'TRANSFORMERS_OFFLINE=1',
+    for value in [f'CUDA_VISIBLE_DEVICES={"" if selector else gpu["uuid"]}', 'HF_HUB_OFFLINE=1', 'TRANSFORMERS_OFFLINE=1',
                   'HF_DATASETS_OFFLINE=1', 'AWS_EC2_METADATA_DISABLED=true', 'PYTHONDONTWRITEBYTECODE=1',
                   'TOKENIZERS_PARALLELISM=false', 'OMP_NUM_THREADS=6', 'MKL_NUM_THREADS=6',
                   f'HF_HOME={base / "output" / "cache"}', f'TMPDIR={base / "output" / "tmp"}',
@@ -183,13 +199,21 @@ def stop_unit(unit, run, deadline):
     return stopped
 
 
-def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units):
+def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, seconds=None):
     """External GPU/cgroup guard remains root-owned, outside the native child."""
+    ordered = ordered_module(plan)
     run = plan['identity']['run_id']
     unit = run + '-' + phase
     old = unit_state(unit, deadline)
     require(old['LoadState'] == 'not-found', 'Stage unit already exists; no reuse')
-    seconds = min(60 if phase == 'runtime' else plan['phase_seconds'][phase], int(remaining(deadline)) - 15)
+    if phase == 'runtime':
+        allocation = 60
+    elif seconds is not None:
+        allocation = seconds
+    else:
+        allocations = plan['workload']['phase_seconds'] if ordered else plan['phase_seconds']
+        allocation = allocations[phase]
+    seconds = min(allocation, int(remaining(deadline)) - 15)
     require(seconds > 0, 'Insufficient stop reserve')
     verify_gpu_observation(gpu_observation(deadline), plan, gpu)
     # Record ownership before dispatch: a lost systemd-run response is ambiguous.
@@ -205,13 +229,19 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units):
             require(state['MemoryMax'] == str(LIMITS['rss_bytes']) and state['MemorySwapMax'] == '0'
                     and state['DevicePolicy'] == 'closed' and state['User'] == str(uid)
                     and state['Group'] == str(gid), 'Effective native cgroup/user boundary differs')
+            if ordered and ordered.phase_kind(plan, phase) == 'inference':
+                ordered.check_question_deadline(Path(base) / 'output' / (phase + '-receipt.json'))
             observed, used = gpu_observation(phase_deadline, with_usage=True)
             verify_gpu_observation(observed, plan, gpu)
             require(used <= LIMITS['gpu_bytes'], 'External 42GiB GPU cap exceeded')
             if state['ActiveState'] in ('inactive', 'failed') or state.get('SubState') == 'exited':
                 require(cgroup_empty(state) and state['Result'] == 'success' and state['ExecMainStatus'] == '0',
                         'Native stage failed: ' + phase + ': ' + str(state))
-                return dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
+                receipt = dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
+                if followup_mode(plan):
+                    receipt.update(run_id=run, plan_sha256=digest(Path(base) / 'plan.json'),
+                                   instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
+                return receipt
             time.sleep(0.5)
     finally:
         stop_unit(unit, run, min(deadline + 15, time.time() + 30))
@@ -269,9 +299,17 @@ def export_outputs(base, plan, report, deadline):
     return dict(path=target, bytes=target.stat().st_size, sha256=digest(target), manifest=manifest)
 
 
-def install_network_cap(plan, deadline):
+def install_network_cap(plan, deadline, base):
     # An actual packet-byte gate, not a billing alert. Fail if quota extension is
     # unavailable. All host outbound traffic shares the conservative allowance.
+    base = Path(base)
+    owner = base / 'bootstrap-network-owner'
+    info = owner.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+            and info.st_uid == os.geteuid() and info.st_mode & 0o077 == 0
+            and owner.read_text() == plan['identity']['run_id'] + '\n' + digest(base / 'plan.json') + '\n',
+            'Bootstrap network quota ownership differs')
+    command(['nft', 'list', 'table', 'inet', 'trid_bootstrap'], deadline)
     chain = 'TRID_' + hashlib.sha256(plan['identity']['run_id'].encode()).hexdigest()[:12]
     command(['iptables', '-N', chain], deadline)
     command(['iptables', '-A', chain, '-m', 'quota', '--quota',
@@ -280,6 +318,9 @@ def install_network_cap(plan, deadline):
     command(['iptables', '-I', 'OUTPUT', '1', '!', '-d', '127.0.0.0/8', '-j', chain], deadline)
     # IPv6 must not bypass the registered IPv4/egress model.
     command(['ip6tables', '-P', 'OUTPUT', 'DROP'], deadline)
+    # Both full-family gates must be active before releasing the smaller
+    # bootstrap quota. Any earlier failure leaves that quota in force.
+    command(['nft', 'delete', 'table', 'inet', 'trid_bootstrap'], deadline)
 
 
 def extract_bootstrap_member(archive_path, pin, target):
@@ -394,6 +435,7 @@ def install_pinned_runtime(plan, base, deadline):
 
 def bootstrap(plan, plan_sha, base):
     require(os.geteuid() == 0 and platform.machine() == 'x86_64', 'Root x86_64 supervisor required')
+    ordered = ordered_module(plan)
     base = Path(base)
     require(base == Path('/opt/trid-' + plan['identity']['run_id']) and not base.is_symlink(), 'Owned bootstrap root differs')
     exclusive_intent(base / 'bootstrap-dispatch.json', dict(plan_sha256=plan_sha))
@@ -410,7 +452,9 @@ def bootstrap(plan, plan_sha, base):
     shutdown_at = dt.datetime.fromtimestamp(deadline - 60).strftime('%H:%M')
     command(['/sbin/shutdown', '-c'], initial_deadline)
     command(['/sbin/shutdown', '-h', shutdown_at], initial_deadline)
-    report = dict(training_success=False, stages=[], run_id=ident['run_id'],
+    success_key = 'inference_success' if ordered else 'training_success'
+    report = {success_key: False}
+    report.update(stages=[], run_id=ident['run_id'],
                   instance_id=identity['instanceId'], plan_sha256=plan_sha)
     units, export, client = [], None, Client(ident, deadline=deadline - 30, request_limit=plan['cost']['get_requests'] + 8)
     try:
@@ -419,7 +463,7 @@ def bootstrap(plan, plan_sha, base):
         validate_data(base / 'code', plan)
         validate_cost_admission(base / 'code', plan)
         bootstrap_admission = validate_bootstrap_admission(base / 'code', plan)
-        install_network_cap(plan, initial_deadline)
+        install_network_cap(plan, initial_deadline, base)
         ticket = None
         for attempt in range(120):
             require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 600),
@@ -434,15 +478,17 @@ def bootstrap(plan, plan_sha, base):
         require(ticket is not None, 'No independently verified termination ticket; no bootstrap downloads')
         deadline = verify_termination_ticket(ticket, plan, plan_sha, identity['instanceId'], time.time())
         client.deadline = deadline - 30
-        acquisition_deadline = min(deadline - 1800, time.time() + plan['phase_seconds']['acquire'])
+        acquire_phase = 'acquire14' if followup_mode(plan) else ('acquire8' if ordered else 'acquire')
+        allocations = plan['workload']['phase_seconds'] if ordered else plan['phase_seconds']
+        acquisition_deadline = min(deadline - 1800, time.time() + allocations[acquire_phase])
         budget = [plan['cost']['download_requests']]
         prerequisites = prepare_bootstrap_dependencies(plan, base, bootstrap_admission, acquisition_deadline, budget, units)
         gpu = gpu_observation(acquisition_deadline)
         verify_gpu_observation(gpu, plan)
         ready = dict(run_id=ident['run_id'], plan_sha256=plan_sha, instance_id=identity['instanceId'],
                      gpu=gpu, prerequisites=prerequisites)
-        require(len(canonical(ready)) <= 1024**2, 'Readiness receipt exceeds reserved envelope')
         save(base / 'ready.json', ready)
+        require((base / 'ready.json').stat().st_size <= 1024**2, 'Readiness receipt exceeds reserved envelope')
         client('s3api', 'put-object', '--bucket', ident['bucket'], '--key', ident['output_prefix'] + 'ready.json',
                '--body', str(base / 'ready.json'), '--if-none-match', '*', '--server-side-encryption', 'AES256')
         release = None
@@ -498,22 +544,26 @@ def bootstrap(plan, plan_sha, base):
         report['runtime_unit'] = supervise_phase(plan, base, 'runtime', gpu, account.pw_uid, account.pw_gid,
                                                  acquisition_deadline, units)
         report['runtime'] = json.loads((base / 'output/runtime.json').read_text())
-        for row in plan['model']['files']:
-            download(row, base / 'model', hosts, acquisition_deadline, budget)
-        validate_model(base / 'model', plan)
-        for path in (base / 'model').iterdir():
-            path.chmod(0o444)
-        for phase in ('capacity', 'baseline', 'train', 'adapter'):
-            report['stages'].append(supervise_phase(plan, base, phase, gpu, account.pw_uid, account.pw_gid, work_deadline, units))
-            if phase == 'capacity':
-                # Never inherit the synthetic adapter, optimizer, or RNG process.
-                shutil.rmtree(base / 'output' / 'capacity')
-                receipt_path = base / 'output/capacity-receipt.json'
-                receipt = json.loads(receipt_path.read_text())
-                require(not (base / 'output/capacity').exists(), 'Synthetic capacity artifacts remain')
-                receipt['discarded'] = True
-                save(receipt_path, receipt)
-        report['training_success'] = True
+        if ordered:
+            ordered.run_ordered(sys.modules[__name__], plan, base, report, client, gpu, account,
+                                work_deadline, acquisition_deadline, budget, hosts, units)
+        else:
+            for row in plan['model']['files']:
+                download(row, base / 'model', hosts, acquisition_deadline, budget)
+            validate_model(base / 'model', plan)
+            for path in (base / 'model').iterdir():
+                path.chmod(0o444)
+            for phase in ('capacity', 'baseline', 'train', 'adapter'):
+                report['stages'].append(supervise_phase(plan, base, phase, gpu, account.pw_uid, account.pw_gid, work_deadline, units))
+                if phase == 'capacity':
+                    # Never inherit the synthetic adapter, optimizer, or RNG process.
+                    shutil.rmtree(base / 'output' / 'capacity')
+                    receipt_path = base / 'output/capacity-receipt.json'
+                    receipt = json.loads(receipt_path.read_text())
+                    require(not (base / 'output/capacity').exists(), 'Synthetic capacity artifacts remain')
+                    receipt['discarded'] = True
+                    save(receipt_path, receipt)
+        report[success_key] = True
     except BaseException as exc:
         report['error'] = f'{type(exc).__name__}: {exc}'
     finally:
@@ -524,7 +574,7 @@ def bootstrap(plan, plan_sha, base):
             except Exception as exc:
                 report['stop_errors'].append(str(exc))
         if report['stop_errors']:
-            report['training_success'] = False
+            report[success_key] = False
         try:
             require(not report['stop_errors'], 'Export forbidden while an owned process remains unresolved')
             if (base / 'output/capacity').exists():
@@ -541,8 +591,8 @@ def bootstrap(plan, plan_sha, base):
         except Exception as exc:
             report['export_error'] = str(exc)
         try:
-            require(len(canonical(report)) <= 1024**2, 'Completion receipt exceeds reserved envelope')
             save(base / 'completion.json', report)
+            require((base / 'completion.json').stat().st_size <= 1024**2, 'Completion receipt exceeds reserved envelope')
             client('s3api', 'put-object', '--bucket', ident['bucket'], '--key', ident['output_prefix'] + 'completion.json',
                    '--body', str(base / 'completion.json'), '--if-none-match', '*', '--server-side-encryption', 'AES256')
         finally:
@@ -588,7 +638,7 @@ def native_runtime(plan, base):
     # total. Use it only to express the unchanged absolute 40GiB allocator cap.
     torch.cuda.set_per_process_memory_fraction(LIMITS['allocator_bytes'] / gpu.total_memory, 0)
     torch.set_num_threads(6)
-    torch.manual_seed(plan['recipe']['seed'])
+    torch.manual_seed(14 if ordered_module(plan) else plan['recipe']['seed'])
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -601,8 +651,12 @@ def runtime_stage(plan, base):
     expected = {k.lower().replace('_', '-'): v for k, v in plan['runtime']['packages'].items()}
     require(actual == expected, 'Installed package inventory differs (including transitive/bootstrap distributions)')
     torch = native_runtime(plan, base)
-    save(Path(base) / 'output/runtime.json', dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
-        count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0)))
+    receipt = dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
+        count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0))
+    if followup_mode(plan):
+        receipt.update(run_id=plan['identity']['run_id'], plan_sha256=digest(Path(base) / 'plan.json'),
+                       instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
+    save(Path(base) / 'output/runtime.json', receipt)
 
 
 def trainer_module(base):
@@ -807,7 +861,7 @@ def evaluation_stage(plan, base, torch, adapter):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=('bootstrap', 'runtime', 'capacity', 'baseline', 'train', 'adapter'))
+    parser.add_argument('phase')
     parser.add_argument('--plan', type=Path, required=True)
     parser.add_argument('--plan-sha256', required=True)
     parser.add_argument('--base', type=Path, required=True)
@@ -820,6 +874,11 @@ def main():
     if args.phase == 'runtime':
         runtime_stage(plan, args.base)
         return
+    ordered = ordered_module(plan)
+    if ordered:
+        ordered.child_stage(sys.modules[__name__], plan, args.base, args.phase)
+        return
+    require(args.phase in ('capacity', 'baseline', 'train', 'adapter'), 'Unknown training stage')
     validate_model(args.base / 'model', plan)
     torch = native_runtime(plan, args.base)
     if args.phase == 'capacity':

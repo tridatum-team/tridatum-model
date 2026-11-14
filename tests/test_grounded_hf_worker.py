@@ -11,11 +11,12 @@ import tempfile
 from types import SimpleNamespace
 import tarfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/aws_eval'))
 import grounded_hf_worker as W
+import grounded_hf_lifecycle as L
 
 
 class RuntimeBoundaryTests(unittest.TestCase):
@@ -41,6 +42,117 @@ class RuntimeBoundaryTests(unittest.TestCase):
              patch.dict(W.os.environ, {'AWS_SECRET_ACCESS_KEY': 'synthetic-unit-test'}, clear=True):
             with self.assertRaisesRegex(RuntimeError, 'nonroot without cloud credentials'):
                 W.native_runtime({}, '.')
+
+    def test_followup_runtime_receipt_binds_current_run_plan_and_instance(self):
+        distribution = SimpleNamespace(metadata={'Name': 'torch'}, version='fixture')
+        torch = SimpleNamespace(__version__='fixture', version=SimpleNamespace(cuda='fixture-cuda'),
+                                cuda=Mock())
+        torch.cuda.device_count.return_value = 1
+        torch.cuda.is_bf16_supported.return_value = True
+        torch.cuda.get_device_name.return_value = 'fixture-L40S'
+        plan = dict(schema=L.FOLLOWUP_SCHEMA, identity={'run_id': 'followup-runtime'},
+                    runtime={'packages': {'torch': 'fixture'}})
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'output').mkdir()
+            (base / 'plan.json').write_text(json.dumps(plan))
+            (base / 'release.json').write_text(json.dumps({'instance_id': 'i-new-followup'}))
+            with patch.object(importlib.metadata, 'distributions', return_value=[distribution]), \
+                    patch.object(W, 'native_runtime', return_value=torch) as native:
+                W.runtime_stage(plan, base)
+            native.assert_called_once_with(plan, base)
+            receipt = json.loads((base / 'output/runtime.json').read_text())
+            self.assertEqual(receipt, dict(
+                run_id='followup-runtime', plan_sha256=W.digest(base / 'plan.json'),
+                instance_id='i-new-followup', packages={'torch': 'fixture'}, torch='fixture',
+                cuda='fixture-cuda', count=1, bf16=True, name='fixture-L40S'))
+
+    def test_followup_missing_current_release_never_writes_runtime_receipt(self):
+        torch = SimpleNamespace(__version__='fixture', version=SimpleNamespace(cuda='fixture-cuda'),
+                                cuda=Mock())
+        plan = dict(schema=L.FOLLOWUP_SCHEMA, identity={'run_id': 'followup-runtime'},
+                    runtime={'packages': {}})
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'output').mkdir()
+            (base / 'plan.json').write_text(json.dumps(plan))
+            with patch.object(importlib.metadata, 'distributions', return_value=[]), \
+                    patch.object(W, 'native_runtime', return_value=torch):
+                with self.assertRaises(FileNotFoundError):
+                    W.runtime_stage(plan, base)
+            self.assertFalse((base / 'output/runtime.json').exists())
+
+
+class FollowupSupervisionTests(unittest.TestCase):
+    def exercise_runtime(self, failure=None):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'output').mkdir()
+            plan = dict(schema=L.FOLLOWUP_SCHEMA, identity={'run_id': 'followup-supervisor'},
+                        workload=dict(models={'qwen14': {}}, profiles=[],
+                                      development_references={'path': 'dev-references.json'}))
+            (base / 'plan.json').write_text(json.dumps(plan))
+            (base / 'release.json').write_text(json.dumps({'instance_id': 'i-new-followup'}))
+            unit = 'followup-supervisor-runtime'
+            gpu = dict(uuid='GPU-followup', minor=0)
+            exited = dict(LoadState='loaded', ActiveState='inactive', SubState='exited',
+                          Result='exit-code' if failure == 'native' else 'success',
+                          ExecMainStatus='1' if failure == 'native' else '0',
+                          Environment='TRID_OWNED_RUN=followup-supervisor', InvocationID='new-invocation',
+                          MemoryMax=str(W.LIMITS['rss_bytes']), MemorySwapMax='0',
+                          DevicePolicy='closed', User='1001', Group='1001')
+            states = [{'LoadState': 'not-found'}]
+            if failure != 'dispatch':
+                states.append(exited)
+            # Even if systemd has forgotten the unit, the durable intent forbids replay.
+            states.append({'LoadState': 'not-found'})
+            units = []
+            with patch.object(W.time, 'time', return_value=1000), \
+                    patch.object(W, 'unit_state', side_effect=states), \
+                    patch.object(W, 'gpu_observation', side_effect=lambda deadline, **kw:
+                                 (gpu, 0) if kw.get('with_usage') else gpu), \
+                    patch.object(W, 'verify_gpu_observation'), \
+                    patch.object(W, 'command') as command, \
+                    patch.object(W, 'stop_unit') as stop:
+                if failure == 'dispatch':
+                    command.side_effect = RuntimeError('lost systemd response')
+                if failure:
+                    with self.assertRaisesRegex(RuntimeError, 'lost systemd response|Native stage failed'):
+                        W.supervise_phase(plan, base, 'runtime', gpu, 1001, 1001, 2000, units)
+                else:
+                    receipt = W.supervise_phase(plan, base, 'runtime', gpu, 1001, 1001, 2000, units)
+                    self.assertEqual(receipt, dict(phase='runtime', state='complete', unit=unit,
+                        invocation='new-invocation', gpu=gpu, run_id=plan['identity']['run_id'],
+                        plan_sha256=W.digest(base / 'plan.json'), instance_id='i-new-followup'))
+                command.assert_called_once()
+                argv, deadline = command.call_args.args
+                self.assertEqual(argv[argv.index('--unit') + 1], unit)
+                self.assertIn('RuntimeMaxSec=60', argv)
+                self.assertEqual(deadline, 2000)
+                marker = base / 'runtime-dispatch.json'
+                original = marker.read_bytes()
+                self.assertEqual(json.loads(original), dict(unit=unit,
+                    plan_sha256=W.digest(base / 'plan.json')))
+                with self.assertRaises(FileExistsError):
+                    W.supervise_phase(plan, base, 'runtime', gpu, 1001, 1001, 2000, units)
+                command.assert_called_once()
+                self.assertEqual(marker.read_bytes(), original)
+                if failure == 'dispatch':
+                    self.assertEqual(units, [unit], 'Ambiguous dispatch remains owned for outer cleanup')
+                    stop.assert_not_called()
+                else:
+                    self.assertEqual(units, [])
+                    stop.assert_called_once_with(unit, plan['identity']['run_id'], 1030)
+
+    def test_followup_runtime_supervisor_records_current_identity_and_cannot_replay(self):
+        self.exercise_runtime()
+
+    def test_followup_lost_dispatch_response_never_retries(self):
+        self.exercise_runtime('dispatch')
+
+    def test_followup_failed_native_stage_stops_without_retry(self):
+        self.exercise_runtime('native')
+
 
 class BootstrapObservationTests(unittest.TestCase):
     def test_observed_command_hash_must_match_explicit_expectation(self):
