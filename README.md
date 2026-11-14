@@ -300,6 +300,37 @@ GPU 생성 요청 전 두 준비 오류를 확인했습니다. S3의 작업 인�
 
 근거 파일: 기존 `runs/mois-ordered-models-20261113T062501Z/`의 `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`, `gpu8-checkpoint-scored.json`, `gpu8-prose-aggregate.json`, `stage-two-result.json`, `ordered-execution-state/generation-3/controller-result.json`, `owned-cleanup-actual-v1/result.json`; 후속 `runs/mois-fourteen-followup-20261114T014951Z/`의 `gpu14-final-scored.json`, `gpu14-prose-aggregate.json`, `gpu14-qualification.json`, `fourteen-execution-state/generation-3/controller-result.json`, `on-demand-pricing-smoke.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
 
+#### 8B 실험 학습 준비 · GPU 미사용
+
+사용자가 선택한 후속 작업은 **8B를 실험용 후보로 고정한 로컬 학습 준비**입니다. 원본의 기존 불합격 판정이나 최종 검증 기준을 바꾸지 않았으며, 8B 사전학습 가중치의 추가 학습·GPU 임대·배포는 수행하지 않았습니다. 대상은 위 공식 Qwen3-8B revision이며 기존 `grounded_messages` 입력 경로를 재사용합니다.
+
+| 자료 | 문항 | 문서군 | 최대 전체 토큰 |
+| --- | ---: | ---: | ---: |
+| 학습용 | 24 | 2 | 1,354 |
+| 개발용 | 8 | 1 | 1,334 |
+
+전체 토큰은 입력+정답+EOS입니다. 조건의 동시 충족, 예외 범위, 의무와 재량의 구별, 정보 부족의 경계를 다루는 새 질문·설명형 정답을 만들었습니다. 시험·채용 문서군은 학습용, 계약 문서군은 개발용으로 분리했습니다. **계약 문서군은 과거 다른 실험의 TRAIN에 노출됐으므로, 이번 실험 안에서만 문서군이 분리된 개발 자료이며 독립 최종 평가가 아닙니다.** 예약된 평가 질문·정답을 새 학습·개발 자료로 사용하지 않았습니다.
+
+- 두 독립 AI 검토에서 발견한 조건·자격 범위 누락을 보완했습니다. 네 정답을 수정하고 나머지 28개의 입력·정답 동일성을 확인했으며, 최종 32개 모두 두 검토를 통과했습니다. 이는 **저작된 정답 자료의 검토 결과이지 모델 정답률이 아닙니다.**
+- 1,000개 예약 문서군의 메타데이터, 네 서명 묶음, 고정 평가 원문의 서명과 대조했습니다. 설정된 기준의 일치·후보 부분 일치 보고는 없었지만, 별도 세부 대조에서 채용 문항의 근거에 일반적인 자격 표현의 8단어 서명 3개가 공유됨을 확인했습니다. 출처 검토에서 좁게 판정한 예외이며 **겹침이 전혀 없다는 주장이나 문서군 전체의 사용 허가가 아닙니다.** 긴급채용·별지 등 기존 제외 범위와 수집본의 현행성 제한은 유지합니다.
+- 실제 8B 토크나이저로 전체 입력 마스킹, 현재 정답+EOS만의 감독, 3,072 문맥·768 정답 토큰 한도를 확인했습니다. 누락·잘라내기 없이 32개가 통과했습니다. 기존 HF trainer는 `enable_thinking=False`이므로 **non-thinking SFT 준비**이며, 이후 학습 효과는 같은 설정의 원본·학습본으로 비교해야 합니다. 앞의 thinking 점수를 그대로 학습 전 기준점으로 쓰지 않습니다.
+- 임의 초기화한 소형 Qwen3를 CPU에서만 사용해 최장 학습 입력의 실제 `batch_loss`·역전파·AdamW 1단계와 최장 개발 입력의 loss 계산을 실행했습니다. **8B 모델의 학습 성공·메모리 용량·답변 성능을 검증한 것은 아닙니다.**
+
+`scripts/prepare_grounded_experiment.py`는 `materialize`, `audit`, `cpu-random-smoke`를 제공합니다. `materialize`는 명시적인 `--contract-sha256`을 요구하며, 기존 trainer가 읽는 해시 고정 manifest의 `valid`에 개발 자료를 넣습니다. 기존 서빙 검증에서 거절되는 정답과 ID·행동 분류만 다른 동일 입력/정답을 거부합니다. 서빙의 수치·인용 검사를 의미적 정확성 검사로 바꾸어 부르지 않습니다. **관련 통합 테스트 40개 통과**와 실제 자료의 실패 전/수정 후 검사를 확인했습니다.
+
+보유한 로컬 입력으로 토큰·입력 계약을 다시 확인하려면 새 출력 파일을 지정합니다. 아래 명령은 가중치를 읽거나 학습하지 않습니다.
+
+```bash
+P=runs/mois-eight-experiment-prep-20261114T053819Z
+runs/mois-grounded-training-20261112T081606Z/verification-venv/bin/python \
+  scripts/prepare_grounded_experiment.py audit \
+  --manifest "$P/materialized-v2/native-train-manifest.json" \
+  --tokenizer runs/mois-ordered-models-20261113T062501Z/qwen8-native-metadata \
+  --context 3072 --answer-tokens 768 --output "$P/native-data-audit-replay.json"
+```
+
+최종 준비 기록은 해당 실행 폴더의 `preparation-result.json`입니다. `semantic-review-aggregate-v2.json`, `source-reservation-admission-v2.json`, `source-partial-overlap-attribution-v2.json`, `cpu-random-smoke-v2.json`, `preparation-code-review-v2.json`에 근거를 보관합니다. 최초 후보·검토 실패·수정 전 코드도 보존했습니다. 후보 생성 시점의 `NOT_ADMITTED` 기록과 별도로 **로컬 입력 준비만 마감**했으며, 실제 학습에는 새 실행 계획과 한도가 정해진 승인이 필요합니다. 마지막 checkpoint를 최선으로 간주하거나 학습 loss만으로 모델을 선택하지 않습니다.
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.
