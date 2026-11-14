@@ -267,10 +267,21 @@ def object_sha(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
-def price_products_sha256(products):
-    """Pin ordered price products, excluding only catalog publication metadata."""
-    return object_sha([{key: value for key, value in product.items()
-                        if key not in ('publicationDate', 'version')} for product in products])
+def on_demand_price_products_sha256(products):
+    """Pin ordered products and consumed OnDemand terms, not unused offers."""
+    require(isinstance(products, list) and products, 'Nonempty price product list required')
+    normalized = []
+    for product in products:
+        require(isinstance(product, dict) and isinstance(product.get('terms'), dict),
+                'Price product requires a terms mapping')
+        on_demand = product['terms'].get('OnDemand')
+        require(isinstance(on_demand, dict) and on_demand
+                and all(isinstance(term, dict) and term for term in on_demand.values()),
+                'Price product requires nonempty OnDemand offer mappings')
+        normalized.append({**{key: value for key, value in product.items()
+                              if key not in ('publicationDate', 'version', 'terms')},
+                           'terms': {'OnDemand': on_demand}})
+    return object_sha(normalized)
 
 
 def relative(name):
@@ -1294,11 +1305,12 @@ def live_preflight(plan, client):
             json.dumps([dict(Type='TERM_MATCH', Field=k, Value=v) for k, v in query['filters'].items()]),
             region='us-east-1')
         products = [json.loads(s) for s in result['PriceList']]
-        require(products and price_products_sha256(products) == query['products_sha256'], 'Price product evidence changed')
+        require(on_demand_price_products_sha256(products) == query['products_sha256'],
+                'Price product evidence changed: ' + category)
         values = [float(d['pricePerUnit']['USD']) for p in products for term in p.get('terms', {}).get('OnDemand', {}).values()
                   for d in term['priceDimensions'].values() if d['unit'] == query['unit']]
         require(values and all(math.isfinite(v) and v >= 0 for v in values)
-                and max(values) == plan['cost']['rates'][category], 'Live price rate differs')
+                and max(values) == plan['cost']['rates'][category], 'Live price rate differs: ' + category)
     return dict(caller=caller, cost=cost_bound(plan), bucket_policy_status=policy_status, checked_at=time.time())
 
 

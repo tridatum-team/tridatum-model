@@ -887,11 +887,100 @@ class PriceProductFingerprintTests(unittest.TestCase):
                             else:
                                 product[field] = ('2026-11-14T00:00:00Z' if field == 'publicationDate'
                                                   else '20261114000000')
-                    self.assertEqual(L.price_products_sha256(original), L.price_products_sha256(changed))
+                    self.assertEqual(L.on_demand_price_products_sha256(original),
+                                     L.on_demand_price_products_sha256(changed))
                     self.assertNotEqual(L.canonical(original), L.canonical(changed))
                     self.assertNotEqual(L.object_sha(original), L.object_sha(changed))
                     self.assertNotEqual(hashlib.sha256(L.canonical(original)).hexdigest(),
                                         hashlib.sha256(L.canonical(changed)).hexdigest())
+
+    def test_reserved_offer_changes_preserve_on_demand_fingerprint_not_raw_hashes(self):
+        for operation in ('add', 'remove', 'date', 'price', 'order', 'offer_order'):
+            with self.subTest(operation=operation):
+                original = self.fixture()
+                reserved = copy.deepcopy(original[0]['terms']['OnDemand'])
+                offer = reserved['synthetic-sku-a.synthetic-term']
+                offer['termAttributes'] = {'LeaseContractLength': '1yr'}
+                reserved['synthetic-second-reserved-term'] = copy.deepcopy(offer)
+                original[0]['terms']['Reserved'] = reserved
+                if operation == 'add':
+                    del original[0]['terms']['Reserved']
+                changed = copy.deepcopy(original)
+                if operation == 'add':
+                    changed[0]['terms']['Reserved'] = reserved
+                elif operation == 'remove':
+                    del changed[0]['terms']['Reserved']
+                else:
+                    changed_reserved = changed[0]['terms']['Reserved']
+                    changed_offer = changed_reserved['synthetic-sku-a.synthetic-term']
+                    dimension = changed_offer['priceDimensions']['synthetic-sku-a.synthetic-term.hour']
+                    if operation == 'date':
+                        changed_offer['effectiveDate'] = '2026-11-14T00:00:00Z'
+                    elif operation == 'price':
+                        dimension['pricePerUnit']['USD'] = '99.0000000000'
+                    elif operation == 'order':
+                        dimension['appliesTo'].reverse()
+                    else:
+                        changed[0]['terms']['Reserved'] = dict(reversed(list(changed_reserved.items())))
+                self.assertEqual(L.on_demand_price_products_sha256(original),
+                                 L.on_demand_price_products_sha256(changed))
+                self.assertNotEqual(json.dumps(original), json.dumps(changed))
+                if operation != 'offer_order':
+                    self.assertNotEqual(L.object_sha(original), L.object_sha(changed))
+
+    def test_only_on_demand_terms_are_projected(self):
+        original = self.fixture()
+        changed = copy.deepcopy(original)
+        changed[0]['terms'].update(Reserved={'offer': {'effectiveDate': 'changed'}},
+                                   SavingsPlan={'offer': {'price': 'changed'}})
+        self.assertEqual(L.on_demand_price_products_sha256(original),
+                         L.on_demand_price_products_sha256(changed))
+
+    def test_invalid_product_lists_fail_closed(self):
+        for products in (None, {}, (), '', 0, False, []):
+            with self.subTest(products=products), self.assertRaises(RuntimeError):
+                L.on_demand_price_products_sha256(products)
+        for value in (None, [], '', 0, False):
+            for index in range(2):
+                with self.subTest(value=value, index=index), self.assertRaises(RuntimeError):
+                    products = self.fixture()
+                    products[index] = value
+                    L.on_demand_price_products_sha256(products)
+
+    def test_missing_or_malformed_on_demand_terms_fail_closed(self):
+        for path in (('terms',), ('terms', 'OnDemand')):
+            for operation in ('remove', 'replace'):
+                for value in (None, {}, [], '', 0, False):
+                    for index in range(2):
+                        with self.subTest(path=path, operation=operation, value=value, index=index):
+                            products = self.fixture()
+                            products[index]['terms']['Reserved'] = {'offer': {'sku': 'reserved-only'}}
+                            target = products[index]
+                            for key in path[:-1]:
+                                target = target[key]
+                            if operation == 'remove':
+                                del target[path[-1]]
+                            else:
+                                target[path[-1]] = value
+                            with self.assertRaises(RuntimeError):
+                                L.on_demand_price_products_sha256(products)
+        products = self.fixture()
+        terms = products[0]['terms']
+        terms['OnDemand-changed'] = terms.pop('OnDemand')
+        with self.assertRaises(RuntimeError):
+            L.on_demand_price_products_sha256(products)
+
+    def test_empty_or_nondict_on_demand_offers_fail_closed(self):
+        for value in (None, {}, [], '', 0, False):
+            for index in range(2):
+                for operation in ('replace', 'add'):
+                    with self.subTest(value=value, index=index, operation=operation):
+                        products = self.fixture()
+                        offers = products[index]['terms']['OnDemand']
+                        key = next(iter(offers)) if operation == 'replace' else 'malformed-extra-offer'
+                        offers[key] = value
+                        with self.assertRaises(RuntimeError):
+                            L.on_demand_price_products_sha256(products)
 
     def test_nonmetadata_values_remain_bound(self):
         term = ('terms', 'OnDemand', 'synthetic-sku-a.synthetic-term')
@@ -916,7 +1005,7 @@ class PriceProductFingerprintTests(unittest.TestCase):
             (dimension + ('unit',), 'GB-Mo'),
         ]
         original = self.fixture()
-        expected = L.price_products_sha256(original)
+        expected = L.on_demand_price_products_sha256(original)
         for path, value in changes:
             with self.subTest(path=path):
                 changed = copy.deepcopy(original)
@@ -924,11 +1013,11 @@ class PriceProductFingerprintTests(unittest.TestCase):
                 for key in path[:-1]:
                     target = target[key]
                 target[path[-1]] = value
-                self.assertNotEqual(expected, L.price_products_sha256(changed))
+                self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
 
     def test_term_and_dimension_mapping_identities_remain_bound(self):
         term = ('terms', 'OnDemand', 'synthetic-sku-a.synthetic-term')
-        for path in (('terms',), ('terms', 'OnDemand'), term + ('priceDimensions',)):
+        for path in (('terms', 'OnDemand'), term + ('priceDimensions',)):
             with self.subTest(path=path):
                 original = self.fixture()
                 changed = copy.deepcopy(original)
@@ -937,14 +1026,15 @@ class PriceProductFingerprintTests(unittest.TestCase):
                     target = target[key]
                 key = next(iter(target))
                 target[key + '-changed'] = target.pop(key)
-                self.assertNotEqual(L.price_products_sha256(original), L.price_products_sha256(changed))
+                self.assertNotEqual(L.on_demand_price_products_sha256(original),
+                                    L.on_demand_price_products_sha256(changed))
 
     def test_nested_catalog_field_names_are_not_excluded(self):
         term = ('terms', 'OnDemand', 'synthetic-sku-a.synthetic-term')
         paths = [('product', 'attributes'), term,
                  term + ('priceDimensions', 'synthetic-sku-a.synthetic-term.hour')]
         original = self.fixture()
-        expected = L.price_products_sha256(original)
+        expected = L.on_demand_price_products_sha256(original)
         for path in paths:
             for field in ('publicationDate', 'version'):
                 for operation in ('change', 'remove'):
@@ -957,23 +1047,23 @@ class PriceProductFingerprintTests(unittest.TestCase):
                             del target[field]
                         else:
                             target[field] = 'changed-nested-value'
-                        self.assertNotEqual(expected, L.price_products_sha256(changed))
+                        self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
 
     def test_product_and_nested_list_order_remain_bound(self):
         original = self.fixture()
-        expected = L.price_products_sha256(original)
+        expected = L.on_demand_price_products_sha256(original)
         changed = copy.deepcopy(original)
         changed.reverse()
-        self.assertNotEqual(expected, L.price_products_sha256(changed))
+        self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
         changed = copy.deepcopy(original)
         dimension = changed[0]['terms']['OnDemand']['synthetic-sku-a.synthetic-term'][
             'priceDimensions']['synthetic-sku-a.synthetic-term.hour']
         dimension['appliesTo'].reverse()
-        self.assertNotEqual(expected, L.price_products_sha256(changed))
+        self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
 
     def test_product_insertion_removal_and_duplication_remain_bound(self):
         original = self.fixture()
-        expected = L.price_products_sha256(original)
+        expected = L.on_demand_price_products_sha256(original)
         for operation in ('insert', 'remove', 'duplicate'):
             with self.subTest(operation=operation):
                 changed = copy.deepcopy(original)
@@ -984,16 +1074,16 @@ class PriceProductFingerprintTests(unittest.TestCase):
                     if operation == 'insert':
                         product['product']['sku'] = 'synthetic-sku-c'
                     changed.insert(1, product)
-                self.assertNotEqual(expected, L.price_products_sha256(changed))
+                self.assertNotEqual(expected, L.on_demand_price_products_sha256(changed))
 
     def test_fingerprinting_does_not_mutate_input(self):
         products = self.fixture()
         original = copy.deepcopy(products)
         original_bytes = L.canonical(products)
-        first = L.price_products_sha256(products)
+        first = L.on_demand_price_products_sha256(products)
         self.assertEqual(products, original)
         self.assertEqual(L.canonical(products), original_bytes)
-        self.assertEqual(L.price_products_sha256(products), first)
+        self.assertEqual(L.on_demand_price_products_sha256(products), first)
         self.assertEqual(products, original)
 
 
