@@ -1,4 +1,11 @@
-"""LLM explanation of admitted graph evidence; structural checks are not entailment checks."""
+"""Explain admitted evidence; structural and numeric checks are not entailment checks.
+
+The written-number guard is a conservative lexical heuristic. A single Sino-Korean
+character before a counter may instead be an ordinary noun or demonstrative, so
+it cannot by itself establish an unsupported numeric claim. Such ambiguous
+written quantities require semantic review; Arabic values, native numerals and
+compound Sino-Korean numerals retain their existing source-only checks.
+"""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -39,8 +46,11 @@ _DATE = re.compile(
     r"(?P<separator>[-/.])\s*(?P<month>[0-9]{1,2})\s*(?P=separator)\s*(?P<day>[0-9]{1,2})"
     r"|년\s*(?P<ko_month>[0-9]{1,2})월\s*(?P<ko_day>[0-9]{1,2})일)(?![0-9])"
 )
+# Single-character Sino-Korean roots (including scale words) are lexically
+# ambiguous. Do not turn that ambiguity into a definitive numeric rejection.
+# This intentionally does not claim complete written-number coverage.
 _WORD_NUMBER = re.compile(
-    r"(?<![가-힣])(?:[영공일이삼사오육칠팔구십백천만억조]+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"
+    r"(?<![가-힣])(?:[영공일이삼사오육칠팔구십백천만억조]{2,}|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"
     r"\s*(?:개월|시간|퍼센트|일|월|년|원|명|회|주|달|분|초)(?![가-힣])"
 )
 _INLINE_CITATION = re.compile(r"\[\s*E[0-9]+(?:\s*,\s*E[0-9]+)*\s*\]")

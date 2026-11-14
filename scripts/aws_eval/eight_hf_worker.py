@@ -202,7 +202,8 @@ def generation_stage(worker, plan, base, torch, phase):
             width = inputs['input_ids'].shape[1]
             validate_prompt_budget(plan, width)
             with torch.inference_mode():
-                result = model.generate(**inputs, generation_config=config)
+                result = model.generate(**inputs, generation_config=config,
+                                        use_model_defaults=False, do_sample=False, num_beams=1)
             tokens = result.sequences[0, width:].tolist()
             decoded = worker.decode_generation(tok, tokens, config.eos_token_id, generation['max_new_tokens'])
             cohort = ('general' if case['id'] in work['final_case_ids']['general'] else 'mois') if final else 'dev'

@@ -1,4 +1,6 @@
 """CPU-only behavioral coverage for ordered and 14B followup inference; no cloud calls."""
+from contextlib import ExitStack
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -120,6 +122,88 @@ class SamplerAndFramingTests(unittest.TestCase):
                  dict(base, peak_cuda_allocated_bytes=101), dict(base, group='zzz')]
         for candidate in worse:
             self.assertLess(O.selection_rank(base), O.selection_rank(candidate))
+
+
+class EffectiveSamplerTests(unittest.TestCase):
+    def test_real_hf_generation_preserves_intentional_sampling_profiles(self):
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+        from transformers import Qwen3Config, Qwen3ForCausalLM
+
+        model_key = 'qwen8'
+        for thinking in (False, True):
+            plan = plan_fixture()
+            p = next(p for p in O.profiles_for(plan, model_key)
+                     if p['thinking'] == thinking and p['seed'] == 14)
+            phase = O.profile_phase(model_key, 'dev', p)
+            with self.subTest(profile=p['name']), \
+                    tempfile.TemporaryDirectory() as temp, ExitStack() as stack:
+                base = Path(temp)
+                (base / 'output').mkdir()
+                (base / 'plan.json').write_text('{}')
+                plan['workload']['development_inputs'] = dict(sha256='synthetic')
+                case = dict(id='synthetic', messages=[dict(role='user', content='Synthetic prompt')])
+                model = Qwen3ForCausalLM(Qwen3Config(
+                    vocab_size=8, hidden_size=16, intermediate_size=32, num_hidden_layers=1,
+                    num_attention_heads=2, num_key_value_heads=2, head_dim=8,
+                    max_position_embeddings=8192, eos_token_id=0, pad_token_id=1,
+                    bos_token_id=3, tie_word_embeddings=False)).eval()
+                # Real multinomial sampling over equal logits; the model has no downloaded weights.
+                with torch.no_grad():
+                    model.lm_head.weight.zero_()
+                model.generation_config = GenerationConfig(
+                    do_sample=False, num_beams=4, min_p=.8, repetition_penalty=2.,
+                    no_repeat_ngram_size=2, suppress_tokens=[0], begin_suppress_tokens=[2],
+                    forced_eos_token_id=7, use_cache=False, eos_token_id=[0, 2],
+                    pad_token_id=5, bos_token_id=6, transformers_version='4.57.6')
+                defaults_before = model.generation_config.to_dict()
+                tok = SimpleNamespace(pad_token_id=1, eos_token_id=7, bos_token_id=3)
+                def cpu_tensor(data, *, device=None, **kwargs):
+                    return torch.tensor(data, **kwargs)
+                runtime = SimpleNamespace(
+                    manual_seed=torch.manual_seed, cuda=Mock(), tensor=cpu_tensor,
+                    ones_like=torch.ones_like, long=torch.long, bfloat16=torch.bfloat16,
+                    inference_mode=torch.inference_mode, __version__=torch.__version__,
+                    version=SimpleNamespace(cuda=None))
+                worker = SimpleNamespace(native_runtime=Mock(return_value=runtime), validate_model=Mock())
+                plan['runtime'] = dict(packages={})
+                observed = []
+                prepare = model._prepare_generation_config
+                def observe(*args, **kwargs):
+                    resolved, model_kwargs = prepare(*args, **kwargs)
+                    observed.append(deepcopy(resolved))
+                    return resolved, model_kwargs
+                inference = O.shared_inference()
+                stack.enter_context(patch.object(model, '_prepare_generation_config', side_effect=observe))
+                stack.enter_context(patch.object(model, 'to', return_value=model))
+                stack.enter_context(patch.object(AutoModelForCausalLM, 'from_pretrained', return_value=model))
+                stack.enter_context(patch.object(AutoTokenizer, 'from_pretrained', return_value=tok))
+                stack.enter_context(patch.object(O, 'input_cases', return_value=[case]))
+                stack.enter_context(patch.object(inference, 'render_prompt',
+                                                 return_value=('Synthetic prompt', [3, 4])))
+                stack.enter_context(patch.object(inference, 'decode_generation', return_value={}))
+                stack.enter_context(patch.object(O, 'memory', return_value=dict(peak_cuda_allocated_bytes=0)))
+                stack.enter_context(patch.object(O.signal, 'signal'))
+                stack.enter_context(patch.object(O.signal, 'setitimer'))
+                O.generation_stage(worker, plan, base, phase, model_key, 'dev', p)
+                self.assertEqual(len(observed), 1)
+                effective = observed[0]
+                self.assertEqual(effective.get_generation_mode().value, 'sample')
+                for field, expected in O.sampler_kwargs(p).items():
+                    self.assertEqual(getattr(effective, field), expected, field)
+                self.assertEqual(effective.no_repeat_ngram_size, 0)
+                for field in ('suppress_tokens', 'begin_suppress_tokens', 'forced_eos_token_id'):
+                    self.assertIsNone(getattr(effective, field), field)
+                self.assertEqual(effective.eos_token_id, [0, 2])
+                self.assertEqual(effective.pad_token_id, 1)
+                self.assertEqual(effective.bos_token_id, 3)
+                row = json.loads((base / 'output' / (phase + '-outputs.jsonl')).read_text())
+                self.assertEqual(row['profile_parameters'], p)
+                self.assertTrue(row['output_token_ids'])
+                self.assertIn(row['output_token_ids'][-1], [0, 2])
+                receipt = json.loads((base / 'output' / (phase + '-receipt.json')).read_text())
+                self.assertEqual(receipt['state'], 'complete')
+                self.assertEqual(model.generation_config.to_dict(), defaults_before)
 
 
 class GuardTests(unittest.TestCase):

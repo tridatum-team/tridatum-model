@@ -336,7 +336,7 @@ runs/mois-grounded-training-20261112T081606Z/verification-venv/bin/python \
 별도 승인된 **L40S 1대·최대 4시간·세전 US$20 범위의 1회 실험**을 실행했습니다. 사전 보수적 계산액은 예비비를 포함해 US$19.785977이며, 실제 청구액이나 AWS 결제 차단 한도가 아닙니다. 자동 재시도·추가 임대·연장·배포는 하지 않았습니다.
 
 - 공식 Qwen3-8B에 BF16 LoRA(rank 8, alpha 16, dropout 0, 학습률 `1e-5`, seed 14)를 적용했습니다. 학습 24문항을 각 3회 사용해 총 72회 노출·36 optimizer step을 완료했고, 12·24·36단계의 가중치를 모두 회수했습니다.
-- 원본과 세 checkpoint에서 같은 개발 8문항, non-thinking·greedy 조건으로 **실제 답변 32개**를 생성했습니다. 학습 문맥은 3,072, 생성 문맥은 사전 입력 감사 후 공통 4,096, 응답 상한은 768토큰으로 고정했습니다. 32개 모두 상한에 잘리지 않고 EOS로 종료했습니다.
+- 원본과 세 checkpoint에서 같은 개발 8문항으로 **실제 답변 32개**를 생성했습니다. non-thinking·greedy를 요청했지만, 후속 조사에서 원본·24단계 로그와 Transformers 4.57.6의 설정 해석 경로가 **모델 기본값의 샘플링 활성화**를 확인했습니다. 이 실행을 결정적 greedy 비교로 해석하지 않습니다. 학습 문맥은 3,072, 생성 문맥은 사전 입력 감사 후 공통 4,096, 응답 상한은 768토큰이었으며, 32개 모두 상한에 잘리지 않고 EOS로 종료했습니다.
 - 두 독립 AI 채점자가 원본·checkpoint 식별정보를 가린 답변을 평가하고, 불일치 3건만 제3 채점자가 판정했습니다. 아래는 **개발 자료의 동결 판정**이며, 문서군의 과거 TRAIN 노출 때문에 독립 최종 평가나 일반 정확도로 해석하지 않습니다.
 
 | 구분 | 내용 정확 | 동결 종합 통과 | 중대 오류 문항 | 개발 loss |
@@ -359,6 +359,25 @@ runs/mois-grounded-training-20261112T081606Z/verification-venv/bin/python \
 수정 후 관련 `unittest` 223건을 실행해 222건 통과·1건 조건부 skip을 확인했습니다. GPU 인스턴스와 루트 EBS 삭제, 이번 실행 전용 IAM·보안그룹·Scheduler 정리를 확인했습니다. 기존 보호 인스턴스는 변경하지 않았으며, S3 실험 자료는 승인된 30일 보존 규칙을 유지합니다.
 
 실제 실행 기록은 `runs/mois-eight-sft-20261114T071851Z`에 보관합니다. `development-score-breakdown.json`, `development-failure-diagnosis.json`, `post-fix-structure-replay.json`, `eight-execution-state/controller-result.json`, `owned-cleanup-audit/result.json`, `posthoc-export-verification.json`에 판정·진단·자원 정리 근거가 있습니다. 실행 당시 19개 소스의 정확한 바이트는 `executed-source.tar`로 보존했으며, 사후 검사기 수정으로 동결된 답변·채점·선택을 교체하지 않았습니다. 다음 개선은 GPU 반복보다 조건 누락·정보 부족 경계·출력 형식의 실패를 구분한 학습 자료 보강부터 진행해야 합니다.
+
+후속 로컬 평가기는 `use_model_defaults=False`, `do_sample=False`, `num_beams=1`을 명시하고, 각 실제 `generate` 호출에서 해석된 설정과 `greedy_search` 모드를 확인합니다. 32GiB Mac의 MPS에서 공식 BF16 원본과 보존한 24단계 adapter가 같은 가상 질문에 근거 ID를 포함한 답변을 생성하고 EOS로 종료함을 확인했습니다. 이는 실행 경로 스모크이며 확대 성능 평가의 점수가 아닙니다. 과거 점수·미채택 판정·실행 기록은 수정하지 않았습니다. 설정 덮어쓰기 근거와 수정 후 기록은 `runs/mois-expanded-development-20261114T121509Z/generation-default-override-evidence.json`, `local-eight-smoke-02/`에 보관합니다.
+
+#### 확대 로컬 개발 실험
+
+`runs/mois-expanded-development-20261114T121509Z/experiment-design.json`에 아래 범위를 먼저 등록했습니다. **현재는 자료 배제 검토와 실행 준비 단계이며, 아래 문항 수가 모델의 정답 수나 새 학습 완료를 뜻하지 않습니다.** 과거 최종 평가 자료와 미채택 판정은 변경하지 않습니다.
+
+| 구분 | 등록 범위 | 목적 |
+| --- | --- | --- |
+| 주 평가 | 행정안전부 20개 문서군의 160문항 + 일반 40문항 | 원본과 보존한 24단계 모델의 무제약 답변 400개 비교 |
+| 별도 출력 제약 평가 | 같은 평가 자료 중 40문항 | JSON-schema 제약의 답변 80개를 주 평가와 분리 |
+| 학습 준비 | 다른 30개 문서군의 480건 + 일반 120건 | 근거·예외·조건·정보 부족 경계를 보강한 600건 준비 |
+
+- `scripts/prepare_expanded_experiment.py`는 원문 위치·인용 해시, 문서군 분리, 보호 자료 배제, 정확한 현재 레코드 해시에 대한 독립 검토, 실제 토큰 길이와 target masking을 확인한 뒤에만 자료를 동결합니다. 일부 통과 행만 골라 분모를 줄이지 않습니다. 공개 추론 입력에는 질문과 메시지만 넣고 참조 답변·채점 기준은 분리합니다.
+- `scripts/evaluate_local_eight.py`는 공식 BF16 가중치와 보존 adapter를 한 모델 인스턴스로 실행합니다. MPS 외 실행으로 자동 전환하거나 양자화·답변 수선·자동 재시도하지 않습니다. 원본과 adapter의 실제 설정·토큰·EOS·시간·메모리 관측값을 기록합니다. 기존 HF worker의 greedy 경로도 모델 기본값 덮어쓰기를 차단했으며, 별도 ordered 비교기의 의도된 sampling profile은 유지했습니다.
+- `local-eight-schema` extra의 `lm-format-enforcer==0.11.3`은 별도 JSON 출력 제약에만 사용합니다. 문자열 escape와 문장/JSON 경계를 함께 포함한 토큰의 오차를 수정한 뒤, 실제 8B 두 arm에서 무제약 실행과 동일한 33토큰 답변·EOS를 확인했습니다. 이는 가상 문항 스모크이며 품질 점수가 아닙니다. 제약은 의미 정확성을 보증하지 않고, 모든 JSON lexical 표현을 지원한다고 주장하지 않습니다.
+- 수치 검사기가 `구분`, `이 시간` 같은 일반 표현을 확정적인 수사로 오인하던 문제를 수정했습니다. 모호한 한 글자 한자어 수사를 기계적으로 거부하지 않는 대신, 그런 표기의 수량 오류는 의미 검토가 필요합니다. 아라비아 숫자·고유어 수사·복합 한자어 수사의 기존 검사는 유지하며, 구조 검사 통과를 사실 검증으로 간주하지 않습니다.
+- 관련 `unittest` **411건 통과**, `uv lock --check --offline` 성공, 실제 MPS 원본/adapter·무제약/JSON 제약 스모크를 확인했습니다. 이 작업은 로컬 실행이며 추가 유료 GPU 임대, 새 가중치 학습, `test.tridatum.co` 배포는 수행하지 않았습니다.
+
 
 ### Packed-head 학습 엔진
 

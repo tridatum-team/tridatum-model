@@ -1,4 +1,6 @@
-"""Consumer-visible 8B worker boundaries; no cloud, runtime, or model execution."""
+"""CPU-only 8B worker boundaries, including tiny real HF generation; no cloud calls."""
+from contextlib import ExitStack
+from copy import deepcopy
 import json
 from pathlib import Path
 import runpy
@@ -155,6 +157,93 @@ class ExposureBoundaryTests(unittest.TestCase):
         scope, _, _, _ = self.fixture(dropped=1)
         with self.assertRaisesRegex(RuntimeError, 'dropped rows'):
             scope['build_items'](None, None, None, None, None, None, True)
+
+
+class EffectiveGenerationTests(unittest.TestCase):
+    def test_real_hf_generation_is_greedy_for_base_and_adapter_phases(self):
+        import torch
+        from peft import LoraConfig, PeftModel, get_peft_model
+        from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+        from transformers import Qwen3Config, Qwen3ForCausalLM
+
+        class CPUInputs(dict):
+            def to(self, device):
+                return self
+
+        phases = ('baseline_dev', 'checkpoint-step-000012-dev')
+        for phase in phases:
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as temp, ExitStack() as stack:
+                base = Path(temp)
+                (base / 'output').mkdir()
+                (base / 'plan.json').write_text('{}')
+                case = dict(id='synthetic', messages=[dict(role='user', content='Synthetic prompt')])
+                generation = dict(do_sample=False, num_beams=1, context_tokens=32, max_new_tokens=4)
+                plan = dict(identity=dict(run_id='tiny-fixture'),
+                    model=dict(id='tiny-local', revision='synthetic'),
+                    workload=dict(generation=generation, development_inputs=dict(path='unused', sha256='dev'),
+                        development_case_ids=[case['id']], final_inputs=dict(sha256='final'),
+                        final_case_ids=dict(general=[case['id']], mois=[])))
+                model = Qwen3ForCausalLM(Qwen3Config(
+                    vocab_size=8, hidden_size=16, intermediate_size=32, num_hidden_layers=1,
+                    num_attention_heads=2, num_key_value_heads=2, head_dim=8,
+                    max_position_embeddings=32, eos_token_id=0, pad_token_id=1,
+                    bos_token_id=3, tie_word_embeddings=False)).eval()
+                # Equal logits make real greedy generation choose token zero (EOS).
+                with torch.no_grad():
+                    model.lm_head.weight.zero_()
+                model.generation_config = GenerationConfig(
+                    do_sample=True, num_beams=4, temperature=.6, top_p=.95, top_k=4,
+                    min_p=.8, repetition_penalty=2., no_repeat_ngram_size=2,
+                    suppress_tokens=[0], begin_suppress_tokens=[2], forced_eos_token_id=7,
+                    use_cache=False, eos_token_id=[0, 2], pad_token_id=5, bos_token_id=6,
+                    transformers_version='4.57.6')
+                defaults_before = model.generation_config.to_dict()
+                if phase in W.CHECKPOINT_PHASES:
+                    adapter = get_peft_model(model, LoraConfig(
+                        r=2, lora_alpha=2, target_modules=['q_proj', 'v_proj'],
+                        task_type='CAUSAL_LM', inference_mode=True)).eval()
+                    stack.enter_context(patch.object(PeftModel, 'from_pretrained', return_value=adapter))
+                ids = torch.tensor([[3, 4]], dtype=torch.long)
+                tok = Mock(pad_token_id=1, eos_token_id=7, bos_token_id=3)
+                tok.apply_chat_template.return_value = 'Synthetic prompt'
+                tok.return_value = CPUInputs(input_ids=ids, attention_mask=torch.ones_like(ids))
+                runtime = SimpleNamespace(manual_seed=torch.manual_seed, cuda=Mock(),
+                                          bfloat16=torch.bfloat16, inference_mode=torch.inference_mode)
+                worker = SimpleNamespace(decode_generation=Mock(return_value={}))
+                observed = []
+                prepare = model._prepare_generation_config
+                def observe(*args, **kwargs):
+                    resolved, model_kwargs = prepare(*args, **kwargs)
+                    observed.append(deepcopy(resolved))
+                    return resolved, model_kwargs
+                stack.enter_context(patch.object(model, '_prepare_generation_config', side_effect=observe))
+                stack.enter_context(patch.object(model, 'to', return_value=model))
+                stack.enter_context(patch.object(AutoModelForCausalLM, 'from_pretrained', return_value=model))
+                stack.enter_context(patch.object(AutoTokenizer, 'from_pretrained', return_value=tok))
+                stack.enter_context(patch.object(W, 'input_rows', return_value=[case]))
+                hashes = {'step-000012': 'synthetic-adapter'}
+                stack.enter_context(patch.object(W, 'adapter_hashes', return_value=hashes))
+                stack.enter_context(patch.object(E, 'validate_outputs'))
+                W.generation_stage(worker, plan, base, runtime, phase)
+                self.assertEqual(len(observed), 1)
+                effective = observed[0]
+                self.assertEqual(effective.get_generation_mode().value, 'greedy_search')
+                self.assertFalse(effective.do_sample)
+                self.assertEqual(effective.num_beams, 1)
+                self.assertEqual(effective.max_new_tokens, 4)
+                self.assertTrue(effective.use_cache)
+                self.assertEqual(effective.temperature, 1.)
+                self.assertEqual(effective.top_p, 1.)
+                self.assertEqual(effective.repetition_penalty, 1.)
+                self.assertEqual(effective.no_repeat_ngram_size, 0)
+                for field in ('min_p', 'suppress_tokens', 'begin_suppress_tokens', 'forced_eos_token_id'):
+                    self.assertIsNone(getattr(effective, field), field)
+                self.assertEqual(effective.eos_token_id, [0, 2])
+                self.assertEqual(effective.pad_token_id, 1)
+                self.assertEqual(effective.bos_token_id, 3)
+                row = json.loads(next((base / 'output').glob('*-outputs.jsonl')).read_text())
+                self.assertEqual(row['output_token_ids'], [0])
+                self.assertEqual(model.generation_config.to_dict(), defaults_before)
 
 
 class DispatchBoundaryTests(unittest.TestCase):

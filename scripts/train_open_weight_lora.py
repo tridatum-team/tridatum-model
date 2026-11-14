@@ -21,9 +21,10 @@ never filters for quality. Adapters:
     offending ids instead of being trained (pilot-sft-001 trained 57 targets without any [Dn], 36 over 256 tokens).
     Nonempty case history is unsupported and rejected. History must be a list of user/assistant pairs with nonempty
     string content (trid.text.validate_history); invalid history reports the file, line and row id before weights load.
-  - `grounded_messages`: rows {"id", "task", "split", "messages": [{"role": "system", "content": str},
-    {"role": "user", "content": str}], "answer": str}. All fields are nonempty; messages are preserved verbatim.
-    History is forbidden. Context or answer+EOS over budget rejects the input rather than dropping or truncating it.
+  - `grounded_messages`: rows {"id", "task", "split", "messages": [...], "answer": str}.
+    Native messages may start with a system turn, then alternate user/assistant and end with the current user.
+    All content is nonempty and preserved verbatim; prior assistant turns are masked context, not targets.
+    A separate `history` field is forbidden. Context or answer+EOS over budget rejects rather than truncates.
 Each sample is the native chat template with the generation prompt (Qwen3: the no-thinking prefix must render)
 followed by the answer and the tokenizer's EOS (end of turn); loss covers only those answer tokens. The system,
 all prior user/assistant turns, current user and batch padding stay masked. With --family qwen3 the vocabulary head
@@ -130,13 +131,18 @@ def load_rows(entry, base):
                     if not isinstance(row.get(field), str) or not row[field].strip():
                         raise ValueError(f'grounded_messages requires nonempty string {field}')
                 messages = row.get('messages')
-                if not isinstance(messages, list) or len(messages) != 2:
-                    raise ValueError('grounded_messages requires exactly system and user messages')
-                for message, role in zip(messages, ('system', 'user')):
+                if not isinstance(messages, list) or not messages:
+                    raise ValueError('grounded_messages requires nonempty native chat messages')
+                has_system = isinstance(messages[0], dict) and messages[0].get('role') == 'system'
+                for index, message in enumerate(messages):
+                    role = ('system' if has_system and index == 0 else
+                            'user' if (index - int(has_system)) % 2 == 0 else 'assistant')
                     if not isinstance(message, dict) or set(message) != {'role', 'content'} or message['role'] != role:
                         raise ValueError(f'grounded_messages requires a {role} message with only role and content')
                     if not isinstance(message['content'], str) or not message['content'].strip():
                         raise ValueError(f'grounded_messages requires nonempty string {role} content')
+                if messages[-1]['role'] != 'user':
+                    raise ValueError('grounded_messages must end with the current user turn')
             except ValueError as exc:
                 raise ValueError(f"{path}:{line_number}: row {row.get('id')!r}: {exc}") from exc
             rows.append(dict(id=row['id'], task=row['task'], messages=messages, answer=row['answer'],

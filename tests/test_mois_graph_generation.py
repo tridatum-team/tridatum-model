@@ -174,6 +174,41 @@ class GraphGenerationTests(unittest.TestCase):
                 self.assert_rejected(result)
                 self.assertIn("numeric_value", result["generation"]["reason"])
 
+    def test_ambiguous_sino_roots_do_not_make_lexical_prose_numeric(self):
+        for text in (
+            "제출과 등록의 구분, 예외의 적용 조건을 확인해야 합니다.",
+            "이 시간 전체를 제출기한으로 보아서는 안 됩니다.",
+        ):
+            with self.subTest(text=text):
+                result, _ = self.generate(completion([{"text": text, "sources": ["E1"]}]))
+                self.assertEqual(result["generation"]["state"], "generated")
+                self.assertEqual(result["generation"]["semantic_verification"], "unverified")
+
+    def test_written_number_guard_keeps_unambiguous_unsupported_quantities(self):
+        for text, reason in (
+            ("999원 이내입니다.", "unsupported_numeric_value"),
+            ("두 시간 이내입니다.", "unsupported_written_numeric_value"),
+            ("한 명 이상입니다.", "unsupported_written_numeric_value"),
+            ("삼십일 이내입니다.", "unsupported_written_numeric_value"),
+            ("십오분 이내입니다.", "unsupported_written_numeric_value"),
+            ("일백만원 이내입니다.", "unsupported_written_numeric_value"),
+        ):
+            with self.subTest(text=text):
+                result, _ = self.generate(
+                    completion([{"text": text, "sources": ["E1"]}]), question=text,
+                )
+                self.assert_rejected(result)
+                self.assertEqual(result["generation"]["reason"], reason)
+
+    def test_single_sino_stem_quantities_remain_a_documented_semantic_blind_spot(self):
+        # The same lexical ambiguity includes genuine quantities and single
+        # scale stems. Passing this heuristic must never assert entailment.
+        for text in ("삼일 이내입니다.", "이 시간 이내입니다.", "만원 이내입니다."):
+            with self.subTest(text=text):
+                result, _ = self.generate(completion([{"text": text, "sources": ["E1"]}]))
+                self.assertEqual(result["generation"]["state"], "generated")
+                self.assertEqual(result["generation"]["semantic_verification"], "unverified")
+
     def test_numeric_check_is_per_paragraph(self):
         result, _ = self.generate(completion([
             {"text": "결과보고서는 30일 이내 제출합니다.", "sources": ["E1"]},

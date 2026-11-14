@@ -172,14 +172,15 @@ def generation_stage(worker, plan, base, phase, model_key, cohort, profile):
                             atomic_receipt(receipt_path, receipt)
                         def end(self):
                             pass
-                    # A fresh GenerationConfig prevents hidden model defaults (e.g.
-                    # suppression, forced EOS, penalties) from changing the sampler.
+                    # Disable model-default merging explicitly: a fresh config alone
+                    # does not isolate suppression, forced EOS, or sampler penalties.
                     config = GenerationConfig(**sampler_kwargs(profile), eos_token_id=stops,
                         pad_token_id=tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id,
                         bos_token_id=tok.bos_token_id)
                     with torch.inference_mode():
                         result = model.generate(input_ids=inputs, attention_mask=torch.ones_like(inputs),
-                                                generation_config=config, streamer=Capture())
+                                                generation_config=config, use_model_defaults=False,
+                                                streamer=Capture())
                     torch.cuda.synchronize()
                     require(generated == result[0, len(ids):].tolist(), 'Streamed native tokens differ')
                     decoded = inference.decode_generation(tok, generated, stops, profile['max_new_tokens'], profile['thinking'])
