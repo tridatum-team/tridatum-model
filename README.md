@@ -269,34 +269,36 @@ Qwen3.5-4B의 non-thinking 두 설정과 thinking 설정을 각각 시드 14·29
 
 대체 16GiB Mac도 조회 당시 메모리 압력 경고 상태여서 모델을 실행하지 않았습니다. 검토한 14B 4bit 가중치만 약 7.74GiB이므로 현 제한에서는 실행할 수 없습니다. 이후 사용자가 **새 L40S 인스턴스 1대·최대 4시간·추가 세전 US$20 예산**을 승인했습니다. 다른 세션의 인스턴스는 시작하거나 변경하지 않습니다. 예산 계산에는 예비비를 포함하지만 AWS 청구 자체를 강제로 제한하는 장치는 아닙니다.
 
-후속 CUDA 경로는 공식 Qwen3-8B BF16을 먼저 비교하고, 사전 관문을 통과하지 못하면 **같은 임대 안에서만** Qwen3-14B BF16을 비교합니다. 개발 프로필 선택과 검증을 분리하고 두 시드를 유지하며, 검증 정답은 GPU 실행 묶음에 넣지 않습니다. MLX 4bit와 backend·정밀도가 모두 다르므로 결과 차이를 파라미터 수만의 효과로 해석하지 않습니다. 이 경로는 추론 비교용이며 학습이나 서비스 배포를 수행하지 않습니다.
+초기 CUDA 계획은 공식 Qwen3-8B BF16을 먼저 비교하고, 사전 관문을 통과하지 못하면 **같은 임대 안에서만** Qwen3-14B BF16을 비교하도록 했습니다. 개발 프로필 선택과 검증을 분리하고 두 시드를 유지하며, 검증 정답은 GPU 실행 묶음에 넣지 않습니다. MLX 4bit와 backend·정밀도가 모두 다르므로 결과 차이를 파라미터 수만의 효과로 해석하지 않습니다. 이 경로는 추론 비교용이며 학습이나 서비스 배포를 수행하지 않습니다.
 
 GPU 생성 요청 전 두 준비 오류를 확인했습니다. S3의 작업 인수에 중복된 endpoint 옵션을 넣어 정상적인 ‘설정 없음’ 응답을 잘못 거부했고, EC2의 `Workloads` 목록 순서만 바뀐 것을 하드웨어 변경으로 판정했습니다. 작업 인수를 정규화하고 해당 목록의 순서만 무시하도록 수정했습니다. 실제 기록된 목록 순서 변경은 통과하고 GPU 수·메모리·지원 용도 값 변경은 거부하는 스모크를 확인했습니다. 생성 전 조회 실패와 실제 생성 요청을 구분하며, 생성 가능성이 생긴 이후에는 새 승인처럼 재시도하지 않습니다. 원래 기록을 보존하는 명시적 미생성 복구 경로를 사용했습니다.
 
-이후 L40S 1대에서 **업무 특화 학습을 하지 않은 원본 [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B/tree/b968826d9c46dd6066d109eabc6255188de91218)의 CUDA BF16 비교**를 완료했습니다. 네 개발 프로필을 비교해 thinking을 선택했고, 두 검증 프로필 모두 16개 답변을 끝까지 생성했습니다. 학습으로 얻은 개선이나 독립적인 최종 반입 검증 결과는 아닙니다.
+업무 특화 학습을 하지 않은 공식 원본 [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B/tree/b968826d9c46dd6066d109eabc6255188de91218)와, 이후 별도 승인받은 [Qwen3-14B](https://huggingface.co/Qwen/Qwen3-14B/tree/40c069824f4251a91eefaf281ebe4c544efd3e18)의 **CUDA BF16 비교를 완료**했습니다. 각각 별도 L40S 임대에서 네 개발 프로필을 비교해 thinking을 선택했고, 모델별 두 검증 프로필 모두 같은 16문항의 답변을 끝까지 생성했습니다. 학습으로 얻은 개선이나 독립적인 최종 반입 검증 결과는 아닙니다.
 
-| 8B CUDA 검증 프로필 | JSON 정답·완료 12문항 | 설명형 의미·문체·완료 4문항 | 열거된 중대 오류가 있는 설명형 문항 |
-| --- | ---: | ---: | ---: |
-| Thinking · 시드 14 | 12/12 | 2/4 | 0 |
-| Thinking · 시드 29 | 12/12 | 2/4 | 1 |
+| 원본 모델 · thinking | 시드 | JSON 정답·완료 12문항 | 설명형 의미·문체·완료 4문항 | 중대 오류 문항 | 문항 생성 중앙값 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Qwen3-8B | 14 | 12/12 | 2/4 | 0 | 19.1초 |
+| Qwen3-8B | 29 | 12/12 | 2/4 | 1 | 19.6초 |
+| Qwen3-14B | 14 | 12/12 | 3/4 | 0 | 20.3초 |
+| Qwen3-14B | 29 | 12/12 | 1/4 | 1 | 22.0초 |
 
-설명형 8개 답변에 대한 두 독립 AI 채점자의 판정은 모두 일치했습니다. 권장 사항이나 예외 없는 제한을 누락했고, 한 답변은 확인되지 않은 방문 접수 가능 여부를 단정했습니다. **두 시드 모두 설명형 3/4 이상이라는 사전 관문에 미달**했으므로 특화 학습에 진입하지 않았습니다.
+시간은 각 검증 프로필 16문항의 `elapsed_seconds` 중앙값이며 웹서비스의 체감 응답시간 측정치는 아닙니다. 모델별 설명형 8개 답변은 각각 두 독립 AI 채점자가 평가했고 판정은 모두 일치했습니다. 14B는 모델·프로필·시드 식별 정보를 가린 별도 익명 패킷으로 채점했습니다. 8B는 과거 자료 파일명에 모델 크기가 드러날 수 있어 완전한 모델 블라인드로 표현하지 않습니다. 문체는 모두 통과했지만, 8B는 권장 사항·예외 없는 제한을 누락하거나 확인되지 않은 방문 접수 가능 여부를 단정했습니다. 14B도 사진 미첨부에 따른 접수 거절의 범위와 예외 없는 제한을 누락했고, 기한·제재 정보가 없는 진단문항에서 **“불이익이 발생할 가능성은 없습니다”라고 보장**했습니다. **두 시드 모두 설명형 3/4 이상·중대 오류 0이라는 사전 관문을 충족한 모델은 없으므로 특화 학습에 진입하지 않았습니다.** 이 작은 진단에서는 14B로 교체할 근거를 얻지 못했으며, 모델 전반의 우열이나 실제 기관 업무 정확도로 일반화하지 않습니다.
 
-14B 전환 명령의 저장은 성공했지만 **14B는 시작되지 않았습니다**. Worker가 명령 게시를 기다리면서 아직 없는 S3 객체를 바로 `GetObject`했고, 원래 역할에 `ListBucket` 권한이 없어 `AccessDenied`로 종료됐습니다. 이후 명령 게시 성공을 실제 worker 수신·실행으로 간주하지 않습니다. 8B의 완료된 checkpoint와 원래 실패 기록은 보존했습니다. GPU 종료·root volume 삭제·이번 run에서 만든 IAM 역할/프로필·scheduler group·security group 삭제를 확인했으며 다른 세션의 리소스와 S3 보존 규칙은 변경하지 않았습니다. **14B 품질은 미측정**입니다. 새 인스턴스는 별도 승인과 새 실행 계획이 필요하며, 완료된 8B를 다시 실행하거나 과거 phase를 새 실행처럼 복사하지 않습니다.
+첫 8B 임대에서는 14B 전환 명령의 저장은 성공했지만 **14B가 시작되지 않았습니다**. Worker가 명령 게시를 기다리면서 아직 없는 S3 객체를 바로 `GetObject`했고, 원래 역할에 `ListBucket` 권한이 없어 `AccessDenied`로 종료됐습니다. 명령 게시 성공을 실제 worker 수신·실행으로 간주하지 않습니다. 8B의 완료된 checkpoint와 원래 실패 기록은 보존했습니다. 그 임대의 GPU·root volume·IAM 역할/프로필·scheduler group·security group 삭제를 확인했으며 다른 세션의 리소스와 S3 보존 규칙은 변경하지 않았습니다. 위 14B 점수는 이 실패 phase가 아니라, 아래의 별도 승인·새 실행 계획으로 수행한 후속 임대에서 얻었습니다. 완료된 8B를 다시 실행하거나 과거 phase를 새 실행처럼 복사하지 않았습니다.
 
-전환 대기는 `ordered_hf_comparison.await_decision`에서 **정확한 명령 key를 prefix로 한 제한된 목록 조회 → 객체가 있을 때만 크기가 제한된 GET**으로 수정했습니다. 새 ordered 실행은 해당 prefix만 허용하는 `ListBucket` 정책을 사전에 요구하며, 권한 누락·넓은 목록 권한·실제 접근 거부는 거절합니다. 실제 과거 오류와 저장된 명령 바이트를 사용한 네트워크 없는 before/after 스모크에서 과거 코드는 즉시 실패하고 수정 코드는 대기 후 명령을 인증했습니다. 수정 후 통합 검사 **197개 중 196개 통과·MLX 전용 1개 건너뜀**을 확인했습니다. 목록 요청이 추가되므로 **과거 비용 계산·IAM 관측·계획·승인을 재사용할 수 없고**, 새 권한으로 실제 GPU 실행을 재검증한 것은 아닙니다.
+전환 대기는 `ordered_hf_comparison.await_decision`에서 **정확한 명령 key를 prefix로 한 제한된 목록 조회 → 객체가 있을 때만 크기가 제한된 GET**으로 수정했습니다. 새 ordered 실행은 해당 prefix만 허용하는 `ListBucket` 정책을 사전에 요구하며, 권한 누락·넓은 목록 권한·실제 접근 거부는 거절합니다. 실제 과거 오류와 저장된 명령 바이트를 사용한 네트워크 없는 before/after 스모크에서 과거 코드는 즉시 실패하고 수정 코드는 대기 후 명령을 인증했습니다. 이 수정 당시 통합 검사 **197개 중 196개 통과·MLX 전용 1개 건너뜀**을 확인했습니다. 목록 요청이 추가되므로 **과거 비용 계산·IAM 관측·계획·승인을 재사용할 수 없습니다**. 후속 14B-only 경로에는 이 전환 채널이 없으므로, 수정된 8B→14B 전환 자체를 GPU에서 재검증한 것은 아닙니다.
 
-별도로 실제 tokenizer와 임의 초기화한 작은 Qwen3 모델로 CPU 추론 스모크도 수행했습니다. 이 CPU 스모크 자체는 GPU 실행·사전학습 모델 품질의 증거가 아니며, 위 8B 점수는 실제 CUDA checkpoint에서 계산했습니다. **14B 추가 비교 → 통과 후보의 특화 학습·독립 회귀 검증 → 실제 반입 환경 검증**은 남아 있으며, 모델 교체·서비스 배포·반입 승인을 하지 않았습니다.
+별도로 실제 tokenizer와 임의 초기화한 작은 Qwen3 모델로 CPU 추론 스모크도 수행했습니다. 이 CPU 스모크 자체는 GPU 실행·사전학습 모델 품질의 증거가 아니며, 위 점수는 실제 CUDA 출력에서 계산했습니다. **8B·14B 비교는 끝났지만, 특화 학습·독립 회귀 검증과 실제 반입 환경 검증은 완료하지 않았습니다.** 기준을 낮추거나 불합격 후보를 학습·배포·반입 승인으로 넘기지 않았고, `test.tridatum.co`의 모델도 교체하지 않았습니다.
 
 **별도 승인된 14B-only 후속 계약:** 이후 사용자가 승인한 **“14B만 진행 · 최대 US$20”**은 `trid-hf14-followup-v1` 계획과 `trid-hf14-followup-approval-v1` 승인으로 구분합니다. 새 L40S **1대·1회 임대·최대 4시간·추가 세전 US$20**만 허용하며 자동 추가 임대·연장이나 소비된 과거 승인 재사용은 허용하지 않습니다. 기존 ordered 8B→14B 경로와 별개이며, 과거 8B 관문 미달 증거는 해시로 결박한 **출처 기록만** 사용합니다. 8B 재실행·새 8B checkpoint·부모 전환 결정 채널 없이 `acquire14 → dev14 → val14`만 수행하고, 과거 runtime·phase·출력을 새 실행 증거로 복사하지 않습니다.
 
-완료 수락에는 **새 실행의 실제 14B runtime·네 개발 프로필의 독립 선택·선정된 두 시드의 검증 영수증·해시와 정확한 구성 파일 목록을 인증한 export**가 필요합니다. 검증 정답의 로컬 격리, 고정 입력·프로필·자원 한도, 단일 dispatch, 소유 자원의 종료·삭제와 S3 보존 규칙은 유지하며 다른 세션의 자원은 변경하지 않습니다. 이 계약 추가는 **새 GPU 실행 성공이나 측정된 14B 품질의 보고가 아니며**, native 완료만으로 품질 통과·학습 진입·배포·반입 승인을 주장하지 않습니다.
+후속 실행의 **실제 14B runtime·네 개발 프로필의 독립 선택·선정된 두 시드의 검증 영수증·해시와 정확한 구성 파일 목록을 인증한 export**를 확인했습니다. 검증 정답의 로컬 격리, 고정 입력·프로필·자원 한도와 단일 dispatch를 유지했습니다. GPU 인스턴스의 종료와 기록된 root volume의 삭제도 확인했습니다. native 실행 완료와 품질 관문 통과는 별개이며, 이번 완료를 학습 진입·배포·반입 승인으로 해석하지 않습니다.
 
-새 14B-only 실행은 인스턴스 생성 요청 전 읽기 전용 가격 사전 점검에서 멈췄습니다. 첫 실패의 응답 본문은 저장되지 않았습니다. 이후 별도 1회 진단 조회를 기존 영수증과 비교했을 때 EBS 가격 상품의 최상위 `publicationDate`·`version`만 달랐고, SKU·상품 속성·요금 조건·가격 구간·통화·단가는 같았습니다. 게시 메타데이터를 제외한 다음 세대의 사전 점검도 생성 요청 전에 멈췄으며, 이후 등록된 나머지 가격을 각각 한 번 조회한 진단에서는 EC2의 미사용 Reserved 제안 12개의 `effectiveDate`만 달랐습니다. 상품·SKU·OnDemand 조건과 단가는 같았고 나머지 여섯 가격 fingerprint도 일치했습니다. 이 진단을 저장되지 않은 실패 응답 본문 자체로 간주하지 않습니다.
+후속 14B 실행에 앞선 두 가격 사전 점검은 모두 인스턴스 생성 요청 전에 멈췄습니다. 첫 실패의 응답 본문은 저장되지 않았습니다. 이후 별도 1회 진단 조회를 기존 영수증과 비교했을 때 EBS 가격 상품의 최상위 `publicationDate`·`version`만 달랐고, SKU·상품 속성·요금 조건·가격 구간·통화·단가는 같았습니다. 게시 메타데이터를 제외한 다음 세대의 사전 점검도 생성 요청 전에 멈췄으며, 이후 등록된 나머지 가격을 각각 한 번 조회한 진단에서는 EC2의 미사용 Reserved 제안 12개의 `effectiveDate`만 달랐습니다. 상품·SKU·OnDemand 조건과 단가는 같았고 나머지 여섯 가격 fingerprint도 일치했습니다. 이 진단을 저장되지 않은 실패 응답 본문 자체로 간주하지 않습니다.
 
-가격 fingerprint는 [AWS 가격 파일 정의](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/reading-service-price-list-file-for-services.html)와 실제 OnDemand 임대 비용 계산에 맞춰 `on_demand_price_products_sha256`로 통일합니다. **각 상품의 최상위 `publicationDate`·`version`만 제외하고, `terms`에서는 실제 소비하는 비어 있지 않은 `OnDemand` 매핑만 결박**합니다. Reserved 제안은 구매하거나 비용 계산에 사용하지 않으므로 fingerprint에서 제외합니다. 나머지 상품 필드·SKU·`formatVersion`, 모든 OnDemand 조건과 가격 효력일 `effectiveDate`·구간·단위·통화·단가·중첩 필드, 상품 목록의 순서와 중복은 계속 비교합니다. OnDemand가 없거나 잘못된 형태면 거절하며 원본 조회 영수증의 바이트 해시는 보존합니다. 이 수정은 GPU 실행 성공이나 모델 품질의 증거가 아니며 **14B 품질은 여전히 미측정**입니다.
+가격 fingerprint는 [AWS 가격 파일 정의](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/reading-service-price-list-file-for-services.html)와 실제 OnDemand 임대 비용 계산에 맞춰 `on_demand_price_products_sha256`로 통일합니다. **각 상품의 최상위 `publicationDate`·`version`만 제외하고, `terms`에서는 실제 소비하는 비어 있지 않은 `OnDemand` 매핑만 결박**합니다. Reserved 제안은 구매하거나 비용 계산에 사용하지 않으므로 fingerprint에서 제외합니다. 나머지 상품 필드·SKU·`formatVersion`, 모든 OnDemand 조건과 가격 효력일 `effectiveDate`·구간·단위·통화·단가·중첩 필드, 상품 목록의 순서와 중복은 계속 비교합니다. OnDemand가 없거나 잘못된 형태면 거절하며 원본 조회 영수증의 바이트 해시는 보존합니다. 수정 후 통합 검사 **239개 중 238개 통과·MLX 전용 1개 건너뜀**을 확인했고, 실제 가격 응답 여덟 쌍을 사용한 스모크에서 소비하지 않는 제안의 갱신은 허용하고 실제 단가 변경은 거부했습니다. 모델 품질 판정은 이 코드 검사와 분리해 위 CUDA 결과로 수행했습니다.
 
-근거 파일: `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`, `gpu8-checkpoint-scored.json`, `gpu8-prose-aggregate.json`, `stage-two-result.json`, `ordered-execution-state/generation-3/controller-result.json`, `owned-cleanup-actual-v1/result.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
+근거 파일: 기존 `runs/mois-ordered-models-20261113T062501Z/`의 `comparison-protocol.json`, `reference-validation.json`, `case-review.json`, `qwen35-development-selection.json`, `stage-one-prose-aggregate.json`, `stage-one-result.json`, `eight-billion-development-registration.json`, 각 phase의 guard/분류 기록, `execution-resource-findings.json`, `gpu8-checkpoint-scored.json`, `gpu8-prose-aggregate.json`, `stage-two-result.json`, `ordered-execution-state/generation-3/controller-result.json`, `owned-cleanup-actual-v1/result.json`; 후속 `runs/mois-fourteen-followup-20261114T014951Z/`의 `gpu14-final-scored.json`, `gpu14-prose-aggregate.json`, `gpu14-qualification.json`, `fourteen-execution-state/generation-3/controller-result.json`, `on-demand-pricing-smoke.json`. 원래 실패 기록과 부분 출력은 보존하되 실패 phase를 품질 점수에 넣지 않았습니다.
 
 ### Packed-head 학습 엔진
 
