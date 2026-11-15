@@ -434,21 +434,24 @@ JSON 제약은 이 표본의 구조 실패를 없앴지만 내용 정확성이�
 - **채점 일관성:** 새 프로토콜은 같은 질문의 익명 답변 쌍을 함께 검토하고, 조건의 동등 표현·행위자 누락·본문 조문 인용을 동일 기준으로 판단합니다. 지침과 중대 오류 codebook을 shard·제3 검토·동결까지 결박합니다. 새로운 두 모델을 같은 프로토콜 안에서 비교하며, 과거 점수를 덮어쓰거나 서로 다른 채점 조건의 수치를 직접 비교하지 않습니다.
 - **수행한 검증:** 관련 통합 테스트 217건 중 216건 통과·1건 skip. 실제 Mac에서 BF16 tensor forward/backward, allocator 설정, Darwin `RUSAGE_INFO_V0` footprint 조회를 실행했습니다. 별도의 가상 답변 8개에 대한 두 독립 AI 검토도 사전 기대 판정과 일치했습니다. 모두 실행·채점 경로 검증이며 새 모델의 성능 점수가 아닙니다.
 
-**첫 실제 용량 실행 `capacity-01`은 약 18.27초에 `host_pressure`로 중단됐습니다.**
+**첫 실행과 사용자의 메모리 정리 후 별도로 승인된 두 번째 실행 모두 `host_pressure`로 중단됐습니다.**
 
-| 관측 항목 | 이번 실행 관측값 | 등록된 기준 |
-| --- | ---: | ---: |
-| 시스템 메모리 압력 | 정상 1 → 경고 2 | 정상 1 유지 |
-| 중단 시 query-reported free percentage | 34% | 10% 이상 |
-| 최고 표본 물리 footprint | 7.01GiB | 24GiB 이하 |
-| 최고 표본 그룹 RSS | 1.31GiB | 24GiB 이하 |
-| 관측 swap 증가 | 0바이트 | 1GiB 이하 |
+| 관측 항목 | `capacity-01` | `capacity-02` | 등록된 기준 |
+| --- | ---: | ---: | ---: |
+| 중단까지 경과 시간 | 18.27초 | 19.31초 | 1800초 이하 |
+| 시스템 메모리 압력 | 정상 1 → 경고 2 | 정상 1 → 경고 2 | 정상 1 유지 |
+| 중단 시 query-reported free percentage | 34% | 31% | 10% 이상 |
+| 최고 표본 물리 footprint | 7.01GiB | 7.01GiB | 24GiB 이하 |
+| 최고 표본 그룹 RSS | 1.31GiB | 1.31GiB | 24GiB 이하 |
+| 관측 swap 증가 | 0바이트 | 0바이트 | 1GiB 이하 |
 
 압력은 시스템 전체 신호이며 어느 프로세스나 메모리 종류가 전환을 일으켰는지는 확정하지 않습니다. free percentage도 실제 할당 가능한 물리 메모리 양이 아닙니다. 모델 검증·초기 telemetry가 완료되는 첫 forward/backward 이전 경계에 도달하지 못했고, MPS 사용량 표본·용량 수락 결과·scratch adapter는 생성되지 않았습니다. 부모가 작업을 종료하고 자식을 회수했으며 잔여 소유 프로세스와 cleanup 오류는 없습니다.
 
-**본학습 1회 실행은 아직 소비하지 않았습니다.** 안전 기준을 완화하거나 자동 재시도하지 않았고, 사용자 앱을 종료하거나 유료 GPU·다른 정밀도 모델로 임의 전환하지 않았습니다. 같은 기준을 유지하려면 로컬 메모리 여유를 확보한 뒤 별도 실행해야 하며, 다른 자원·정밀도 경로는 별도 계약으로 구분해야 합니다. 새 모델 품질·배포 수락이나 `test.tridatum.co` 업데이트 결과는 없습니다.
+두 번째 실행의 별도 소스 조사에서 전체 shard를 Python 버퍼에 읽거나 FP32 전체 원본을 중복 생성하는 경로는 발견되지 않았습니다. 무결성 검사는 파일 스트림 SHA256을 사용하고, 실제 Qwen3/MPS 로더는 BF16 meta parameter를 구성한 뒤 tensor별로 읽어 장치에 배치합니다. 합성 입력 파일은 실제 600행의 준비·admission 이후 생성되므로 그 앞 단계의 완료는 확인되지만, 정확히 어느 로딩·adapter 구성·초기 검사 연산에서 중단됐는지는 관측되지 않았습니다. 큰 vocabulary tensor의 CPU staging을 줄이는 것은 최적화 후보이지 이번 중단의 확인된 원인이나 검증된 해결책은 아닙니다. 추측만으로 로더를 변경하거나 같은 실행을 다시 반복하지 않았습니다.
 
-로컬 근거: `training-policy.json`, `review-protocol.json`, `execution-sources.json`, `executed-source.tar`, `mps-initialization-smoke.json`, `review-calibration-result.json`, `capacity-01/result.json`, `capacity-stop-analysis.json`. 실행 자료는 Git에 포함되지 않는 별도 보존 대상입니다.
+**본학습 1회 실행은 아직 소비하지 않았습니다.** 사용자 확인을 받은 메모리 정리 이후에도 현재 조건은 전체 용량 검증을 통과하지 못했습니다. 이는 모든 32GiB Mac의 학습 불가능을 뜻하지 않습니다. 안전 기준을 완화하거나 자동 재시도하지 않았고, 사용자 앱을 종료하거나 유료 GPU·다른 정밀도 모델로 임의 전환하지 않았습니다. 다른 자원·정밀도 경로는 별도 계약으로 구분해야 합니다. 새 모델 품질·배포 수락이나 `test.tridatum.co` 업데이트 결과는 없습니다.
+
+로컬 근거: `training-policy.json`, `review-protocol.json`, `execution-sources.json`, `executed-source.tar`, `mps-initialization-smoke.json`, `review-calibration-result.json`, `capacity-01/result.json`, `capacity-stop-analysis.json`, `local-continuation-registration.json`, `capacity-02-release.json`, `capacity-02/result.json`, `capacity-02-analysis.json`, `capacity-02-loading-investigation.json`. 실행 자료는 Git에 포함되지 않는 별도 보존 대상입니다.
 
 ### Packed-head 학습 엔진
 
