@@ -5,11 +5,17 @@ text/JSON-boundary tokens. Its shortcut traverses only the quote-start branch,
 so valid Qwen paths such as ``\\u`` and period/quote/comma/quote are omitted.
 Reuse the parser and ordinary cache; traverse a once-built residual-token trie.
 This module is imported only for the explicit JSON-schema diagnostic profile.
+
+LMFE's isolated-token alphabet also omits Unicode scalars completed across
+multiple byte tokens. Synchronize unrestricted-string admission with those
+actual decoded scalars before committing them; never let an invalid character
+silently discard an unfinished parser stack and manufacture EOS.
 """
 from lmformatenforcer.integrations.transformers import (
     build_transformers_prefix_allowed_tokens_fn as library_prefix_function,
 )
 from lmformatenforcer.tokenenforcer import TokenEnforcer
+from lmformatenforcer.jsonschemaparser import JsonSchemaParser, StringParsingState
 from lmformatenforcer.tokenizerprefixtree import TokenizerPrefixTreeNode
 
 
@@ -58,6 +64,41 @@ class EscapeAwareTokenEnforcer(TokenEnforcer):
     def __init__(self, tokenizer_data, parser):
         super().__init__(tokenizer_data, parser)
         self.residual_tree = residual_freetext_tree(tokenizer_data)
+
+    def _apply_new_characters(self, state, token_sequence):
+        # Preserve upstream contextual decoding, but do not inherit its
+        # catch-and-ForceStop behavior or unchecked stack-dropping transitions.
+        new_state = TokenEnforcer.OutputTensorState(parser=state.parser)
+        token = token_sequence[-1]
+        if token in self.tokenizer_tree.new_word_tokens:
+            new_state.current_word_tokens = [token]
+            continuation = self.tokenizer_tree.tokens_to_strs[token]
+        else:
+            new_state.current_word_tokens = state.current_word_tokens + [token]
+            previous = self.decoder(state.current_word_tokens)
+            decoded = self.decoder(new_state.current_word_tokens)
+            if not decoded.startswith(previous):
+                raise ValueError('LMFE contextual token decode changed an already committed prefix')
+            continuation = decoded[len(previous):]
+        for character in continuation:
+            parser = new_state.parser
+            top = parser.object_stack[-1] if isinstance(parser, JsonSchemaParser) and parser.object_stack else None
+            free_string = (isinstance(top, StringParsingState) and not top.allowed_strings
+                           and not top.regex_parser and top.seen_opening_quote and not top.seen_closing_quote)
+            if free_string:
+                if ord(character) < 32 or 0xD800 <= ord(character) <= 0xDFFF or character == '\ufffd':
+                    raise ValueError('Invalid decoded Unicode/control character inside JSON string')
+                if character not in parser.config.alphabet:
+                    # Per-answer parser config/context only; shared tokenizer data,
+                    # original citation enums, prompt bytes and token IDs stay fixed.
+                    # This also covers the first character under minLength=1.
+                    parser.config.alphabet += character
+                    parser.context.alphabet_without_quotes = parser.config.alphabet.replace('"', '')
+            if character not in parser.get_allowed_characters():
+                raise ValueError(f'Invalid committed JSON transition for U+{ord(character):04X}; '
+                                 'refusing to discard an unfinished parser stack')
+            new_state.parser = parser.add_character(character)
+        return new_state
 
     def _collect_allowed_tokens(self, parser, tree_node, allowed_tokens, shortcut_key):
         super()._collect_allowed_tokens(parser, tree_node, allowed_tokens, shortcut_key)

@@ -429,6 +429,44 @@ class SchemaTokenizerContracts(unittest.TestCase):
                               for token in tokens])
         self.assertEqual(self.tokenizer.decode(tokens, clean_up_tokenization_spaces=False), raw)
 
+    def test_split_byte_unicode_outside_initial_alphabet_keeps_the_string_open(self):
+        initial_alphabet = self.decoder.data.tokenizer_alphabet
+        self.assertNotIn('①', initial_alphabet)
+        for text in ('제16조 ①', '① 한국어 𠮷'):
+            with self.subTest(text=text):
+                raw = json.dumps({'paragraphs': [{'text': text, 'sources': ['E1']}]},
+                                 ensure_ascii=False, separators=(',', ':'))
+                allowed, tokens = self.walk(raw)
+                # walk also asserts that EOS never appears before the final root
+                # close, including after the byte tokens that complete U+2460.
+                self.assertTrue(set(self.stops) <= set(allowed))
+                self.assertEqual(self.tokenizer.decode(tokens, clean_up_tokenization_spaces=False), raw)
+                self.assertEqual(self.decoder.data.tokenizer_alphabet, initial_alphabet)
+        # Formatting admission must not become numeric/semantic grounding:
+        # circled numerals remain unchanged for the downstream production check.
+        self.assertEqual(json.loads(raw)['paragraphs'][0]['text'], '① 한국어 𠮷')
+
+    def test_invalid_committed_transition_fails_closed_and_retains_actual_prefix(self):
+        import torch
+        callback = self.decoder.prefix(self.case, self.stops)
+        prefix = '{"paragraphs":[{"text":"한국어'
+        history = self.case['prompt_token_ids'].copy()
+        for token in self.tokenizer.encode(prefix, add_special_tokens=False):
+            self.assertIn(token, callback(0, torch.tensor(history, dtype=torch.long)))
+            history.append(token)
+        newline = self.tokenizer.encode('\n', add_special_tokens=False)
+        self.assertEqual(len(newline), 1)
+        self.assertNotIn(newline[0], callback(0, torch.tensor(history, dtype=torch.long)))
+        # Deliberately feed an inadmissible token to exercise the state invariant;
+        # neither ForceStopParser nor an empty-stack/EOS success is acceptable.
+        history.extend(newline)
+        with self.assertRaisesRegex(ValueError, 'Unicode/control') as raised:
+            callback(0, torch.tensor(history, dtype=torch.long))
+        diagnostic = raised.exception.decoder_diagnostic
+        self.assertEqual(diagnostic['generated_prefix_token_ids'], history[len(self.case['prompt_token_ids']):])
+        self.assertEqual(diagnostic['decoded_prefix'], prefix + '\n')
+        self.assertEqual(diagnostic['offered_eos_ids'], [])
+
     def test_residual_boundary_index_is_shared_but_prefix_state_is_fresh(self):
         from local_eight_schema import build_transformers_prefix_allowed_tokens_fn
         from lmformatenforcer import JsonSchemaParser

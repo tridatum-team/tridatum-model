@@ -288,16 +288,33 @@ class SchemaDecoder:
             ids = sent.tolist()
             require(batch_id == 0 and ids[:width] == case['prompt_token_ids'],
                     'JSON profile prompt/batch binding differs')
-            result = library_prefix(batch_id, sent)
-            state = library_prefix.token_enforcer.prefix_states[tuple(ids)]
-            require(isinstance(state.parser, JsonSchemaParser),
-                    'LMFE parser entered fallback/unsupported state; refusing forced EOS')
-            if any(stop in result for stop in stops):
-                require(state.parser.can_end(), 'LMFE returned premature fallback EOS')
-                raw = self.tokenizer.decode(ids[width:], skip_special_tokens=False,
-                                            clean_up_tokenization_spaces=False)
-                validate_schema_finish(raw, schema)
-            return result
+            result = None
+            try:
+                result = library_prefix(batch_id, sent)
+                state = library_prefix.token_enforcer.prefix_states[tuple(ids)]
+                require(isinstance(state.parser, JsonSchemaParser),
+                        'LMFE parser entered fallback/unsupported state; refusing forced EOS')
+                if any(stop in result for stop in stops):
+                    require(state.parser.can_end(), 'LMFE returned premature fallback EOS')
+                    raw = self.tokenizer.decode(ids[width:], skip_special_tokens=False,
+                                                clean_up_tokenization_spaces=False)
+                    validate_schema_finish(raw, schema)
+                return result
+            except Exception as error:
+                # generate() has not returned its sequence on callback failure.
+                # Preserve the actual attempted prefix, separately from answers,
+                # so a failure can be reproduced without another model call.
+                state = library_prefix.token_enforcer.prefix_states.get(tuple(ids))
+                active = state.parser if state is not None else None
+                error.decoder_diagnostic = dict(
+                    id=case['id'], generated_prefix_token_ids=ids[width:],
+                    decoded_prefix=self.tokenizer.decode(ids[width:], skip_special_tokens=False,
+                                                         clean_up_tokenization_spaces=False),
+                    parser_type=type(active).__name__ if active is not None else None,
+                    parser_can_end=active.can_end() if active is not None else None,
+                    parser_stack=[type(p).__name__ for p in getattr(active, 'object_stack', [])],
+                    offered_eos_ids=[stop for stop in stops if result is not None and stop in result])
+                raise
 
         return allowed
 
@@ -521,6 +538,9 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                         elapsed_seconds=elapsed)), flush=True)
                     del result, ids, attention
                 except BaseException as error:
+                    error_detail = dict(type=type(error).__name__, message=str(error))
+                    if hasattr(error, 'decoder_diagnostic'):
+                        error_detail['decoder_prefix'] = error.decoder_diagnostic
                     append_row(streams[arm], dict(**case, arm=arm, **binding,
                         adapter_weights_sha256=None if arm == 'base' else ADAPTER_SHA,
                         generation=dict(GENERATION), generation_config=config.to_dict(),
@@ -528,7 +548,7 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                         response_text=None, termination_reason='error', terminal_stop_token_id=None,
                         context_truncated=False, skipped_context=False, truncated_output=False,
                         elapsed_seconds=time.perf_counter() - started,
-                        exception=dict(type=type(error).__name__, message=str(error))))
+                        exception=error_detail))
                     raise
 
 
