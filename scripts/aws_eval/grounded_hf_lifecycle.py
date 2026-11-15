@@ -1912,7 +1912,12 @@ def validate_fresh_terminal(plan, plan_sha, instance_id, completion):
 
 
 def collect_export(client, plan, plan_sha, state, instance_id):
-    """Retrieve bounded evidence only; native completion is not quality acceptance."""
+    """Authenticate evidence; explicit terminal failure may have metadata only.
+
+    A failed fresh run may name its last acknowledged training snapshot rather
+    than a terminal archive. It remains failed, and the snapshot still undergoes
+    the same digest, identity and exact archive-membership authentication.
+    """
     state = Path(state)
     identity = plan['identity']
     if fresh_mode(plan):
@@ -1925,11 +1930,20 @@ def collect_export(client, plan, plan_sha, state, instance_id):
            '--key', identity['output_prefix'] + 'completion.json', '--range', 'bytes=0-1048575',
            str(completion_path))
     completion = json.loads(completion_path.read_text())
-    require(completion['run_id'] == identity['run_id'] and completion['instance_id'] == instance_id
-            and completion['plan_sha256'] == plan_sha, 'Completion ownership differs')
+    require(isinstance(completion, dict) and completion.get('run_id') == identity['run_id']
+            and completion.get('instance_id') == instance_id
+            and completion.get('plan_sha256') == plan_sha, 'Completion ownership differs')
+    explicit_failure = completion.get(success_field(plan)) is False and bool(
+        completion.get('error') or completion.get('export_error') or completion.get('stop_errors'))
+    if 'export' not in completion:
+        require(explicit_failure, 'Completion without export requires explicit terminal failure')
+        return dict(native_pipeline_success=False, semantic_acceptance='not_evaluated',
+                    evidence_kind='metadata_only', export_state='missing', completion=completion,
+                    worker_error=completion.get('error'), export_error=completion.get('export_error'))
     pin = completion['export']
-    require(type(pin['bytes']) is int and 0 < pin['bytes'] <= export_limit(plan)
-            and SHA.fullmatch(pin['sha256']), 'Export envelope differs')
+    require(isinstance(pin, dict) and set(pin) == {'bytes', 'sha256'}
+            and type(pin['bytes']) is int and 0 < pin['bytes'] <= export_limit(plan)
+            and isinstance(pin['sha256'], str) and SHA.fullmatch(pin['sha256']), 'Export envelope differs')
     path = state / 'export.tar'
     client('s3api', 'get-object', '--bucket', identity['bucket'],
            '--key', identity['output_prefix'] + 'export.tar', '--range', f'bytes=0-{pin["bytes"] - 1}', str(path))
@@ -1983,7 +1997,12 @@ def collect_export(client, plan, plan_sha, state, instance_id):
             eight_module(plan).validate_dev_export(plan, plan_sha, receipt, destination)
             eight_module(plan).validate_completion(plan, plan_sha, completion, destination)
     elif fresh_mode(plan):
-        require(manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
+        status = manifest['status']
+        require(isinstance(status, dict)
+                and all(status.get(key) == completion[key] for key in ('run_id', 'plan_sha256', 'instance_id')),
+                'Fresh archive status ownership differs')
+        require(status == {k: v for k, v in completion.items() if k != 'export'}
+                or (explicit_failure and status.get('experimental_success') is False),
                 'Fresh terminal manifest status differs')
         if native:
             validate_fresh_terminal(plan, plan_sha, instance_id, completion)
@@ -2002,6 +2021,8 @@ def collect_export(client, plan, plan_sha, state, instance_id):
             if (not bounded_mode(plan)) or 'gpu' in stage:
                 verify_gpu_observation(stage['gpu'], plan, bound['gpu'])
     return dict(native_pipeline_success=native, semantic_acceptance='not_evaluated',
+                evidence_kind='authenticated_archive',
+                export_state='authenticated_terminal' if native else 'authenticated_partial',
                 completion=completion, export_sha256=pin['sha256'])
 
 

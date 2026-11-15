@@ -12,7 +12,9 @@ Replace validate with stage, launch, reconcile, or owned-prerequisite-cleanup an
 add --execute for live actions. Cleanup before final plan is also supported, but
 only when no dispatch evidence or live owned compute exists. Every mutation has
 an exclusive durable intent, successful response and readback; an ambiguous
-mutation is NEVER automatically retried. Parent recovery is required.
+mutation is NEVER automatically retried. A durably accepted schedule-group
+deletion alone may resume bounded read-only absence reconciliation, preserving
+its original intent/response; other partial cleanup requires parent recovery.
 
 Registration JSON schema trid-fresh-eight-prerequisites-v1 requires:
   approved:true, automatic_retry:false, identity:(exact lifecycle plan identity),
@@ -265,6 +267,58 @@ def mutate(client, state, registration_sha, name, service, operation, args, obse
     observation = observe(response)
     record(Path(state) / (name + '-readback.json'), dict(request=request, observation=observation))
     return observation
+
+
+def delete_schedule_group(client, reg, registration_sha, state, expected, *,
+                          timeout=60, clock=time.monotonic, pause=time.sleep):
+    """Await asynchronous absence; accepted deletion is never sent twice."""
+    state = Path(state)
+    name = 'cleanup-schedule-group'
+    request = dict(registration_sha256=registration_sha, service='scheduler',
+                   operation='delete-schedule-group', args=['--name', reg['identity']['schedule_group']])
+    intent_path = state / (name + '-intent.json')
+    response_path = state / (name + '-response.json')
+    readback_path = state / (name + '-readback.json')
+
+    def observe(response):
+        deadline = clock() + timeout
+        require(0 < timeout <= 60, 'Group absence wait exceeds bound')
+        for attempt in range(31):
+            try:
+                group = client('scheduler', 'get-schedule-group', *request['args'])
+            except lifecycle.AWSCallError as exc:
+                require(exc.code == 'ResourceNotFoundException', 'Group absence unresolved: ' + str(exc))
+                return dict(absent=True, error_code=exc.code)
+            # Names/ARNs can be reused. Preserve the original creation identity
+            # and all fields except the deletion's mutable state/timestamp.
+            stable = lambda value: {k: v for k, v in value.items()
+                                    if k not in ('State', 'LastModificationDate', 'ResponseMetadata')}
+            require(stable(group) == stable(expected) and group.get('State') in ('ACTIVE', 'DELETING')
+                    and group.get('LastModificationDate'), 'Pending group replaced/modified')
+            remaining = deadline - clock()
+            require(remaining > 0 and attempt < 30, 'Accepted group deletion still pending; read-only reconciliation required')
+            pause(min(2, remaining))
+
+    if intent_path.exists():
+        require(load(intent_path) == request and response_path.exists(),
+                'Ambiguous group deletion; never repeat mutation')
+        accepted = load(response_path)
+        require(set(accepted) == {'request', 'response'} and accepted['request'] == request
+                and isinstance(accepted['response'], dict)
+                and set(accepted['response']) <= {'ResponseMetadata'},
+                'Accepted group deletion provenance differs')
+        if readback_path.exists():
+            require(load(readback_path) == dict(request=request,
+                observation=dict(absent=True, error_code='ResourceNotFoundException')),
+                'Group deletion readback differs')
+        observation = observe(accepted['response'])
+        if not readback_path.exists():
+            record(readback_path, dict(request=request, observation=observation))
+        return observation
+    require(not response_path.exists() and not readback_path.exists(), 'Orphan group deletion receipt')
+    require(group_snapshot(client, reg) == expected, 'Group drift before deletion')
+    return mutate(client, state, registration_sha, name, 'scheduler', 'delete-schedule-group',
+                  request['args'], observe)
 
 
 def caller_matches(client, reg):
@@ -603,9 +657,7 @@ def partial_prerequisite_cleanup(reg, registration_sha, state, client, plan=None
         expected = known[key]
         try:
             if key == 'schedule_group':
-                require(group_snapshot(client, reg) == expected, 'Group drift')
-                mutate_('schedule-group', 'scheduler', 'delete-schedule-group', ['--name', identity[key]],
-                    lambda response: absent(client, 'scheduler', 'get-schedule-group', 'ResourceNotFoundException', '--name', identity[key]))
+                delete_schedule_group(client, reg, registration_sha, state, expected)
             elif key == 'instance_profile':
                 attached = bool(expected['Roles'])
                 require(profile_snapshot(client, reg, attached) == expected, 'Profile drift')
@@ -673,6 +725,17 @@ def owned_prerequisite_cleanup(reg, registration_sha, state, client, plan=None, 
         else:
             require(created['response']['GroupId'] == expected[key]['GroupId']
                     and readback['observation'] == expected[key], 'SG creation/readback differs')
+    started_path = state / 'owned-cleanup-started.json'
+    resuming_group = started_path.exists()
+    if resuming_group:
+        require(load(started_path) == dict(registration_sha256=registration_sha, resources=expected),
+                'Original cleanup authority differs')
+        require({path.name for path in state.glob('cleanup-*-intent.json')}
+                == {'cleanup-schedule-group-intent.json'},
+                'Partial prerequisite cleanup requires explicit parent recovery')
+        # A DELETING group may already reject ListSchedules. Reconcile only its
+        # accepted deletion before the normal compute/dependency observations.
+        delete_schedule_group(client, reg, registration_sha, state, expected['schedule_group'])
     verify_compute_cleanup(reg, state, client, plan, plan_sha)
     for key in ROLE_KEYS:
         require(role_snapshot(client, reg, key) == expected[key], 'Live role replaced/modified')
@@ -680,15 +743,17 @@ def owned_prerequisite_cleanup(reg, registration_sha, state, client, plan=None, 
         require([p['Arn'] for p in profiles] == ([expected['instance_profile']['Arn']] if key == 'instance_role' else []),
                 'Unexpected role/profile reference')
     require(profile_snapshot(client, reg) == expected['instance_profile'], 'Live profile replaced/modified')
-    require(group_snapshot(client, reg) == expected['schedule_group'], 'Live group replaced/modified')
+    if not resuming_group:
+        require(group_snapshot(client, reg) == expected['schedule_group'], 'Live group replaced/modified')
     sgid = expected['security_group']['GroupId']
     require(sg_snapshot(client, reg, sgid) == expected['security_group'], 'Live SG replaced/modified')
     verify_profile_unused(client, expected['instance_profile']['Arn'])
     verify_sg_unused(client, sgid)
-    record(state / 'owned-cleanup-started.json', dict(registration_sha256=registration_sha, resources=expected))
+    if not resuming_group:
+        record(started_path, dict(registration_sha256=registration_sha, resources=expected))
     mutate_ = lambda name, service, op, args, observe: mutate(client, state, registration_sha, 'cleanup-' + name, service, op, args, observe)
-    mutate_('schedule-group', 'scheduler', 'delete-schedule-group', ['--name', identity['schedule_group']],
-            lambda response: absent(client, 'scheduler', 'get-schedule-group', 'ResourceNotFoundException', '--name', identity['schedule_group']))
+    if not resuming_group:
+        delete_schedule_group(client, reg, registration_sha, state, expected['schedule_group'])
     verify_profile_unused(client, expected['instance_profile']['Arn'])
     require(profile_snapshot(client, reg) == expected['instance_profile'], 'Profile drift before detach')
     empty = mutate_('profile-detach', 'iam', 'remove-role-from-instance-profile',

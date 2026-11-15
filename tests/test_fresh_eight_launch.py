@@ -328,6 +328,175 @@ class FreshPreparationTests(unittest.TestCase):
         self.assertEqual(reconcile.call_args.args[2], 'i-owned')
         self.assertEqual(cleanup.call_args.kwargs, {'plan': plan, 'plan_sha': SHA})
 
+class ScheduleGroupDeletionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.state = self.root / 'state'
+        self.state.mkdir()
+        self.reg = registration(self.root)
+        ident = self.reg['identity']
+        self.expected = dict(Name=ident['schedule_group'],
+            Arn=f"arn:aws:scheduler:{ident['region']}:{ident['account']}:schedule-group/{ident['schedule_group']}",
+            State='ACTIVE', CreationDate='2026-11-15T00:00:00Z',
+            LastModificationDate='2026-11-15T00:00:00Z')
+        self.live = dict(self.expected)
+        self.deleted = False
+        self.disappear = False
+        self.deletes = 0
+        self.calls = []
+        self.now = 0
+
+    def client(self, service, operation, *args):
+        self.calls.append(operation)
+        self.assertEqual(service, 'scheduler')
+        if operation == 'list-tags-for-resource':
+            return {'Tags': fresh.tags(self.reg['identity'])}
+        self.assertEqual(args, ('--name', self.reg['identity']['schedule_group']))
+        if operation == 'delete-schedule-group':
+            self.deletes += 1
+            self.deleted = True
+            self.live['State'] = 'DELETING'
+            self.live['LastModificationDate'] = '2026-11-15T00:01:00Z'
+            return {}
+        self.assertEqual(operation, 'get-schedule-group')
+        if self.deleted and self.disappear:
+            raise missing(service, operation, 'ResourceNotFoundException')
+        return dict(self.live)
+
+    def pause(self, seconds):
+        self.now += seconds
+
+    def delete(self, pause=None):
+        return fresh.delete_schedule_group(self.client, self.reg, SHA, self.state, self.expected,
+            timeout=2, clock=lambda: self.now, pause=pause or self.pause)
+
+    def test_accepted_delete_waits_for_async_absence_with_one_mutation(self):
+        def finish(seconds):
+            self.pause(seconds)
+            self.disappear = True
+        result = self.delete(finish)
+        self.assertTrue(result['absent'])
+        self.assertEqual(self.deletes, 1)
+        self.assertIn('DELETING', self.live.values())
+        self.assertEqual(fresh.load(self.state / 'cleanup-schedule-group-readback.json')['observation'], result)
+        self.assertEqual(self.calls[-2:], ['get-schedule-group', 'get-schedule-group'])
+
+    def test_timeout_preserves_acceptance_and_resume_only_reads(self):
+        with self.assertRaisesRegex(RuntimeError, 'still pending'):
+            self.delete()
+        self.assertEqual(self.now, 2)
+        names = ['cleanup-schedule-group-intent.json', 'cleanup-schedule-group-response.json']
+        original = {name: (self.state / name).read_bytes() for name in names}
+        self.assertFalse((self.state / 'cleanup-schedule-group-readback.json').exists())
+        self.disappear = True
+        self.calls.clear()
+        result = self.delete()
+        self.assertTrue(result['absent'])
+        self.assertEqual(self.deletes, 1)
+        self.assertEqual(self.calls, ['get-schedule-group'])
+        self.assertEqual({name: (self.state / name).read_bytes() for name in names}, original)
+        # A subsequent readback is also read-only, never another delete.
+        self.delete()
+        self.assertEqual(self.deletes, 1)
+
+    def test_recreated_same_name_group_blocks_accepted_delete_reconciliation(self):
+        with self.assertRaises(RuntimeError):
+            self.delete()
+        self.live['CreationDate'] = '2026-11-15T01:00:00Z'
+        self.live['State'] = 'ACTIVE'
+        with self.assertRaisesRegex(RuntimeError, 'replaced/modified'):
+            self.delete()
+        self.assertEqual(self.deletes, 1)
+        self.assertFalse((self.state / 'cleanup-schedule-group-readback.json').exists())
+
+    def test_ambiguous_delete_without_acceptance_never_replays_or_reads(self):
+        fresh.record(self.state / 'cleanup-schedule-group-intent.json',
+            dict(registration_sha256=SHA, service='scheduler', operation='delete-schedule-group',
+                 args=['--name', self.reg['identity']['schedule_group']]))
+        with self.assertRaisesRegex(RuntimeError, 'Ambiguous group deletion'):
+            self.delete()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.deletes, 0)
+
+    def test_foreign_acceptance_and_access_denial_never_prove_absence(self):
+        with self.assertRaises(RuntimeError):
+            self.delete()
+        def denied(*args):
+            raise missing('scheduler', 'get-schedule-group', 'AccessDeniedException')
+        with self.assertRaisesRegex(RuntimeError, 'Group absence unresolved'):
+            fresh.delete_schedule_group(denied, self.reg, SHA, self.state, self.expected)
+        self.assertFalse((self.state / 'cleanup-schedule-group-readback.json').exists())
+        with self.assertRaisesRegex(RuntimeError, 'Ambiguous group deletion'):
+            fresh.delete_schedule_group(self.client, self.reg, 'b' * 64, self.state, self.expected)
+        self.assertEqual(self.deletes, 1)
+
+    def owned_cleanup_journal(self):
+        resources = dict(schedule_group=self.expected,
+            instance_profile=dict(Arn='arn:owned-profile', InstanceProfileId='AIPA-owned', CreateDate='original'),
+            security_group=dict(GroupId='sg-owned'))
+        for key in fresh.ROLE_KEYS:
+            resources[key] = dict(identity=dict(Arn=self.reg['iam'][key]['arn'],
+                RoleId='AROA-' + key, CreateDate='original'))
+        fresh.record(self.state / 'owned-prerequisites.json',
+            dict(registration_sha256=SHA, identity=self.reg['identity'], resources=resources))
+        fresh.record(self.state / 'owned-cleanup-started.json',
+            dict(registration_sha256=SHA, resources=resources))
+        for key, value in resources.items():
+            if key in fresh.ROLE_KEYS:
+                response = {'Role': value['identity']}
+            elif key == 'instance_profile':
+                response = {'InstanceProfile': value}
+            elif key == 'schedule_group':
+                response = {'ScheduleGroupArn': value['Arn']}
+            else:
+                response = {'GroupId': value['GroupId']}
+            request = dict(registration_sha256=SHA, service='fixture', operation='create-' + key, args=[])
+            fresh.record(self.state / ('create-' + key + '-intent.json'), request)
+            fresh.record(self.state / ('create-' + key + '-response.json'), dict(request=request, response=response))
+            fresh.record(self.state / ('create-' + key + '-readback.json'), dict(request=request, observation=value))
+
+    def test_owned_cleanup_resumes_group_readback_but_compute_uncertainty_blocks_other_deletes(self):
+        with self.assertRaisesRegex(RuntimeError, 'still pending'):
+            self.delete()
+        self.owned_cleanup_journal()
+        self.disappear = True
+        operations = []
+
+        def transport(service, operation, *args, **kwargs):
+            operations.append(operation)
+            if operation == 'get-caller-identity':
+                return dict(Account=self.reg['identity']['account'], Arn=self.reg['controller_arn'])
+            if service == 'scheduler':
+                return self.client(service, operation, *args)
+            raise missing(service, operation, 'AccessDenied')
+
+        with self.assertRaisesRegex(RuntimeError, 'AccessDenied'):
+            fresh.owned_prerequisite_cleanup(self.reg, SHA, self.state, transport)
+        self.assertEqual(operations, ['get-caller-identity', 'get-schedule-group', 'describe-instances'])
+        self.assertEqual(self.deletes, 1)
+        self.assertTrue((self.state / 'cleanup-schedule-group-readback.json').exists())
+        self.assertFalse((self.state / 'cleanup-profile-detach-intent.json').exists())
+
+    def test_owned_cleanup_never_replays_beyond_the_accepted_group_boundary(self):
+        with self.assertRaisesRegex(RuntimeError, 'still pending'):
+            self.delete()
+        self.owned_cleanup_journal()
+        fresh.record(self.state / 'cleanup-profile-detach-intent.json', {'ambiguous': True})
+        calls = []
+
+        def transport(service, operation, *args):
+            calls.append(operation)
+            self.assertEqual(operation, 'get-caller-identity')
+            return dict(Account=self.reg['identity']['account'], Arn=self.reg['controller_arn'])
+
+        with self.assertRaisesRegex(RuntimeError, 'explicit parent recovery'):
+            fresh.owned_prerequisite_cleanup(self.reg, SHA, self.state, transport)
+        self.assertEqual(calls, ['get-caller-identity'])
+        self.assertEqual(self.deletes, 1)
+
+
 
 if __name__ == '__main__':
     unittest.main()

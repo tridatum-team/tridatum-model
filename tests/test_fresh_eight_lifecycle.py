@@ -1,8 +1,11 @@
 """Offline fresh600 lease regressions; fixtures are not live launch evidence."""
 import datetime as dt
+import hashlib
+import io
 import json
 from pathlib import Path
 import sys
+import tarfile
 import tempfile
 import unittest
 
@@ -213,6 +216,124 @@ class FreshLifetimeTests(unittest.TestCase):
         completion['stages'].pop()
         with self.assertRaises(RuntimeError):
             L.validate_fresh_terminal(plan, 'a' * 64, 'i-owned', completion)
+
+
+class FreshExportFailureTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = plan_fixture()
+        self.plan['output_allowlist'] = ['train-receipt.json']
+        self.completion = dict(run_id=self.plan['identity']['run_id'], plan_sha256='a' * 64,
+            instance_id='i-owned', experimental_success=False, stop_errors=[],
+            stages=[dict(phase='train', state='complete', cleanup_verified=True)],
+            error='RuntimeError: Absolute deadline exhausted',
+            export_error="Unregistered output member: ['tmp/generated.py']")
+
+    def archive(self, *, extra=False, bad_member=False, foreign_status=False):
+        # A real tar with authenticated receipt bytes, not a mocked validator.
+        content = b'{"phase":"train","state":"complete"}'
+        status = {k: v for k, v in self.completion.items() if k not in ('error', 'export_error', 'export')}
+        if foreign_status:
+            status['instance_id'] = 'i-foreign'
+        manifest = dict(run_id=self.completion['run_id'], plan_sha256=self.completion['plan_sha256'],
+            status=status, files=[dict(path='train-receipt.json', bytes=len(content),
+                sha256=('b' * 64 if bad_member else hashlib.sha256(content).hexdigest()))])
+        rows = {'train-receipt.json': content, 'export-manifest.json': json.dumps(manifest).encode()}
+        if extra:
+            rows['undeclared.bin'] = b'not in authenticated inventory'
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode='w:') as stream:
+            for name, raw in rows.items():
+                member = tarfile.TarInfo(name)
+                member.size = len(raw)
+                stream.addfile(member, io.BytesIO(raw))
+        raw = output.getvalue()
+        self.completion['export'] = dict(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+        return raw
+
+    def collect(self, directory, archive=None):
+        completion = self.completion
+        prefix = self.plan['identity']['output_prefix']
+        calls = []
+
+        class Transport:
+            def __call__(self, service, operation, *args):
+                if (service, operation) != ('s3api', 'get-object'):
+                    raise AssertionError('Unexpected cloud operation')
+                key = args[args.index('--key') + 1]
+                calls.append(key)
+                if key == prefix + 'completion.json':
+                    Path(args[-1]).write_text(json.dumps(completion))
+                elif key == prefix + 'export.tar' and archive is not None:
+                    Path(args[-1]).write_bytes(archive)
+                else:
+                    raise AssertionError('Unexpected archive retrieval after metadata-only failure')
+                return {}
+
+        self.calls = calls
+        return L.collect_export(Transport(), self.plan, 'a' * 64, directory, 'i-owned')
+
+    def test_missing_archive_preserves_worker_export_and_cleanup_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.collect(directory)
+        self.assertFalse(result['native_pipeline_success'])
+        self.assertEqual(result['semantic_acceptance'], 'not_evaluated')
+        self.assertEqual(result['evidence_kind'], 'metadata_only')
+        self.assertEqual(result['export_state'], 'missing')
+        self.assertEqual(result['completion'], self.completion)
+        self.assertEqual(result['worker_error'], self.completion['error'])
+        self.assertEqual(result['export_error'], self.completion['export_error'])
+        self.assertEqual(len(self.calls), 1)
+        self.assertNotIn('export_sha256', result)
+
+    def test_missing_archive_never_bypasses_completion_identity(self):
+        for key in ('run_id', 'plan_sha256', 'instance_id'):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                original = self.completion[key]
+                self.completion[key] = 'foreign'
+                with self.assertRaisesRegex(RuntimeError, 'Completion ownership'):
+                    self.collect(directory)
+                self.completion[key] = original
+                self.assertEqual(len(self.calls), 1)
+
+    def test_success_or_nonterminal_metadata_without_archive_is_protocol_error(self):
+        for success in (True, False):
+            with self.subTest(success=success), tempfile.TemporaryDirectory() as directory:
+                self.completion['experimental_success'] = success
+                self.completion.pop('error', None)
+                self.completion.pop('export_error', None)
+                with self.assertRaisesRegex(RuntimeError, 'explicit terminal failure'):
+                    self.collect(directory)
+                self.assertEqual(len(self.calls), 1)
+
+    def test_failed_terminal_recovers_authenticated_earlier_train_snapshot(self):
+        archive = self.archive()
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.collect(directory, archive)
+        self.assertFalse(result['native_pipeline_success'])
+        self.assertEqual(result['export_state'], 'authenticated_partial')
+        self.assertEqual(result['completion']['error'], self.completion['error'])
+        self.assertEqual(result['export_sha256'], hashlib.sha256(archive).hexdigest())
+        self.assertEqual(len(self.calls), 2)
+
+    def test_failed_terminal_still_rejects_corrupt_archive_bytes(self):
+        archive = self.archive()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'Export bytes differ'):
+                self.collect(directory, archive[:-1] + b'x')
+
+    def test_failed_terminal_still_authenticates_exact_members_and_status_identity(self):
+        for option in ('extra', 'bad_member', 'foreign_status'):
+            with self.subTest(option=option), tempfile.TemporaryDirectory() as directory:
+                archive = self.archive(**{option: True})
+                with self.assertRaises(RuntimeError):
+                    self.collect(directory, archive)
+
+    def test_present_malformed_export_is_not_metadata_only_fallback(self):
+        self.completion['export'] = None
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'Export envelope'):
+                self.collect(directory)
+        self.assertEqual(len(self.calls), 1)
 
 
 if __name__ == '__main__':

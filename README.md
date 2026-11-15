@@ -453,17 +453,19 @@ JSON 제약은 이 표본의 구조 실패를 없앴지만 내용 정확성이�
 
 로컬 근거: `training-policy.json`, `review-protocol.json`, `execution-sources.json`, `executed-source.tar`, `mps-initialization-smoke.json`, `review-calibration-result.json`, `capacity-01/result.json`, `capacity-stop-analysis.json`, `local-continuation-registration.json`, `capacity-02-release.json`, `capacity-02/result.json`, `capacity-02-analysis.json`, `capacity-02-loading-investigation.json`. 실행 자료는 Git에 포함되지 않는 별도 보존 대상입니다.
 
-#### 새 8B CUDA LoRA · 별도 승인된 1회 실행
+#### 새 8B CUDA LoRA · 학습 완료 보고 후 산출물 회수 실패
 
 로컬 메모리 안전 기준은 유지하고, 사용자가 **BF16 유지·추가 GPU 예산 $10**을 별도로 승인했습니다. `runs/mois-fresh-eight-gpu-20261115T094150Z/`에 새 계약을 등록했습니다. 위의 새 LoRA 학습·용량 수락·개발 200문항 비교 조건은 유지하며, MPS 대신 CUDA를 사용합니다. 과거 유료 실행 권한이나 24단계 adapter를 재사용하지 않습니다.
 
-- **실행 경로:** `scripts/aws_eval/fresh_eight_launch.py`가 명시적 파일 목록·소스 SHA·승인·전용 자원 등록을 결박합니다. 실제 AWS 사전 검사와 입력 업로드는 통과했고 1회 실행 제어기를 시작했습니다. GPU 용량 검증·학습·답변 생성의 성공을 아직 주장하지 않습니다. 직접 lifecycle 실행으로 등록 절차를 우회하지 않습니다.
+- **실행 결과:** 실제 L40S 인스턴스에서 원격 완료 보고의 `capacity`·`train` 단계는 `complete`이며 소유 프로세스 정리도 확인됐습니다. 그러나 평가에서 `Absolute deadline exhausted`가 발생했고, 결과 내보내기도 실패했습니다. 제어기 경과 시간은 4877.57초입니다. 전체 7200초 lease보다 이르므로 별도 3600초 평가 한도에 걸린 것으로 추정하지만, 평가 시각·생성 문항 수는 회수하지 못했습니다. 단계 보고만으로 누락된 학습 ledger·수치 검증·가중치 인증을 대체하지 않습니다.
 - **비용 조건:** Seoul `g6e.2xlarge` 한 대, 암호화된 120GiB gp3 root 한 개, 작업 120분과 종료 여유 30분을 합친 최대 150분을 가격 계산에 포함합니다. 시작·설치·다운로드·검증·학습·추론·회수 시간이 모두 같은 한도를 소비합니다. 전송·요청·보존량·KMS 요청을 포함한 독립 조건부 검토 결과는 세금 10% 가정과 예비비 $1을 포함해 **$9.29**입니다. 실제 청구서나 AWS 결제 hard cap은 아니며, 자동 재실행·시간 연장·추가 인스턴스는 승인하지 않습니다.
-- **독립 종료·보존:** 전용 IAM role/profile, ingress 없는 security group, Scheduler group을 만들고 실제 readback을 확인했습니다. 기존 bucket 규칙 8개는 보존하고 새 code/output prefix에만 30일 만료·미완료 multipart 1일 정리를 추가했으며 전체 설정의 일치를 확인했습니다. 인스턴스별 Scheduler deadline은 의존성 다운로드 전에 확인하고, 모델 다운로드·학습에는 별도 release가 필요합니다. 원격 작업은 호스트 egress 2GiB에 bootstrap 16MiB 예약분을 포함하며, controller 회수 1GiB와 합산해 가격을 계산합니다.
-- **후보 수락:** 전체 용량 검증, 600행의 정확한 1회 소비와 최종 150단계, 같은 설정으로 새로 생성한 원본·후보 답변 400개, 실행 소스와 아티팩트, 인스턴스·root volume 정리 결과를 함께 확인합니다. 중간·부분 결과를 완성된 후보로 승격하지 않습니다. GPU를 정리한 뒤 익명 답변 쌍의 독립 채점과 불일치 검토를 수행합니다.
-- **현재 검증:** 관련 통합 테스트 424건 중 423건 통과·1건 skip. 실제 모듈 import, 실제 고정 입력 600행·200문항 계약 검사, 명시적 40파일 bundle 생성·해시 인증, 실제 자원 readback을 결박한 최종 계획·1회 승인 검증을 통과했습니다. 이는 실행 경로 검증이지 새 모델의 성능 점수가 아닙니다. 보호 최종 자료는 사용하지 않으며 `test.tridatum.co` 배포는 이 승인에 포함하지 않습니다.
+- **회수 실패 원인:** 라이브러리 임시 파일 `tmp/.../_remote_module_non_scriptable.py`가 결과 디렉터리에 남아 엄격한 archive 목록 검사에서 거부됐습니다. archive 생성·업로드 이전에 실패했습니다. 실제 원격 output prefix에는 `ready.json`과 `completion.json`만 있으며, 새 adapter·학습 ledger·답변 파일은 없습니다. 이어 controller가 없는 `export` 필드를 읽으면서 원래 오류까지 가렸습니다. 새 모델 성능 점수나 후보 수락 결과는 없습니다.
+- **자원 정리:** 인스턴스와 root volume의 종료·부재를 확인했습니다. Scheduler group 삭제의 비동기 완료를 즉시 부재로 가정한 정리 오류도 발생했지만, 삭제를 재전송하지 않고 별도 소유권 검증·정리 절차로 group·profile·role 2개·security group의 부재를 확인했습니다. 기존 bucket과 자료는 삭제하지 않았으며, 기존 규칙 8개와 새 prefix의 30일 만료·multipart 1일 정리 규칙은 유지합니다. 원래 실패 기록을 성공 기록으로 덮어쓰지 않았습니다.
+- **수정한 경계:** 임시 파일·HF cache·용량 검증 scratch를 export 바깥의 전용 영역으로 분리하고, output/scratch의 합계 2GiB·4096 inode 한도를 유지합니다. 소유 프로세스를 회수한 뒤에만 scratch를 정리합니다. 학습 수락 직후 평가보다 먼저 bounded snapshot을 게시하고, 후속 내보내기 실패 시 마지막 업로드 확인 pin을 보존합니다. 같은 S3 key를 갱신하며 불완전한 snapshot은 품질 수락이 아닙니다. export 없는 명시적 실패는 원래 오류를 보존하고, 성공 주장에 archive가 없으면 계속 거부합니다. 비동기 삭제에는 제한된 읽기 전용 완료 확인을 사용합니다.
+- **수정 후 검증:** 통합 테스트 443건 중 442건 통과·1건 skip. 실제 macOS Torch 2.9.1 하위 프로세스를 중단해 임시 Python 파일이 남는 현상을 재현했고, 수정된 경로에서 등록된 자료의 실제 tar 생성·본문 일치·프로세스 회수 후 scratch 삭제를 확인했습니다. 같은 미등록 파일을 export 내부에 넣으면 여전히 거부합니다. 로컬 합성 자료 검증이며 Linux mount/cgroup이나 수정 후 실제 GPU 학습을 검증한 것은 아닙니다. 독립 코드 검토에서 추가 blocking finding은 없었습니다.
+- **다음 실행 제약:** 이번 1회 GPU 실행 권한은 소비됐습니다. 수정 코드를 과거 실행에 소급 적용하거나 자동 재실행하지 않습니다. 복구 snapshot이 있더라도 전체 학습 증거와 동일 조건의 개발 200문항·답변 400개 및 자원 정리 검증 없이 완성 후보로 승격하지 않습니다. 보호 최종 자료와 `test.tridatum.co` 배포는 변경하지 않았습니다.
 
-로컬 근거: `authorization.json`, `training-policy-final.json`, `resource-envelope-final.json`, `execution-sources.json`, `source-verification.json`, `data-contract-smoke.json`, `admission/conditional-cost-admission.json`, `prerequisite-registration.json`, `cloud-state/owned-prerequisites.json`, `plan.json`, `one-run-approval.json`. 실행 자료와 가중치는 별도 보존 대상이며 Git 저장소에 포함되었다고 가정하지 않습니다.
+로컬 근거: `authorization.json`, `training-policy-final.json`, `resource-envelope-final.json`, `executed-source.tar`, `plan.json`, `cloud-state/completion.json`, `cloud-state/controller-result.json`, `post-run-output-inventory.json`, `failure-analysis.json`, `cleanup-only-continuation/continuation-result.json`, `torch-interruption-probe-02.json`, `repair-archive-smoke.json`. 수정 전 소스와 실패 증거는 그대로 보존합니다. 실행 자료는 Git 저장소에 포함되었다고 가정하지 않습니다.
 
 ### Packed-head 학습 엔진
 

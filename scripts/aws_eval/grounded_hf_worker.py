@@ -154,6 +154,9 @@ def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
         'InaccessiblePaths=/root /home /run/credentials /var/lib/cloud',
         f'StandardOutput=append:{base / "output" / (phase + ".log")}',
         f'StandardError=append:{base / "output" / (phase + ".log")}']
+    scratch_root = base / ('scratch' if fresh else 'output')
+    if fresh:
+        properties.append(f'ReadWritePaths={scratch_root}')
     selector = ordered is not None and ordered.phase_kind(plan, phase) == 'select'
     if ordered:
         hidden = [base / 'model'] if selector else [
@@ -170,7 +173,7 @@ def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
     for value in [f'CUDA_VISIBLE_DEVICES={"" if selector else gpu["uuid"]}', 'HF_HUB_OFFLINE=1', 'TRANSFORMERS_OFFLINE=1',
                   'HF_DATASETS_OFFLINE=1', 'AWS_EC2_METADATA_DISABLED=true', 'PYTHONDONTWRITEBYTECODE=1',
                   'TOKENIZERS_PARALLELISM=false', 'OMP_NUM_THREADS=6', 'MKL_NUM_THREADS=6',
-                  f'HF_HOME={base / "output" / "cache"}', f'TMPDIR={base / "output" / "tmp"}',
+                  f'HF_HOME={scratch_root / "cache"}', f'TMPDIR={scratch_root / "tmp"}',
                   f'TRID_OWNED_RUN={plan["identity"]["run_id"]}']:
         argv += ['--setenv', value]
     return [*argv, '--', str(base / 'venv/bin/python'), '-I', '-B',
@@ -218,11 +221,14 @@ def stop_unit(unit, run, deadline):
     return stopped
 
 
-def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, seconds=None):
+def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, seconds=None, attempt=None):
     """External GPU/cgroup guard remains root-owned, outside the native child."""
     ordered = ordered_module(plan)
     run = plan['identity']['run_id']
     unit = run + '-' + phase
+    if attempt is not None:
+        attempt.clear()
+        attempt.update(phase=phase, unit=unit, work_deadline=deadline, started_at=time.time())
     old = unit_state(unit, deadline)
     require(old['LoadState'] == 'not-found', 'Stage unit already exists; no reuse')
     if phase == 'runtime':
@@ -232,7 +238,11 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, 
     else:
         allocations = plan['workload']['phase_seconds'] if ordered else plan['phase_seconds']
         allocation = allocations[phase]
+    if attempt is not None:
+        attempt['registered_seconds'] = allocation
     seconds = min(allocation, int(remaining(deadline)) - 15)
+    if attempt is not None:
+        attempt['effective_seconds'] = seconds
     require(seconds > 0, 'Insufficient stop reserve')
     verify_gpu_observation(gpu_observation(deadline), plan, gpu)
     # Record ownership before dispatch: a lost systemd-run response is ambiguous.
@@ -240,6 +250,8 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, 
     owned_units.append(unit)
     command(stage_argv(plan, base, phase, seconds, gpu, uid, gid), deadline)
     phase_deadline = min(deadline, time.time() + seconds)
+    if attempt is not None:
+        attempt['phase_deadline'] = phase_deadline
     try:
         while True:
             remaining(phase_deadline)
@@ -308,6 +320,10 @@ def export_outputs(base, plan, report, deadline):
     require(predicted <= archive_limit, 'Export archive overhead exceeds envelope')
     import io
     target = base / 'export.tar'
+    if fresh_mode(plan):
+        # One local archive at a time, including replacement after a failed PUT.
+        # The acknowledged remote pin remains untouched until upload succeeds.
+        target.unlink(missing_ok=True)
     with tarfile.open(target, 'x:', format=tarfile.USTAR_FORMAT) as archive:
         info = tarfile.TarInfo('export-manifest.json'); info.size = len(payload); info.mode = 0o444
         archive.addfile(info, io.BytesIO(payload))
@@ -320,6 +336,42 @@ def export_outputs(base, plan, report, deadline):
                 archive.addfile(info, stream)
     require(target.stat().st_size <= archive_limit, 'Archive overflow')
     return dict(path=target, bytes=target.stat().st_size, sha256=digest(target), manifest=manifest)
+
+
+def publish_outputs(base, plan, report, client, deadline):
+    """Publish one bounded artifact set; advance its pin only on acknowledgment."""
+    status = {k: v for k, v in report.items() if k != 'export'}
+    export = export_outputs(base, plan, status, deadline)
+    ident = plan['identity']
+    condition = [] if fresh_mode(plan) and 'export' in report else ['--if-none-match', '*']
+    bounded_client = fresh_mode(plan) and hasattr(client, 'deadline')
+    if bounded_client:
+        previous_deadline = client.deadline
+        client.deadline = min(previous_deadline, deadline) if previous_deadline is not None else deadline
+    try:
+        remaining(deadline)
+        client('s3api', 'put-object', '--bucket', ident['bucket'], '--key', ident['output_prefix'] + 'export.tar',
+               '--body', str(export['path']), *condition, '--server-side-encryption', 'AES256',
+               '--metadata', json.dumps({'sha256': export['sha256'], 'run': ident['run_id']}))
+    finally:
+        if bounded_client:
+            client.deadline = previous_deadline
+    report['export'] = {k: export[k] for k in ('bytes', 'sha256')}
+    return export
+
+
+def cleanup_fresh_scratch(base, units, deadline):
+    """Scratch is disposable only after every owned native process is reaped."""
+    require(not units, 'Scratch cleanup forbidden while an owned process remains unresolved')
+    scratch = Path(base) / 'scratch'
+    require(not scratch.is_symlink(), 'Unsafe native scratch root')
+    if scratch.exists():
+        if os.path.ismount(scratch):
+            command(['umount', str(scratch)], deadline)
+            scratch.rmdir()
+        else:
+            shutil.rmtree(scratch)
+
 
 
 def replacement_egress_allowance(plan):
@@ -585,7 +637,10 @@ def bootstrap(plan, plan_sha, base):
                 else:
                     path.chmod(0o555 if path.stat().st_mode & 0o111 else 0o444)
         (base / 'output').mkdir(mode=0o700)
-        command(['mount', '-t', 'tmpfs', '-o', 'size=2G,nr_inodes=4096,nosuid,nodev,noexec,mode=0700',
+        # Fresh scratch shares the historical 2GiB/4096-inode host envelope,
+        # but never the exported namespace. Neither mount can grow unbounded.
+        output_mount = 'size=512M,nr_inodes=2048' if fresh else 'size=2G,nr_inodes=4096'
+        command(['mount', '-t', 'tmpfs', '-o', output_mount + ',nosuid,nodev,noexec,mode=0700',
                  'trid-output', str(base / 'output')], acquisition_deadline)
         if fresh:
             # Root-owned sticky parent prevents later nonroot phases replacing
@@ -593,11 +648,17 @@ def bootstrap(plan, plan_sha, base):
             (base / 'output').chmod(0o1777)
         else:
             os.chown(base / 'output', account.pw_uid, account.pw_gid)
+        scratch_root = base / ('scratch' if fresh else 'output')
+        if fresh:
+            scratch_root.mkdir(mode=0o755)
+            command(['mount', '-t', 'tmpfs', '-o', 'size=1536M,nr_inodes=2048,nosuid,nodev,noexec,mode=0755',
+                     'trid-scratch', str(scratch_root)], acquisition_deadline)
         for name in ('tmp', 'cache'):
-            (base / 'output' / name).mkdir()
-            os.chown(base / 'output' / name, account.pw_uid, account.pw_gid)
+            (scratch_root / name).mkdir(mode=0o700)
+            os.chown(scratch_root / name, account.pw_uid, account.pw_gid)
         report['runtime_unit'] = supervise_phase(plan, base, 'runtime', gpu, account.pw_uid, account.pw_gid,
-                                                 acquisition_deadline, units)
+                                                 acquisition_deadline, units,
+                                                 attempt=report.setdefault('phase_attempt', {}) if fresh else None)
         report['runtime'] = json.loads((base / 'output/runtime.json').read_text())
         if ordered:
             ordered.run_ordered(sys.modules[__name__], plan, base, report, client, gpu, account,
@@ -629,9 +690,10 @@ def bootstrap(plan, plan_sha, base):
         report['error'] = f'{type(exc).__name__}: {exc}'
     finally:
         report['stop_errors'] = []
-        for unit in units:
+        for unit in list(units):
             try:
                 stop_unit(unit, ident['run_id'], min(deadline - 60, time.time() + 30))
+                units.remove(unit)
             except Exception as exc:
                 report['stop_errors'].append(str(exc))
         if report['stop_errors']:
@@ -641,20 +703,15 @@ def bootstrap(plan, plan_sha, base):
             if not fresh and (base / 'output/capacity').exists():
                 require(not (base / 'output/capacity').is_symlink(), 'Synthetic scratch ownership differs')
                 shutil.rmtree(base / 'output/capacity')
-            if fresh and (base / 'output/tmp/fresh-capacity').exists():
-                scratch = base / 'output/tmp/fresh-capacity'
-                require(not scratch.is_symlink(), 'Synthetic scratch ownership differs')
-                shutil.rmtree(scratch)
+            if fresh:
+                cleanup_fresh_scratch(base, units, deadline - 60)
             if (base / 'output').exists():
-                # These directories are scratch only; unexpected content is not
-                # silently excluded. Every surviving file must be registered.
-                export = export_outputs(base, plan, report, deadline - 60)
-                client('s3api', 'put-object', '--bucket', ident['bucket'], '--key', ident['output_prefix'] + 'export.tar',
-                       '--body', str(export['path']), '--if-none-match', '*', '--server-side-encryption', 'AES256',
-                       '--metadata', json.dumps({'sha256': export['sha256'], 'run': ident['run_id']}))
-                report['export'] = {k: export[k] for k in ('bytes', 'sha256')}
+                # No exceptions for library scratch or unknown output files.
+                export = publish_outputs(base, plan, report, client, deadline - 60)
         except Exception as exc:
             report['export_error'] = str(exc)
+            if fresh:
+                report[success_key] = False
         try:
             save(base / 'completion.json', report)
             require((base / 'completion.json').stat().st_size <= 1024**2, 'Completion receipt exceeds reserved envelope')

@@ -73,7 +73,7 @@ def fresh_model(plan, base):
 def capacity_stage(core, plan, base, torch, admitted):
     from transformers import AutoTokenizer
     root = Path(base) / 'output'
-    out, scratch = root / 'capacity', root / 'tmp/fresh-capacity'
+    out, scratch = root / 'capacity', Path(base) / 'scratch/tmp/fresh-capacity'
     out.mkdir(); scratch.mkdir()
     trainer = core.trainer_module(base)
     tok = AutoTokenizer.from_pretrained(Path(base) / 'model', local_files_only=True)
@@ -117,7 +117,7 @@ def capacity_stage(core, plan, base, torch, admitted):
     adapter = scratch / 'scratch-adapter'
     model.save_pretrained(adapter)
     expected = {name: value.detach().cpu() for name, value in model.named_parameters() if value.requires_grad}
-    scratch_weights = E.pin(adapter / 'adapter_model.safetensors', root)
+    scratch_weights = E.pin(adapter / 'adapter_model.safetensors', Path(base))
     # No graph/model/optimizer alias survives this release. CPU tensor snapshots
     # are retained solely for exact fresh-base reload comparison.
     del loss, optimizer, schedule, model
@@ -221,12 +221,13 @@ def run_experiment(core, plan, base, report, client, gpu, account, work_deadline
                 plan=E.pin(root / 'plan.json', root), candidate_id=E.RUN_ID,
                 arm='candidate', step=150))
             (root / 'candidate.json').chmod(0o444)
-        unit = core.supervise_phase(plan, base, phase, gpu, account.pw_uid, account.pw_gid, work_deadline, units)
+        unit = core.supervise_phase(plan, base, phase, gpu, account.pw_uid, account.pw_gid, work_deadline, units,
+                                    attempt=report.setdefault('phase_attempt', {}))
         E.require(unit['cleanup_verified'] is True, 'Fresh phase has no owned-process cleanup proof')
         report['stages'].append(unit)
         if phase == 'capacity':
             E.validate_capacity(root, plan)
-            scratch = root / 'tmp/fresh-capacity'
+            scratch = base / 'scratch/tmp/fresh-capacity'
             E.require(scratch.is_dir() and not scratch.is_symlink(), 'Scratch capacity ownership differs')
             shutil.rmtree(scratch)
         elif phase == 'train':
@@ -244,4 +245,9 @@ def run_experiment(core, plan, base, report, client, gpu, account, work_deadline
             import os
             os.chown(path, 0, 0)
             path.chmod(0o555 if path.is_dir() else 0o444)
+        if phase == 'train':
+            # Persist only accepted, reaped, root-frozen training artifacts.
+            # This incomplete snapshot is recovery evidence, never quality success.
+            E.require(not units, 'Training snapshot requires all owned units reaped')
+            core.publish_outputs(base, plan, report, client, work_deadline)
     E.validate_completion(root, plan)
