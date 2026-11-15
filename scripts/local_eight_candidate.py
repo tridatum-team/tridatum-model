@@ -1,0 +1,235 @@
+"""Authenticated final-endpoint contract; stdlib only, no private grading reads."""
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from pathlib import Path
+
+POLICY_SHA = '1641b555673165307c053bef701d4a2399eb8a774916ba5cb3e2a0a4ec9f9679'
+PROTOCOL_SHA = '222e0f233f19a1f994a80b65073bfc6563be42658a9c276829d091fb10d275ee'
+MODEL_ID = 'Qwen/Qwen3-8B'
+REVISION = 'b968826d9c46dd6066d109eabc6255188de91218'
+# This is the supported PEFT serialization, not an open-ended bag of overrides.
+# Unknown future fields require a deliberate review rather than silent defaults.
+FIXED_LORA_CONFIG = dict(
+    alpha_pattern={}, auto_mapping=None, bias='none', corda_config=None, eva_config=None,
+    exclude_modules=None, fan_in_fan_out=False, inference_mode=True, init_lora_weights=True,
+    layer_replication=None, layers_pattern=None, layers_to_transform=None, loftq_config={},
+    lora_alpha=16, lora_bias=False, lora_dropout=0.0, megatron_config=None,
+    megatron_core='megatron.core', modules_to_save=None, peft_type='LORA',
+    qalora_group_size=16, r=8, rank_pattern={}, revision=None, target_parameters=None,
+    task_type='CAUSAL_LM', trainable_token_indices=None,
+    use_dora=False, use_qalora=False, use_rslora=False)
+
+
+def validate_adapter_config(config, targets):
+    require(isinstance(config, dict)
+            and set(config) == set(FIXED_LORA_CONFIG) | {'base_model_name_or_path', 'target_modules'}
+            and isinstance(config['base_model_name_or_path'], str)
+            and isinstance(config['target_modules'], list)
+            and len(config['target_modules']) == len(targets)
+            and set(config['target_modules']) == set(targets),
+            'adapter configuration/base isolation differs')
+    # Preserve exact JSON types, including bool versus int. The base name is
+    # informational: inference always supplies the separately authenticated base.
+    effective = {key: config[key] for key in FIXED_LORA_CONFIG}
+    require(json.dumps(effective, sort_keys=True) == json.dumps(FIXED_LORA_CONFIG, sort_keys=True),
+            'adapter configuration/base isolation differs')
+
+
+def require(ok, message):
+    if not ok:
+        raise ValueError(message)
+
+
+def load(path):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, 'duplicate identity key')
+            result[key] = value
+        return result
+    def invalid(value):
+        raise ValueError('nonfinite identity: ' + value)
+    return json.loads(Path(path).read_text(encoding='utf-8'), object_pairs_hook=unique,
+                      parse_constant=invalid)
+
+
+def file_pin(path):
+    path = Path(path)
+    require(path.is_file() and not path.is_symlink() and path.stat().st_nlink == 1,
+            'candidate evidence must be ordinary unshared file')
+    path = path.resolve()
+    with path.open('rb') as stream:
+        sha = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return dict(path=str(path), bytes=path.stat().st_size, sha256=sha)
+
+
+def bound(root, entry):
+    require(isinstance(entry, dict) and set(entry) == {'path', 'bytes', 'sha256'}, 'invalid candidate pin')
+    path = Path(entry['path'])
+    path = path if path.is_absolute() else Path(root) / path
+    require(path.is_file() and not path.is_symlink() and path.stat().st_nlink == 1,
+            'candidate evidence must be ordinary unshared file')
+    actual = file_pin(path)
+    require(all(actual[k] == entry[k] for k in ('bytes', 'sha256')), 'candidate evidence hash/size differs: ' + str(path))
+    return path.resolve()
+
+
+def same_pin(root, first, second):
+    return bound(root, first) == bound(root, second) and first['sha256'] == second['sha256']
+
+
+def supervised(root, entry, policy_pin, phase):
+    result = load(bound(root, entry))
+    require(result.get('schema') == 'trid-local-mps-supervised-v1'
+            and result.get('phase') == phase and result.get('status') == 'accepted',
+            'parent supervision did not accept ' + phase)
+    cleanup = result.get('cleanup', {})
+    require(cleanup.get('accepted') is True and cleanup.get('leader_reaped') is True
+            and cleanup.get('remaining_members') == [], 'owned process cleanup not accepted')
+    require(same_pin(root, result['policy'], policy_pin), 'supervisor policy differs')
+    sources = load(bound(root, result['sources']))
+    require(sources.get('schema') == 'trid-local-mps-sources-v1'
+            and sources.get('files') == result.get('source_files') and sources['files'],
+            'actual supervisor source set differs')
+    paths = [bound(root, pin) for pin in sources['files']]
+    require(len(paths) == len(set(paths)), 'duplicate source pin')
+    worker = load(bound(root, result['worker_result']))
+    require(same_pin(root, worker['policy'], policy_pin), 'worker policy differs')
+    actual = worker.get('actual_source_files')
+    require(actual and actual == result.get('actual_source_files'), 'worker actual source closure differs')
+    actual_paths = [bound(root, pin) for pin in actual]
+    require(len(actual_paths) == len(set(actual_paths)) and set(actual_paths) <= set(paths),
+            'worker executed unregistered source')
+    if phase == 'train':
+        bound(root, result['ledger'])
+        capacity, _ = supervised(root, result['capacity_result'], policy_pin, 'capacity')
+        require(same_pin(root, result['sources'], capacity['sources']),
+                'capacity and training source registration differ')
+    else:
+        require(worker.get('status') == 'complete' and worker.get('phase') == 'capacity'
+                and worker.get('optimizer_updates') == 2 and worker.get('microbatches_per_update') == 4
+                and worker.get('reload_exact') is True
+                and type(worker.get('reload_loss')) in (int, float) and math.isfinite(worker['reload_loss']),
+                'capacity proof did not complete the registered envelope/reload')
+    return result, worker
+
+
+def resolve_candidate(root, manifest_path, expected_sha):
+    """Authenticate nomination without opening references, rubrics, or protocol text."""
+    require(bool(manifest_path) == bool(expected_sha), 'candidate manifest and SHA must be paired')
+    require(manifest_path is not None, 'candidate registration required')
+    registration_pin = file_pin(manifest_path)
+    require(registration_pin['sha256'] == expected_sha, 'candidate registration hash differs')
+    registration = load(bound(root, registration_pin))
+    require(set(registration) == {'schema', 'policy', 'candidate_id', 'arm', 'step', 'supervision',
+                                 'training', 'checkpoint_ledger', 'adapter'}
+            and registration['schema'] == 'trid-local-eight-candidate-v1', 'candidate registration schema differs')
+    require(registration['policy']['sha256'] == POLICY_SHA, 'unregistered training policy')
+    policy = load(bound(root, registration['policy']))
+    require(policy.get('schema') == 'trid-local-eight-training-policy-v1'
+            and registration['candidate_id'] == policy['experiment_id']
+            and registration['arm'] == 'candidate' and registration['step'] == policy['training']['steps'] == 150,
+            'only registered final step150 may be nominated')
+    require(policy['evaluation']['review_protocol']['sha256'] == PROTOCOL_SHA, 'prospective protocol identity differs')
+    # Only authenticate opaque protocol bytes here; never parse grading instructions.
+    bound(root, policy['evaluation']['review_protocol'])
+    training_manifest = load(bound(root, policy['data']['training_manifest']))
+    require(training_manifest.get('schema') == 'trid-expanded-training-manifest-v1'
+            and training_manifest.get('state') == 'ADMITTED' and training_manifest.get('rows') == 600
+            and training_manifest.get('valid') == [], 'admitted training manifest differs')
+    manifest_dir = bound(root, policy['data']['training_manifest']).parent
+    admitted = set()
+    for entry in training_manifest['train']:
+        require(entry['epochs'] == 1, 'training rows repeated')
+        path = bound(manifest_dir, {k: entry[k] for k in ('path', 'bytes', 'sha256')})
+        with path.open(encoding='utf-8') as stream:
+            for line_number, line in enumerate(stream, 1):
+                if line.strip():
+                    admitted.add((entry['sha256'], line_number))
+    require(len(admitted) == 600, 'admitted source row denominator differs')
+    acquisition = load(bound(root, policy['model']['acquisition_manifest']))
+    require(acquisition['repo_id'] == MODEL_ID and acquisition['revision'] == REVISION,
+            'official acquisition identity differs')
+    supervisor, training = supervised(root, registration['supervision'], registration['policy'], 'train')
+    require(same_pin(root, supervisor['worker_result'], registration['training'])
+            and same_pin(root, supervisor['ledger'], registration['checkpoint_ledger']),
+            'nomination is not accepted parent result')
+    ledger = load(bound(root, registration['checkpoint_ledger']))
+    for record in (training, ledger):
+        require(record['base_model_id'] == MODEL_ID and record['base_revision'] == REVISION
+                and record['base_weights'] == {'representation': 'hf-safetensors', 'dtype': 'torch.bfloat16'}
+                and record['init_adapter'] is None
+                and record['manifest_sha256'] == policy['data']['training_manifest']['sha256'],
+                'fresh official base/training lineage differs')
+    require(training['status'] == 'complete' and training['steps'] == training['cumulative_steps'] == 150
+            and ledger['run_status'] == 'complete' and ledger['planned_steps'] == 150
+            and training['train_rows'] == 600 and training['valid_rows'] == 0
+            and training['dropped_over_max_tokens'] == training['valid_dropped'] == 0,
+            'complete fixed endpoint and denominator required')
+    coverage = training.get('coverage', [])
+    require(training.get('coverage_complete') is True and len(coverage) == 600
+            and {(row['source_sha256'], row['source_line']) for row in coverage} == admitted,
+            'exactly-once admitted source coverage differs')
+    inventory = training.get('dtype_inventory', {})
+    for group, dtype in (('base', 'torch.bfloat16'), ('adapter', 'torch.float32')):
+        values = inventory.get(group, {})
+        require(values and all(key in (dtype + '@mps', dtype + '@mps:0') and entry['tensors'] > 0
+                               and entry['elements'] > 0 and entry['bytes'] > 0 for key, entry in values.items()),
+                'actual training dtype inventory differs: ' + group)
+    for key in ('batch_size', 'micro_batch_size', 'lr', 'seed', 'max_tokens', 'max_answer_tokens', 'family'):
+        require(training[key] == policy['training'][key], 'training configuration differs: ' + key)
+    require(training['device'] == 'mps' and training['dtype'] == 'torch.bfloat16', 'training runtime differs')
+    require(training['lora'] == {k: policy['training'][k] for k in ('rank', 'alpha', 'dropout', 'targets')},
+            'training LoRA configuration differs')
+    require([row['step'] for row in training['history']] == list(range(1, 151)), 'training history coverage differs')
+    require(ledger['checkpoint_every'] == 50 and [c['step'] for c in ledger['checkpoints']] == [50, 100, 150]
+            and training['checkpoints'] == ledger['checkpoints'], 'diagnostic checkpoint ledger differs')
+    adapter = registration['adapter']
+    require(set(adapter) == {'directory', 'files'}, 'candidate adapter fields differ')
+    directory = Path(adapter['directory'])
+    directory = (directory if directory.is_absolute() else Path(root) / directory).resolve()
+    require(directory == bound(root, registration['training']).parent / 'adapter', 'only final adapter directory allowed')
+    require(set(adapter['files']) == {'adapter_config.json', 'adapter_model.safetensors', 'README.md'}
+            and {p.name for p in directory.iterdir()} == set(adapter['files']), 'adapter membership differs')
+    files = {}
+    for name, entry in adapter['files'].items():
+        require(bound(root, entry) == directory / name, 'adapter file path differs')
+        files[name] = file_pin(directory / name)
+    weights_sha = files['adapter_model.safetensors']['sha256']
+    config_sha = files['adapter_config.json']['sha256']
+    require(set(supervisor.get('adapter_files', {})) == {'adapter_config.json', 'adapter_model.safetensors'}
+            and all(same_pin(root, supervisor['adapter_files'][name], files[name])
+                    for name in supervisor['adapter_files']), 'accepted producer adapter files differ')
+    last = ledger['last_step']
+    last_path = Path(last['path'])
+    last_path = last_path if last_path.is_absolute() else Path(root) / last_path
+    require(training['last_step'] == last and last['step'] == 150 and last_path.resolve() == directory
+            and last['adapter_weights_sha256'] == weights_sha
+            and last.get('adapter_config_sha256') == config_sha
+            and last['equals_last_checkpoint'] is True
+            and ledger['checkpoints'][-1]['adapter_weights_sha256'] == weights_sha
+            and ledger['checkpoints'][-1].get('adapter_config_sha256') == config_sha,
+            'final training/ledger/config/weights binding differs')
+    config = load(directory / 'adapter_config.json')
+    validate_adapter_config(config, policy['training']['targets'])
+    identity = dict(status='registered_final_development_candidate_not_selected', step=150,
+                    files=files, checkpoint_ledger=file_pin(bound(root, registration['checkpoint_ledger'])), config=config)
+    return dict(arms=['base', 'candidate'], adapter_directory=str(directory), adapter=identity,
+                adapter_sha256=weights_sha, registration=registration_pin,
+                policy=registration['policy'], policy_document=policy,
+                candidate_id=registration['candidate_id'], review_protocol=policy['evaluation']['review_protocol'])
+
+
+def public_contract(contract):
+    return {key: value for key, value in contract.items() if key not in ('policy_document', 'adapter_directory', 'adapter')}
+
+
+def review_protocol(root, contract):
+    protocol = load(bound(root, contract['review_protocol']))
+    require(protocol.get('schema') == 'trid-local-eight-review-protocol-v2'
+            and protocol.get('paired_consistency') is True and protocol.get('critical_errors_are_codes') is True,
+            'prospective review protocol differs')
+    return {key: protocol[key] for key in ('instructions', 'paired_consistency', 'critical_error_codes', 'critical_errors_are_codes')}

@@ -10,6 +10,15 @@ Commands (all paths belong to --root):
   freeze --packet FILE --reports FIRST SECOND [--third FILE --adjudication FILE] --out FILE
   aggregate --judgments FILE --judgments-sha256 SHA --mapping FILE --out FILE
 
+packet additionally accepts paired --candidate-manifest FILE --candidate-sha256
+SHA for the registered final150 development cycle; omission is strict historical
+step24 replay. Candidate review uses registered critical-error codes (concrete
+evidence belongs in reason), unchanged anonymous protocol instructions, and
+complete same-question pairs in each shard. A dispute expands to both samples;
+the third report must cover that entire anonymous pair. Candidate aggregation
+reauthenticates registration and supervision, never searches checkpoints/profiles
+or compares scores against the historical grading policy.
+
 Review JSON: schema trid-expanded-blind-review-v1, packet_sha256, reviewer_id,
 independent:true, blinded:true, judgments:{sample_id:{semantic_pass:bool,
 format_pass:bool, critical_errors:[specific descriptions], reason:nonempty}}.
@@ -55,11 +64,23 @@ if str(ROOT) not in sys.path:
 from scripts.aws_eval.eight_hf_assessment import (
     bound, digest, object_sha, pin, require, signature, structural_result, validate_report,
 )
+from scripts.local_eight_candidate import resolve_candidate, public_contract, review_protocol
 
 ARMS = ('base', 'step-000024')
 PIN_NAMES = {'design', 'source_allocation', 'evaluation_inputs', 'evaluation_metadata',
              'evaluation_references', 'training_manifest', 'semantic_review_resolution'}
 METRICS = ('structural_pass', 'semantic_pass', 'format_pass', 'joint_pass')
+ANONYMOUS_PROTOCOL_SHA = 'aa2ea535907290693f2d470cb21cb70d5573be20899da1052fbf3bc9f68abeb8'
+PROTOCOL_FIELDS = ('instructions', 'paired_consistency', 'critical_error_codes', 'critical_errors_are_codes')
+# Always imported by the evaluator before either code_identity receipt. Keep the
+# producer and its local decoding/loading dependencies authenticated, not merely
+# whichever unrelated files a receipt elects to list.
+CANDIDATE_PRODUCER_SOURCES = frozenset({
+    'scripts/evaluate_local_eight.py', 'scripts/local_eight_candidate.py',
+    'scripts/train_open_weight_lora.py', 'scripts/aws_eval/grounded_hf_worker.py',
+    'scripts/aws_eval/grounded_hf_lifecycle.py', 'scripts/aws_eval/qwen_cuda_smoke.py',
+    'scripts/aws_eval/qwen_cpu_smoke.py', 'trid/prompts.py', 'trid/text.py', 'trid/case_prompts.py',
+})
 
 
 def parse_json(text):
@@ -104,6 +125,31 @@ def authenticate(path, expected):
     require(path.stat().st_size == expected['bytes'] and digest(path) == expected['sha256'],
             'artifact hash/size mismatch: ' + path.name)
     return path
+
+
+def authenticate_producer_sources(root, manifest_sources, runtime_sources):
+    root = Path(root).resolve()
+    for sources in (manifest_sources, runtime_sources):
+        require(isinstance(sources, dict) and CANDIDATE_PRODUCER_SOURCES <= sources.keys(),
+                'candidate mandatory producer source pins missing')
+        for name, entry in sources.items():
+            relative = Path(name)
+            require(bool(relative.parts) and not relative.is_absolute() and relative.as_posix() == name
+                    and '..' not in relative.parts and relative.parts[0] in ('scripts', 'trid')
+                    and relative.suffix == '.py', 'candidate source key differs from producer identity')
+            expected = root / relative
+            recorded = Path(entry['path'])
+            recorded = recorded if recorded.is_absolute() else root / recorded
+            require(expected.is_file() and recorded.is_file()
+                    and any(parent.samefile(root) for parent in expected.resolve().parents)
+                    and recorded.samefile(expected)
+                    and not expected.is_symlink() and expected.stat().st_nlink == 1,
+                    'candidate producer source path substitution')
+            authenticate(expected, entry)
+    require(manifest_sources.keys() <= runtime_sources.keys()
+            and all(all(manifest_sources[name][field] == runtime_sources[name][field]
+                        for field in ('bytes', 'sha256')) for name in manifest_sources),
+            'candidate producer sources changed between runtime receipts')
 
 
 def frozen_dataset(root, path, expected_sha):
@@ -153,12 +199,14 @@ def frozen_dataset(root, path, expected_sha):
     return frozen, design, inputs, metadata, references
 
 
-def completed_run(root, directory, cases, design, profile, input_pin=None):
+def completed_run(root, directory, cases, design, profile, input_pin=None, contract=None):
     """Authenticate the evaluator's actual file/row contract, never model weights."""
     directory = Path(directory)
+    arms = contract['arms'] if contract else ARMS
+    adapter_sha = contract['adapter_sha256'] if contract else design['model']['adapter_sha256']
     require(not (directory / 'failure.json').exists(), 'failed local run is not complete')
     names = ['run-manifest.json', 'decoder-profile.json', 'prompt-preflight.json',
-             'loaded-runtime.json', 'completion.json', 'base-outputs.jsonl', 'step-000024-outputs.jsonl']
+             'loaded-runtime.json', 'completion.json', *[arm + '-outputs.jsonl' for arm in arms]]
     pins = {name: pin(directory / name, root) for name in names}
     manifest = load(directory / 'run-manifest.json')
     completion = load(directory / 'completion.json')
@@ -166,16 +214,27 @@ def completed_run(root, directory, cases, design, profile, input_pin=None):
     preflight = load(directory / 'prompt-preflight.json')
     loaded = load(directory / 'loaded-runtime.json')
     manifest_sha = pins['run-manifest.json']['sha256']
-    require(manifest.get('schema') == 'trid-local-eight-paired-v1' and manifest.get('mode') == 'evaluation'
-            and manifest.get('arm_order') == list(ARMS)
+    require(manifest.get('schema') == ('trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1')
+            and manifest.get('mode') == 'evaluation' and manifest.get('arm_order') == list(arms)
             and manifest.get('grading_access') is False and manifest.get('retries') is False
             and manifest.get('resume') is False, 'local run identity/mode differs')
+    if contract:
+        require(manifest.get('evaluation_contract') == public_contract(contract)
+                and manifest.get('adapter') == contract['adapter'] and profile == 'unconstrained',
+                'registered evaluation contract differs')
+        from scripts.evaluate_local_eight import model_identity
+        model = manifest['model']
+        require(model_identity(model['directory'], model['acquisition_manifest']['path']) == model,
+                'candidate official base authentication differs')
+        authenticate_producer_sources(root, manifest.get('code'), loaded.get('code'))
+    else:
+        require('evaluation_contract' not in manifest, 'historical replay cannot carry a candidate contract')
     ids = manifest.get('selected_ids', [])
     require(len(ids) == len(set(ids)) == len(cases) and set(ids) == set(cases), 'selected case denominator')
     require(completion.get('status') == 'complete' and completion.get('mode') == 'evaluation'
             and completion.get('rows_per_arm') == len(cases)
             and completion.get('run_manifest_sha256') == manifest_sha
-            and set(completion.get('outputs', {})) == set(ARMS)
+            and set(completion.get('outputs', {})) == set(arms)
             and finite_seconds(completion.get('elapsed_seconds')), 'completion identity/denominator')
     public_path = Path(manifest['input']['path'])
     public_path = public_path if public_path.is_absolute() else Path(root) / public_path
@@ -197,8 +256,9 @@ def completed_run(root, directory, cases, design, profile, input_pin=None):
             and model.get('revision') == design['model']['revision']
             and model.get('body_hashes_authenticated') is True
             and model.get('representation') == 'hf-safetensors-bfloat16'
-            and adapter.get('step') == design['model']['adapter_step'] == 24
-            and adapter['files']['adapter_model.safetensors']['sha256'] == design['model']['adapter_sha256'],
+            and adapter.get('step') == (150 if contract else design['model']['adapter_step'])
+            and (contract is not None or adapter.get('step') == 24)
+            and adapter['files']['adapter_model.safetensors']['sha256'] == adapter_sha,
             'model/adapter binding differs')
     runtime = manifest['runtime']
     require(runtime.get('device') == 'mps' and runtime.get('dtype') == 'torch.bfloat16'
@@ -242,7 +302,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None):
                 ('do_sample', 'num_beams', 'max_new_tokens', 'return_dict_in_generate')),
             'requested/effective generation contract differs')
     answers = {}
-    for arm in ARMS:
+    for arm in arms:
         path = directory / (arm + '-outputs.jsonl')
         authenticate(path, completion['outputs'][arm])
         require(Path(completion['outputs'][arm]['path']).resolve() == path.resolve(),
@@ -259,14 +319,17 @@ def completed_run(root, directory, cases, design, profile, input_pin=None):
                     and row.get('loaded_runtime_sha256') == pins['loaded-runtime.json']['sha256']
                     and row.get('model_id') == model['id'] and row.get('model_revision') == model['revision']
                     and row.get('input_sha256') == manifest['input']['sha256']
-                    and row.get('nominated_adapter_weights_sha256') == design['model']['adapter_sha256']
-                    and row.get('adapter_weights_sha256') == (None if arm == 'base' else design['model']['adapter_sha256'])
+                    and row.get('nominated_adapter_weights_sha256') == adapter_sha
+                    and row.get('adapter_weights_sha256') == (None if arm == 'base' else adapter_sha)
                     and row.get('mode') == 'evaluation' and row.get('decoder_profile') == profile
                     and row.get('decoder_profile_sha256') == pins['decoder-profile.json']['sha256']
                     and row.get('generation') == generation and row.get('generation_config') == config
                     and row.get('generation_policy_sha256') == object_sha(policy)
                     and row.get('effective_generation_mode') == 'greedy_search',
                     'answer arm/runtime/profile/adapter binding differs')
+            if contract:
+                require(row.get('candidate_manifest_sha256') == contract['registration']['sha256'],
+                        'answer registration binding differs')
             require(row.get('messages') == prompt.get('messages') == case['messages']
                     and row.get('prompt_sha256') == prompt.get('prompt_sha256') == object_sha(case['messages'])
                     and row.get('prompt_token_ids') == prompt.get('prompt_token_ids')
@@ -283,20 +346,30 @@ def mapping_body(mapping):
     return {k: v for k, v in mapping.items() if k not in ('schema', 'packet_sha256')}
 
 
-def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None):
+def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None,
+                candidate_manifest=None, candidate_sha=None):
+    require(bool(candidate_manifest) == bool(candidate_sha), 'candidate manifest and SHA must be paired')
+    contract = resolve_candidate(root, candidate_manifest, candidate_sha) if candidate_manifest else None
+    arms = contract['arms'] if contract else ARMS
+    if contract:
+        require(secondary is None and frozen_sha == contract['policy_document']['data']['frozen_dataset']['sha256'],
+                'candidate requires registered development dataset and no secondary search')
     frozen, design, cases, metadata, references = frozen_dataset(root, frozen_path, frozen_sha)
     out = Path(out)
     require(not out.exists(), 'packet directory already exists; never rerandomize')
     runs = [('primary', primary, cases, 'unconstrained')]
     if secondary is not None:
         runs.append(('secondary', secondary, {cid: cases[cid] for cid in frozen['secondary_case_ids']}, 'json-schema'))
-    mapping = dict(schema='trid-expanded-blind-mapping-v1', frozen_dataset=pin(frozen_path, root),
-                   rows={}, runs={}, arms=list(ARMS), primary_case_ids=list(cases),
+    mapping = dict(schema='trid-expanded-blind-mapping-v2' if contract else 'trid-expanded-blind-mapping-v1',
+                   frozen_dataset=pin(frozen_path, root), rows={}, runs={}, arms=list(arms), primary_case_ids=list(cases),
                    secondary_case_ids=frozen['secondary_case_ids'] if secondary is not None else [])
     packet_rows = []
+    pair_ids = {}
+    if contract:
+        mapping['evaluation_contract'] = public_contract(contract)
     for suite, directory, subset, profile in runs:
         answers, pins, manifest, loaded = completed_run(root, directory, subset, design, profile,
-            frozen['pins']['evaluation_inputs'] if suite == 'primary' else None)
+            frozen['pins']['evaluation_inputs'] if suite == 'primary' else None, contract=contract)
         mapping['runs'][suite] = {'directory': str(Path(directory).resolve()), 'pins': pins,
                                   'runtime': manifest['runtime'], 'generation': manifest['generation'],
                                   'generation_config': loaded['generation_config'],
@@ -314,6 +387,8 @@ def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None):
             packet_rows.append(dict(sample_id=sid, messages=cases[cid]['messages'],
                 response=answer['response_text'], reference_answer=reference['reference_answer'],
                 rubric=reference['rubric'], structural=structural_result(cases[cid], answer, manifest['generation'])))
+            if contract:
+                packet_rows[-1]['pair_id'] = pair_ids.setdefault((suite, cid), secrets.token_hex(24))
             mapping['rows'][sid] = dict(case_id=cid, case_sha256=reference['case_sha256'],
                 cohort=metadata[cid]['cohort'], behavior=metadata[cid]['behavior'],
                 family_id=metadata[cid]['family_id'], suite=suite, arm=arm,
@@ -325,6 +400,9 @@ def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None):
         'accept semantic paraphrases, never exact-reference match. Score requested format separately; structural flags '
         'are not entailment proof. Record case-specific material critical errors, never formatting-only critical errors. '
         'Do not infer or request model, arm, decoder profile, timing, or other reviewers\' votes.')
+    if contract:
+        packet['schema'] = 'trid-expanded-blind-packet-v2'
+        packet.update(review_protocol(root, contract))
     save_new(out / 'review-packet.json', packet)
     mapping['packet_sha256'] = digest(out / 'review-packet.json')
     save_new(out / 'private-mapping.json', mapping)
@@ -332,28 +410,64 @@ def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None):
 
 
 def validate_blind_packet(packet, *, partial=False):
-    require(packet.get('schema') == 'trid-expanded-blind-packet-v1', 'packet schema differs')
+    candidate = packet.get('schema') == 'trid-expanded-blind-packet-v2'
+    require(packet.get('schema') in ('trid-expanded-blind-packet-v1', 'trid-expanded-blind-packet-v2'), 'packet schema differs')
     fields = {'schema', 'rows', 'mapping_commitment', 'instructions'}
+    row_fields = {'sample_id', 'messages', 'response', 'reference_answer', 'rubric', 'structural'}
+    if candidate:
+        require(object_sha({key: packet.get(key) for key in PROTOCOL_FIELDS}) == ANONYMOUS_PROTOCOL_SHA,
+                'prospective anonymous review protocol changed')
+        fields.update(('paired_consistency', 'critical_error_codes', 'critical_errors_are_codes'))
+        row_fields.add('pair_id')
+        require(packet['paired_consistency'] is True and packet['critical_errors_are_codes'] is True
+                and isinstance(packet['critical_error_codes'], dict) and packet['critical_error_codes'],
+                'registered anonymous review protocol missing')
+        pairs = defaultdict(list)
+        for row in packet['rows']:
+            require(isinstance(row.get('pair_id'), str) and row['pair_id'], 'anonymous pair identity missing')
+            pairs[row['pair_id']].append(row)
+        require(all(len(pair) == 2 and all(pair[0][key] == pair[1][key]
+                    for key in ('messages', 'reference_answer', 'rubric')) for pair in pairs.values()),
+                'complete anonymous counterpart context required')
     if partial:
         fields.add('parent_packet_sha256')
     require(set(packet) == fields
-            and all(set(row) == {'sample_id', 'messages', 'response', 'reference_answer', 'rubric', 'structural'}
+            and all(set(row) == row_fields
                     and set(row['structural']) == {'pass', 'reason'}
                     and type(row['structural']['pass']) is bool for row in packet['rows']),
             'blind packet contains undeclared identity/vote fields')
     ids = [r['sample_id'] for r in packet['rows']]
     require(all(isinstance(sid, str) and sid for sid in ids) and len(ids) == len(set(ids))
-            and (partial or len(ids) in (400, 480)), 'blind packet denominator')
+            and (partial or len(ids) in ((400,) if candidate else (400, 480))), 'blind packet denominator')
     return ids
 
 
 def shard_document(parent, parent_sha, rows):
-    return dict(schema='trid-expanded-blind-shard-v1', parent_packet_sha256=parent_sha,
-        rows=rows, instructions='Independently review only these samples. Report against this child packet file SHA, '
-        'not its parent hash. Use trid-expanded-blind-review-v1 with your own actual reviewer_id, independent:true, '
-        'blinded:true and every sample judgment. Judge material meaning and requested format separately; accept '
-        'semantic paraphrases. Structural flags are not entailment evidence. Never request arm identities, '
-        "timing, decoder profile, or other reviewers' votes.")
+    result = dict(schema='trid-expanded-blind-shard-v1', parent_packet_sha256=parent_sha,
+                  rows=rows, instructions=parent['instructions'])
+    if parent.get('schema') == 'trid-expanded-blind-packet-v2':
+        result['schema'] = 'trid-expanded-blind-shard-v2'
+        result.update({key: parent[key] for key in
+                      ('paired_consistency', 'critical_error_codes', 'critical_errors_are_codes')})
+    else:
+        result['instructions'] = ('Independently review only these samples. Report against this child packet file SHA, '
+            'not its parent hash. Use trid-expanded-blind-review-v1 with your own actual reviewer_id, independent:true, '
+            'blinded:true and every sample judgment. Judge material meaning and requested format separately; accept '
+            'semantic paraphrases. Structural flags are not entailment evidence. Never request arm identities, '
+            "timing, decoder profile, or other reviewers' votes.")
+    return result
+
+
+def shard_subsets(parent, size):
+    if parent.get('schema') != 'trid-expanded-blind-packet-v2':
+        return [parent['rows'][start:start + size] for start in range(0, len(parent['rows']), size)]
+    require(size >= 2, 'paired review shard must hold both responses')
+    pairs = {}
+    for row in parent['rows']:
+        pairs.setdefault(row['pair_id'], []).append(row)
+    ordered = [row for pair in pairs.values() for row in pair]
+    width = size - size % 2
+    return [ordered[start:start + width] for start in range(0, len(ordered), width)]
 
 
 def shard(root, packet_path, packet_sha, size, out):
@@ -364,9 +478,8 @@ def shard(root, packet_path, packet_sha, size, out):
     out = Path(out)
     require(not out.exists(), 'shard directory already exists')
     index = dict(schema='trid-expanded-review-shards-v1', parent=pin(packet_path, root), size=size, children=[])
-    for start in range(0, len(ids), size):
-        subset = parent['rows'][start:start + size]
-        path = out / f'shard-{start // size + 1:04d}.json'
+    for number, subset in enumerate(shard_subsets(parent, size), 1):
+        path = out / f'shard-{number:04d}.json'
         save_new(path, shard_document(parent, packet_sha, subset))
         index['children'].append({'packet': pin(path, root), 'sample_ids': [r['sample_id'] for r in subset]})
     path = out / 'shard-index.json'
@@ -383,13 +496,14 @@ def shard_index(root, path, expected_sha):
     parent_path = bound(root, index['parent'])
     parent = load(parent_path)
     ids = validate_blind_packet(parent, partial='parent_packet_sha256' in parent)
-    require(ids and len(index['children']) == math.ceil(len(ids) / index['size']), 'shard coverage denominator')
+    subsets = shard_subsets(parent, index['size'])
+    require(ids and len(index['children']) == len(subsets), 'shard coverage denominator')
     children = {}
     for number, entry in enumerate(index['children']):
         require(set(entry) == {'packet', 'sample_ids'}, 'shard index child fields')
         child_path = bound(root, entry['packet'])
         child = load(child_path)
-        subset = parent['rows'][number * index['size']:(number + 1) * index['size']]
+        subset = subsets[number]
         require(entry['sample_ids'] == [r['sample_id'] for r in subset]
                 and child == shard_document(parent, index['parent']['sha256'], subset),
                 'shard content/coverage differs')
@@ -473,10 +587,16 @@ def review_pair(packet_path, reports, root=ROOT):
     require(documents[0]['reviewer_id'] != documents[1]['reviewer_id'], 'reviewers must differ')
     independent_samples(documents, ids)
     disagreements = sorted(sid for sid in ids if signature(judgments[0][sid], False) != signature(judgments[1][sid], False))
+    if packet.get('paired_consistency'):
+        disputed_pairs = {row['pair_id'] for row in packet['rows'] if row['sample_id'] in disagreements}
+        disagreements = sorted(row['sample_id'] for row in packet['rows'] if row['pair_id'] in disputed_pairs)
     return packet, documents, judgments, disagreements
 
 
 def review_document(report, packet, packet_sha, ids=None, *, root=ROOT):
+    if packet.get('critical_errors_are_codes'):
+        require(object_sha({key: packet.get(key) for key in PROTOCOL_FIELDS}) == ANONYMOUS_PROTOCOL_SHA,
+                'prospective anonymous review protocol changed')
     require(report.get('schema') == 'trid-expanded-blind-review-v1', 'expanded review schema differs')
     fields = {'schema', 'packet_sha256', 'reviewer_id', 'independent', 'blinded', 'judgments'}
     if ids is not None:
@@ -496,13 +616,18 @@ def review_document(report, packet, packet_sha, ids=None, *, root=ROOT):
     require(not report['reviewer_id'].startswith('panel:') or 'composition' in report,
             'panel identity requires authenticated composition')
     # Reuse the established content-hash-bound complete judgment validator, not old gates/counts.
-    return validate_report(dict(report, schema='trid-eight-blind-review-v1'), packet, packet_sha, ids)
+    judgments = validate_report(dict(report, schema='trid-eight-blind-review-v1'), packet, packet_sha, ids)
+    if packet.get('critical_errors_are_codes'):
+        require(all(set(judgment['critical_errors']) <= set(packet['critical_error_codes'])
+                    for judgment in judgments.values()), 'unregistered critical-error code')
+    return judgments
 
 
 def adjudication_document(packet, packet_sha, disagreements):
     document = dict(packet, parent_packet_sha256=packet_sha,
                     rows=[row for row in packet['rows'] if row['sample_id'] in disagreements])
-    document['instructions'] += ' Report only these sample IDs against parent_packet_sha256, and include adjudication_packet_sha256.'
+    if not packet.get('paired_consistency'):
+        document['instructions'] += ' Report only these sample IDs against parent_packet_sha256, and include adjudication_packet_sha256.'
     return document
 
 
@@ -549,41 +674,41 @@ def latency(values):
             'p95_seconds': ordered[math.ceil(.95 * len(ordered)) - 1]}
 
 
-def paired_summary(rows):
+def paired_summary(rows, arm_names=ARMS):
     by_case = defaultdict(dict)
     for row in rows:
         require(row['arm'] not in by_case[row['case_id']], 'duplicate paired arm')
         by_case[row['case_id']][row['arm']] = row
-    require(all(set(pair) == set(ARMS) for pair in by_case.values()), 'incomplete paired summary')
+    require(all(set(pair) == set(arm_names) for pair in by_case.values()), 'incomplete paired summary')
     arms = {}
-    for arm in ARMS:
+    for arm in arm_names:
         selected = [pair[arm] for pair in by_case.values()]
         arms[arm] = {metric: sum(r[metric] for r in selected) for metric in METRICS}
         arms[arm]['critical_case_count'] = sum(bool(r['critical_errors']) for r in selected)
         arms[arm]['latency'] = latency([r['elapsed_seconds'] for r in selected])
     paired = {}
     for metric in METRICS:
-        gains = sum(not p[ARMS[0]][metric] and p[ARMS[1]][metric] for p in by_case.values())
-        losses = sum(p[ARMS[0]][metric] and not p[ARMS[1]][metric] for p in by_case.values())
+        gains = sum(not p[arm_names[0]][metric] and p[arm_names[1]][metric] for p in by_case.values())
+        losses = sum(p[arm_names[0]][metric] and not p[arm_names[1]][metric] for p in by_case.values())
         paired[metric] = {'gains': gains, 'regressions': losses, 'net_cases': gains - losses,
                           'net_fraction': (gains - losses) / len(by_case)}
     paired['critical_errors'] = {
-        'introduced_cases': sum(not p[ARMS[0]]['critical_errors'] and bool(p[ARMS[1]]['critical_errors']) for p in by_case.values()),
-        'resolved_cases': sum(bool(p[ARMS[0]]['critical_errors']) and not p[ARMS[1]]['critical_errors'] for p in by_case.values())}
+        'introduced_cases': sum(not p[arm_names[0]]['critical_errors'] and bool(p[arm_names[1]]['critical_errors']) for p in by_case.values()),
+        'resolved_cases': sum(bool(p[arm_names[0]]['critical_errors']) and not p[arm_names[1]]['critical_errors'] for p in by_case.values())}
     paired['latency_delta_seconds'] = statistics.mean(
-        p[ARMS[1]]['elapsed_seconds'] - p[ARMS[0]]['elapsed_seconds'] for p in by_case.values())
+        p[arm_names[1]]['elapsed_seconds'] - p[arm_names[0]]['elapsed_seconds'] for p in by_case.values())
     return {'cases': len(by_case), 'answers': len(rows), 'arms': arms, 'paired': paired}
 
 
-def suite_summary(rows):
-    summary = paired_summary(rows)
+def suite_summary(rows, arms=ARMS):
+    summary = paired_summary(rows, arms)
     for key in ('cohort', 'behavior', 'family_id'):
         groups = defaultdict(list)
         for row in rows:
             # Keep cohort in family identity even if two authors chose the same label.
             label = row['cohort'] + ':' + row[key] if key == 'family_id' else row[key]
             groups[label].append(row)
-        summary['by_' + key] = {label: paired_summary(group) for label, group in sorted(groups.items())}
+        summary['by_' + key] = {label: paired_summary(group, arms) for label, group in sorted(groups.items())}
     family_results = summary['by_family_id']
     summary['cluster_uncertainty'] = {
         'method': 'descriptive source-family paired deltas; no confidence interval or independent-question assumption',
@@ -623,16 +748,37 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
             'frozen judgment resolution differs')
     # Arm identities are opened only after frozen anonymous judgment reauthentication.
     mapping = load(mapping_path)
-    require(mapping.get('schema') == 'trid-expanded-blind-mapping-v1'
+    require(mapping.get('schema') == ('trid-expanded-blind-mapping-v2'
+            if packet['schema'] == 'trid-expanded-blind-packet-v2' else 'trid-expanded-blind-mapping-v1')
             and mapping.get('packet_sha256') == digest(packet_path)
             and object_sha(mapping_body(mapping)) == frozen['mapping_commitment']
             and set(mapping['rows']) == set(resolved), 'private mapping commitment differs')
+    contract = None
+    if packet['schema'] == 'trid-expanded-blind-packet-v2':
+        registered = mapping['evaluation_contract']['registration']
+        contract = resolve_candidate(root, bound(root, registered), registered['sha256'])
+        require(mapping['evaluation_contract'] == public_contract(contract)
+                and all(packet[key] == value for key, value in review_protocol(root, contract).items())
+                and set(mapping['runs']) == {'primary'}
+                and mapping['frozen_dataset']['sha256'] == contract['policy_document']['data']['frozen_dataset']['sha256'],
+                'prospective candidate/protocol/dataset binding differs')
+    else:
+        require('evaluation_contract' not in mapping, 'historical mapping cannot nominate candidate')
+    arms = contract['arms'] if contract else ARMS
     dataset_path = bound(root, mapping['frozen_dataset'])
     dataset, design, cases, metadata, references = frozen_dataset(root, dataset_path, mapping['frozen_dataset']['sha256'])
-    require(mapping['arms'] == list(ARMS) and mapping['primary_case_ids'] == list(cases)
+    require(mapping['arms'] == list(arms) and mapping['primary_case_ids'] == list(cases)
             and set(mapping['runs']) in ({'primary'}, {'primary', 'secondary'})
             and mapping['secondary_case_ids'] == (dataset['secondary_case_ids'] if 'secondary' in mapping['runs'] else []),
             'mapping suite denominator differs')
+    if contract:
+        paired_mapping = defaultdict(list)
+        for row in packet['rows']:
+            paired_mapping[row['pair_id']].append(mapping['rows'][row['sample_id']])
+        require(all(len(pair) == 2 and pair[0]['case_id'] == pair[1]['case_id']
+                    and pair[0]['suite'] == pair[1]['suite']
+                    and {item['arm'] for item in pair} == set(arms) for pair in paired_mapping.values()),
+                'anonymous pair mapping differs')
     expected = {}
     for suite, run in mapping['runs'].items():
         for entry in run['pins'].values():
@@ -640,7 +786,7 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
         subset = cases if suite == 'primary' else {cid: cases[cid] for cid in dataset['secondary_case_ids']}
         answers, current_pins, _, _ = completed_run(root, run['directory'], subset, design,
             'unconstrained' if suite == 'primary' else 'json-schema',
-            dataset['pins']['evaluation_inputs'] if suite == 'primary' else None)
+            dataset['pins']['evaluation_inputs'] if suite == 'primary' else None, contract=contract)
         require(current_pins == run['pins'], 'run artifact membership changed')
         expected.update({(suite, cid, arm): row for (cid, arm), row in answers.items()})
     joined = []
@@ -666,7 +812,7 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
     require(seen == set(expected), 'full output denominator missing')
     result = dict(schema='trid-expanded-assessment-v1', frozen_judgments=pin(judgments_path, root),
         private_mapping=pin(mapping_path, root), frozen_dataset=mapping['frozen_dataset'],
-        primary=suite_summary([r for r in joined if r['suite'] == 'primary']),
+        primary=suite_summary([r for r in joined if r['suite'] == 'primary'], arms),
         selected_step=None, diagnostic_comparator_step=24, deployment_qualified=False,
         original_no_selection_unchanged=True, broad_accuracy_claim=False,
         source_caveats=dataset.get('source_caveats', design.get('source_caveats', [])),
@@ -674,13 +820,32 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
         interpretation='Source-separated diagnostic only; no automatic qualification or deployment. '
                        'Structure is not semantic correctness; foundation pretraining exposure is unknown.',
         secondary=None)
+    if contract:
+        result['schema'] = 'trid-expanded-assessment-v2'
+        del result['diagnostic_comparator_step']
+        result.update(evaluation_contract=public_contract(contract), candidate_step=150,
+                      role='development_only_not_unseen_final', historical_scores_unchanged=True)
+        primary = result['primary']
+        base, candidate = primary['arms']['base'], primary['arms']['candidate']
+        mois = primary['by_cohort']['mois']['arms']
+        general = primary['by_cohort']['general']['arms']
+        checks = dict(semantic_pass=candidate['semantic_pass'] > base['semantic_pass'],
+            mois_semantic_pass=mois['candidate']['semantic_pass'] > mois['base']['semantic_pass'],
+            joint_pass=candidate['joint_pass'] > base['joint_pass'],
+            critical_case_count=candidate['critical_case_count'] <= base['critical_case_count'],
+            general_semantic_pass=general['candidate']['semantic_pass'] >= general['base']['semantic_pass'],
+            general_critical_case_count=general['candidate']['critical_case_count'] <= general['base']['critical_case_count'])
+        result['development_gate'] = dict(policy=contract['policy_document']['evaluation']['development_gate'],
+            checks=checks, passed=all(checks.values()), deployment_qualification=False)
+        result['interpretation'] = ('Contemporaneous base versus one prospectively fixed final endpoint on development data. '
+            'No historical score comparison, checkpoint selection, unseen-final claim, or deployment qualification.')
     if 'secondary' in mapping['runs']:
         secondary_rows = [r for r in joined if r['suite'] == 'secondary']
-        result['secondary'] = suite_summary(secondary_rows)
+        result['secondary'] = suite_summary(secondary_rows, arms)
         result['secondary']['combined_with_primary'] = False
         primary_lookup = {(r['case_id'], r['arm']): r for r in joined if r['suite'] == 'primary'}
         benefit = {}
-        for arm in ARMS:
+        for arm in arms:
             pairs = [(primary_lookup[(r['case_id'], arm)], r) for r in secondary_rows if r['arm'] == arm]
             benefit[arm] = {'cases': len(pairs),
                 'format_gains': sum(not a['format_pass'] and b['format_pass'] for a, b in pairs),
@@ -705,6 +870,8 @@ def main(argv=None):
     packet.add_argument('--frozen-sha256', required=True)
     packet.add_argument('--primary', type=Path, required=True)
     packet.add_argument('--secondary', type=Path)
+    packet.add_argument('--candidate-manifest', type=Path)
+    packet.add_argument('--candidate-sha256')
     packet.add_argument('--out', type=Path, required=True)
     command = commands.add_parser('shard')
     command.add_argument('--packet', type=Path, required=True)
@@ -732,7 +899,8 @@ def main(argv=None):
     command.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'packet':
-        result = make_packet(args.root, args.frozen, args.frozen_sha256, args.primary, args.out, args.secondary)
+        result = make_packet(args.root, args.frozen, args.frozen_sha256, args.primary, args.out, args.secondary,
+                             args.candidate_manifest, args.candidate_sha256)
     elif args.command == 'shard':
         result = shard(args.root, args.packet, args.packet_sha256, args.size, args.out)
     elif args.command == 'collect':

@@ -423,6 +423,33 @@ JSON 제약은 이 표본의 구조 실패를 없앴지만 내용 정확성이�
 
 완료·판정 근거는 같은 실행 폴더의 `primary-native-01/completion.json`, `secondary-schema-02/completion.json`, `blind-assessment/frozen-judgments.json`, `blind-assessment/assessment.json`, `paired-schema-effect.json`, `frozen-failure-diagnosis.json`, `next-training-decision.json`에 보관합니다. 실행 자료와 가중치는 로컬 보존 대상이며 Git 저장소에 포함되었다고 가정하지 않습니다. 추가 유료 자원, 새 본학습, `test.tridatum.co` 배포는 이 실험에서 수행하지 않았습니다.
 
+#### 새 8B 로컬 LoRA · 용량 검증에서 안전 중단
+
+후속 실행은 `runs/mois-fresh-eight-local-20261115T052527Z/`에 별도로 등록했습니다. **실행·후보 인증·평가 경로는 구현했지만, 실제 전체 용량 검증이 호스트 메모리 압력으로 중단되어 본학습과 새 후보 평가는 시작하지 않았습니다.** 이 중단을 OOM이나 8B backward 실패로 해석하지 않습니다.
+
+- **고정 학습 계약:** 공식 BF16 8B 원본에서 FP32 LoRA를 새로 시작합니다. 600개 행을 seed 14의 shuffle로 정확히 한 번 사용하며, batch 4/microbatch 1로 150회 갱신합니다. rank 8/alpha 16/dropout 0, peak LR `1e-5`의 기존 warmup·cosine 스케줄을 유지합니다. `valid=[]`는 명시적으로 수용하되 validation loss로 checkpoint를 고르지 않습니다. 완료된 최종 150단계 한 개만 새로 생성한 원본 답변과 개발 200문항에서 비교하며, 중간 checkpoint는 경쟁 후보가 아닙니다.
+- **로컬 실행 감독:** `scripts/local_mps_training.py`의 `capacity`와 `train`은 정책·소스 SHA, 전용 출력·장치 lock, 모델 import 전 시작 gate, 외부 시간·RSS·물리 footprint·호스트 압력·swap 증가 검사를 사용합니다. Torch import 전 HIGH/LOW watermark와 offline/no-fallback 환경을 함께 설정하고, 모델 적재 전 정확한 20GiB allocator 한도를 적용합니다. 부모 감독기의 수락·자식 회수·잔여 프로세스 없음이 확인돼야 학습 결과를 사용할 수 있습니다. 메모리 표본은 순간적인 시스템 전체 hard cap이나 진짜 peak가 아닙니다.
+- **용량 수락 조건:** 전체 길이 3072토큰 중 답변+EOS 768토큰인 실제 native-tokenizer 합성 입력으로, 네 microbatch씩 두 optimizer 갱신을 요구합니다. 두 번째 backward는 optimizer state가 메모리에 있는 상태이며, 유한한 기울기·실제 갱신·dtype/state inventory·원 모델 해제 후 새 모델로의 정확한 adapter 재로딩과 전체 길이 loss까지 확인해야 합니다. 작은 tensor 스모크나 부분 실행은 이 조건을 대체하지 않습니다.
+- **후보 인증:** `scripts/local_eight_candidate.py`는 성공한 감독 결과, 학습·ledger·최종 checkpoint의 config 및 weight 해시, 전체 행 소비, fresh 초기화와 고정 recipe를 함께 검증합니다. `alpha_pattern`, layer replication, base를 바꾸는 초기화 등 등록되지 않은 PEFT 설정을 거부합니다. 평가기의 `--candidate-manifest`/`--candidate-sha256` 경로는 `base`/`candidate`를 명시적으로 구분하며, 과거 24단계 계약을 새 후보로 바꾸지 않습니다.
+- **채점 일관성:** 새 프로토콜은 같은 질문의 익명 답변 쌍을 함께 검토하고, 조건의 동등 표현·행위자 누락·본문 조문 인용을 동일 기준으로 판단합니다. 지침과 중대 오류 codebook을 shard·제3 검토·동결까지 결박합니다. 새로운 두 모델을 같은 프로토콜 안에서 비교하며, 과거 점수를 덮어쓰거나 서로 다른 채점 조건의 수치를 직접 비교하지 않습니다.
+- **수행한 검증:** 관련 통합 테스트 217건 중 216건 통과·1건 skip. 실제 Mac에서 BF16 tensor forward/backward, allocator 설정, Darwin `RUSAGE_INFO_V0` footprint 조회를 실행했습니다. 별도의 가상 답변 8개에 대한 두 독립 AI 검토도 사전 기대 판정과 일치했습니다. 모두 실행·채점 경로 검증이며 새 모델의 성능 점수가 아닙니다.
+
+**첫 실제 용량 실행 `capacity-01`은 약 18.27초에 `host_pressure`로 중단됐습니다.**
+
+| 관측 항목 | 이번 실행 관측값 | 등록된 기준 |
+| --- | ---: | ---: |
+| 시스템 메모리 압력 | 정상 1 → 경고 2 | 정상 1 유지 |
+| 중단 시 query-reported free percentage | 34% | 10% 이상 |
+| 최고 표본 물리 footprint | 7.01GiB | 24GiB 이하 |
+| 최고 표본 그룹 RSS | 1.31GiB | 24GiB 이하 |
+| 관측 swap 증가 | 0바이트 | 1GiB 이하 |
+
+압력은 시스템 전체 신호이며 어느 프로세스나 메모리 종류가 전환을 일으켰는지는 확정하지 않습니다. free percentage도 실제 할당 가능한 물리 메모리 양이 아닙니다. 모델 검증·초기 telemetry가 완료되는 첫 forward/backward 이전 경계에 도달하지 못했고, MPS 사용량 표본·용량 수락 결과·scratch adapter는 생성되지 않았습니다. 부모가 작업을 종료하고 자식을 회수했으며 잔여 소유 프로세스와 cleanup 오류는 없습니다.
+
+**본학습 1회 실행은 아직 소비하지 않았습니다.** 안전 기준을 완화하거나 자동 재시도하지 않았고, 사용자 앱을 종료하거나 유료 GPU·다른 정밀도 모델로 임의 전환하지 않았습니다. 같은 기준을 유지하려면 로컬 메모리 여유를 확보한 뒤 별도 실행해야 하며, 다른 자원·정밀도 경로는 별도 계약으로 구분해야 합니다. 새 모델 품질·배포 수락이나 `test.tridatum.co` 업데이트 결과는 없습니다.
+
+로컬 근거: `training-policy.json`, `review-protocol.json`, `execution-sources.json`, `executed-source.tar`, `mps-initialization-smoke.json`, `review-calibration-result.json`, `capacity-01/result.json`, `capacity-stop-analysis.json`. 실행 자료는 Git에 포함되지 않는 별도 보존 대상입니다.
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.

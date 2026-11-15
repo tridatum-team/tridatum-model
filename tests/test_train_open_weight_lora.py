@@ -153,6 +153,9 @@ class HistoryContractTests(unittest.TestCase):
         raw = self.grounded_row()
         loaded, item = self.encode_row(raw, 'grounded_messages')
         self.assertEqual(trainer.messages_of(loaded), raw['messages'])
+        self.assertEqual(item['identity']['id'], raw['id'])
+        self.assertEqual(item['identity']['source_line'], 2)
+        self.assertEqual(item['identity']['source_sha256'], trainer.sha256(Path(item['file'])))
         expected = (
             '<|im_start|>system\n  근거에 따라 JSON 문단으로 설명하세요.\n<|im_end|>\n'
             '<|im_start|>user\n\n질문: 표식은?\n[D1] 표식은 은색이다.  <|im_end|>\n'
@@ -576,6 +579,11 @@ class CheckpointTests(unittest.TestCase):
         ledger = json.loads((out / 'checkpoints.json').read_text())
         self.assertEqual(ledger['run_status'], 'complete')
         self.assertEqual(ledger['checkpoints'], final['checkpoints'])
+        self.assertEqual(ledger['last_step'], final['last_step'])
+        for record in ledger['checkpoints'] + [ledger['last_step']]:
+            adapter = Path(record['path'])
+            self.assertEqual(record['adapter_config_sha256'], trainer.sha256(adapter / 'adapter_config.json'))
+            self.assertEqual(record['adapter_weights_sha256'], trainer.sha256(adapter / 'adapter_model.safetensors'))
 
     def test_interrupted_run_keeps_earlier_checkpoints_but_is_never_complete(self):
         out = self.base / 'run-interrupted'

@@ -1,10 +1,16 @@
-"""Offline paired BF16/MPS diagnostic for the nominated step-24 adapter, not selection.
+"""Offline paired BF16/MPS development diagnostic, never deployment selection.
 
 Only a public JSON array of {id, messages} is accepted; reference/grade files are
 never loaded. Both arms use one base+adapter instance, native nonthinking prompts,
 and the unchanged cloud worker decoder. No CUDA equivalence is claimed. A smoke
 run requires explicit IDs and its own fresh output directory. Full evaluation
 uses every input in file order. Neither mode resumes or retries an answer.
+
+With neither candidate option, preserve the authenticated historical step24
+replay. Paired --candidate-manifest/--candidate-sha256 instead authenticate the
+prospectively fixed final step150 and accepted parent supervision. Candidate
+mode uses base/candidate arms, forbids export overrides and secondary decoder
+search, and only hashes the opaque review-protocol bytes (never parses them).
 
 Each attempt is fsynced before generation and each completed answer immediately
 afterwards. An interruption leaves the immutable run identity, preflight, attempt
@@ -491,23 +497,24 @@ def observe_generation_policy(model, expected_config):
             target._prepare_generation_config = previous
 
 
-def answer_record(case, arm, binding, config, tokens, tokenizer, elapsed, memory):
+def answer_record(case, arm, binding, config, tokens, tokenizer, elapsed, memory, contract=None):
     decoded = decode_generation(tokenizer, tokens, config['eos_token_id'], GENERATION['max_new_tokens'])
     return dict(**case, arm=arm, **binding, generation=dict(GENERATION),
-                adapter_weights_sha256=None if arm == 'base' else ADAPTER_SHA,
+                adapter_weights_sha256=None if arm == 'base' else (contract['adapter_sha256'] if contract else ADAPTER_SHA),
                 generation_config=config, output_token_ids=tokens, **decoded,
                 exception=None, context_truncated=False, skipped_context=False,
                 truncated_output=decoded['termination_reason'] == 'length',
                 elapsed_seconds=elapsed, mps_memory=memory)
 
 
-def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=None):
+def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=None, contract=None):
+    arms = contract['arms'] if contract else ARMS
     with contextlib.ExitStack() as stack:
         streams = {arm: stack.enter_context((out / f'{arm}-outputs.jsonl').open('x', encoding='utf-8'))
-                   for arm in ARMS}
+                   for arm in arms}
         attempts = stack.enter_context((out / 'attempts.jsonl').open('x', encoding='utf-8'))
         for case in prepared:
-            for arm in ARMS:
+            for arm in arms:
                 append_row(attempts, dict(id=case['id'], arm=arm, state='started',
                     timestamp=dt.datetime.now(dt.timezone.utc).isoformat()))
                 started = time.perf_counter()
@@ -530,7 +537,7 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                     tokens = result.sequences[0, len(case['prompt_token_ids']):].tolist()
                     elapsed = time.perf_counter() - started
                     row = answer_record(case, arm, binding, config.to_dict(), tokens,
-                                        tokenizer, elapsed, mps_memory(torch))
+                                        tokenizer, elapsed, mps_memory(torch), contract=contract)
                     row['effective_generation_mode'] = observed['generation_mode']
                     append_row(streams[arm], row)
                     print(json.dumps(dict(event='answer_complete', id=case['id'], arm=arm,
@@ -542,7 +549,7 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                     if hasattr(error, 'decoder_diagnostic'):
                         error_detail['decoder_prefix'] = error.decoder_diagnostic
                     append_row(streams[arm], dict(**case, arm=arm, **binding,
-                        adapter_weights_sha256=None if arm == 'base' else ADAPTER_SHA,
+                        adapter_weights_sha256=None if arm == 'base' else (contract['adapter_sha256'] if contract else ADAPTER_SHA),
                         generation=dict(GENERATION), generation_config=config.to_dict(),
                         output_token_ids=tokens, generated_tokens=len(tokens), raw_output=None,
                         response_text=None, termination_reason='error', terminal_stop_token_id=None,
@@ -558,7 +565,9 @@ def parser():
     p.add_argument('--model-metadata', required=True, type=Path)
     p.add_argument('--inputs', required=True, type=Path)
     p.add_argument('--inputs-sha256', required=True)
-    p.add_argument('--export', type=Path, default=EXPORT)
+    p.add_argument('--export', type=Path)
+    p.add_argument('--candidate-manifest', type=Path)
+    p.add_argument('--candidate-sha256')
     p.add_argument('--mode', required=True, choices=('smoke', 'evaluation'))
     p.add_argument('--smoke-id', action='append', default=[])
     p.add_argument('--decoder-profile', choices=('unconstrained', 'json-schema'),
@@ -580,7 +589,25 @@ def main(argv=None):
         rows, input_pin = public_inputs(args.inputs, args.inputs_sha256)
         selected = select_rows(rows, args.mode, args.smoke_id)
         model_pin = model_identity(args.model_directory, args.model_metadata)
-        adapter, adapter_pin = adapter_identity(args.export)
+        require(bool(args.candidate_manifest) == bool(args.candidate_sha256),
+                'candidate manifest and SHA must be paired')
+        contract = None
+        if args.candidate_manifest:
+            from local_eight_candidate import resolve_candidate, public_contract
+            require(args.export is None and args.decoder_profile == 'unconstrained',
+                    'candidate registration forbids export overrides and secondary profile search')
+            contract = resolve_candidate(ROOT, args.candidate_manifest, args.candidate_sha256)
+            policy = contract['policy_document']
+            require(input_pin['sha256'] == policy['data']['evaluation_inputs']['sha256']
+                    and model_pin['acquisition_manifest']['sha256'] == policy['model']['acquisition_manifest']['sha256']
+                    and model_pin['directory'] == str((ROOT / policy['model']['directory']).resolve())
+                    and GENERATION == policy['evaluation']['generation'],
+                    'candidate public inputs/base/generation differ')
+            adapter, adapter_pin = Path(contract['adapter_directory']), contract['adapter']
+        else:
+            adapter, adapter_pin = adapter_identity(args.export or EXPORT)
+        arms = contract['arms'] if contract else ARMS
+        adapter_sha = contract['adapter_sha256'] if contract else ADAPTER_SHA
         import torch
         from transformers import AutoTokenizer, GenerationConfig
         from peft import PeftModel
@@ -603,13 +630,16 @@ def main(argv=None):
             torch_threads=torch.get_num_threads(), cpu_fallback=False,
             mps_environment={k: v for k, v in sorted(os.environ.items()) if k.startswith('PYTORCH_MPS_')},
             cuda_equivalence_claim=False)
-        identity = dict(schema='trid-local-eight-paired-v1', mode=args.mode,
+        identity = dict(schema='trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1', mode=args.mode,
             model=model_pin, adapter=adapter_pin, input=input_pin,
             selected_ids=[r['id'] for r in selected], generation=GENERATION,
             decoder_profile=decoder_identity,
-            runtime=runtime, code=code_identity(), arm_order=list(ARMS),
-            paired_order='each input: base with adapter disabled, then step24 enabled',
+            runtime=runtime, code=code_identity(), arm_order=list(arms),
+            paired_order='each input: base with adapter disabled, then registered adapter enabled' if contract
+                        else 'each input: base with adapter disabled, then step24 enabled',
             grading_access=False, retries=False, resume=False)
+        if contract:
+            identity['evaluation_contract'] = public_contract(contract)
         save_new(args.out / 'run-manifest.json', identity)
         save_new(args.out / 'prompt-preflight.json', dict(status='passed', prompts=prepared,
             all_selected_preflighted_before_weights=True, truncation=False))
@@ -643,14 +673,16 @@ def main(argv=None):
         binding = dict(run_manifest_sha256=digest(args.out / 'run-manifest.json'),
             loaded_runtime_sha256=digest(args.out / 'loaded-runtime.json'), model_id=MODEL_ID,
             model_revision=REVISION, input_sha256=input_pin['sha256'],
-            nominated_adapter_weights_sha256=ADAPTER_SHA, mode=args.mode)
+            nominated_adapter_weights_sha256=adapter_sha, mode=args.mode)
         binding['decoder_profile'] = args.decoder_profile
         binding['decoder_profile_sha256'] = digest(args.out / 'decoder-profile.json')
         binding['generation_policy_sha256'] = object_sha(policy)
-        run_pairs(torch, model, tokenizer, prepared, config, binding, args.out, decoder=decoder)
+        if contract:
+            binding['candidate_manifest_sha256'] = contract['registration']['sha256']
+        run_pairs(torch, model, tokenizer, prepared, config, binding, args.out, decoder=decoder, contract=contract)
         save_new(args.out / 'completion.json', dict(status='complete', mode=args.mode,
             elapsed_seconds=time.perf_counter() - started, rows_per_arm=len(prepared),
-            outputs={arm: pin(args.out / f'{arm}-outputs.jsonl') for arm in ARMS},
+            outputs={arm: pin(args.out / f'{arm}-outputs.jsonl') for arm in arms},
             mps_memory=mps_memory(torch), run_manifest_sha256=binding['run_manifest_sha256']))
         print(json.dumps(dict(event='complete', rows_per_arm=len(prepared),
                               elapsed_seconds=time.perf_counter() - started)), flush=True)

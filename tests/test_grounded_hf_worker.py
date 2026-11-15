@@ -230,17 +230,26 @@ class GroundedSyntheticCapacityTests(unittest.TestCase):
             self.assertEqual(item['file'], str(source))
             self.assertEqual(item['task'], 'synthetic-capacity')
 
-    def test_schema_mutation_is_rejected_by_actual_training_loader(self):
+    def test_optional_system_and_native_multiturn_remain_supported(self):
         with tempfile.TemporaryDirectory() as temp:
             tokenizer = FixtureTokenizer(self.trainer['QWEN3_NO_THINK'])
-            W.synthetic_capacity_item(tokenizer, self.trainer, temp, 8192, 768)
+            W.synthetic_capacity_item(tokenizer, self.trainer, temp, 3072, 768)
             source = Path(temp) / 'synthetic.jsonl'
             row = json.loads(source.read_text())
-            del row['messages'][0]
-            source.write_text(json.dumps(row) + '\n')
-            entry = dict(path=source.name, sha256=W.digest(source), adapter='grounded_messages', split='train')
-            with self.assertRaisesRegex(ValueError, 'exactly system and user messages'):
-                self.trainer['build_items'](tokenizer, [entry], Path(temp), 'qwen3', 8192, 768, False)
+            current_user = row['messages'][-1]
+            for messages in ([current_user],
+                             [dict(role='user', content='Earlier question.'),
+                              dict(role='assistant', content='Earlier answer.'), current_user]):
+                with self.subTest(turns=len(messages)):
+                    row['messages'] = messages
+                    source.write_text(json.dumps(row) + '\n')
+                    entry = dict(path=source.name, sha256=W.digest(source), adapter='grounded_messages', split='train')
+                    items, dropped = self.trainer['build_items'](
+                        tokenizer, [entry], Path(temp), 'qwen3', 8192, 768, False)
+                    self.assertEqual(dropped, 0)
+                    self.assertEqual(len(items), 1)
+                    self.assertEqual(sum(value != -100 for value in items[0]['labels']), 768)
+                    self.assertEqual(items[0]['labels'][-1], tokenizer.eos_token_id)
 
     def test_unrepresentable_envelope_fails_without_truncation(self):
         with tempfile.TemporaryDirectory() as temp:

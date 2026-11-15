@@ -146,7 +146,8 @@ def load_rows(entry, base):
             except ValueError as exc:
                 raise ValueError(f"{path}:{line_number}: row {row.get('id')!r}: {exc}") from exc
             rows.append(dict(id=row['id'], task=row['task'], messages=messages, answer=row['answer'],
-                             adapter='grounded_messages', file=str(path)))
+                             adapter='grounded_messages', file=str(path),
+                             source_sha256=entry['sha256'], source_line=line_number))
             continue
         history = row.get('history', [])
         try:
@@ -203,7 +204,8 @@ def encode(tok, row, family, max_tokens):
         if row.get('adapter') == 'grounded_messages':
             raise ValueError(f"{row['file']}: row {row['id']!r}: over_context_budget ({len(ids)} > {max_tokens})")
         return None
-    return dict(ids=ids, labels=[-100] * len(prompt_ids) + answer_ids, task=row['task'], file=row['file'])
+    return dict(ids=ids, labels=[-100] * len(prompt_ids) + answer_ids, task=row['task'], file=row['file'],
+                identity={key: row.get(key) for key in ('id', 'source_sha256', 'source_line')})
 
 
 def build_items(tok, entries, base, family, max_tokens, max_answer_tokens, expand):
@@ -510,7 +512,7 @@ def load_init_adapter(model, path, device):
     return len(expected)
 
 
-def main():
+def main(argv=None, observer=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--model', type=Path, required=True)
     p.add_argument('--model-id', required=True)
@@ -544,7 +546,7 @@ def main():
     p.add_argument('--checkpoint-every', type=int,
                    help='also save the adapter every N steps and at the last step under <out>/checkpoints/step-NNNNNN/ '
                         '(each with its own training.json); <out>/adapter stays the last step, nothing is selected')
-    a = p.parse_args()
+    a = p.parse_args(argv)
     if a.out.exists():
         p.error('Use a new --out directory')
     if a.checkpoint_every is not None and a.checkpoint_every < 1:
@@ -576,6 +578,9 @@ def main():
                                        a.max_tokens, a.max_answer_tokens, False)
     if not train:
         raise ValueError('No training rows')
+    if observer:
+        observer('admission', args=a, train=train, valid=valid, dropped=dropped, valid_dropped=valid_dropped)
+    selection = observer('selection') if observer else SELECTION
     random.shuffle(train)
     steps = a.steps or math.ceil(len(train) / a.batch_size)
     accumulation = a.batch_size // a.micro_batch_size
@@ -605,7 +610,9 @@ def main():
     warmup = max(1, steps // 20)
     schedule = torch.optim.lr_scheduler.LambdaLR(
         optimizer, lambda s: (s + 1) / warmup if s < warmup else 0.5 * (1 + math.cos(math.pi * (s - warmup) / max(1, steps - warmup))))
-    history, cursor = [], 0
+    if observer:
+        observer('model', model=model, optimizer=optimizer, schedule=schedule)
+    history, cursor, coverage = [], 0, []
     trained_tokens = {}
     model.train()
     train_started = time.time()
@@ -631,6 +638,9 @@ def main():
             system_prompt=SYSTEM, case_system_prompt=CASE_SYSTEM,
             versions=dict(torch=torch.__version__, transformers=transformers.__version__, peft=peft.__version__),
             history=list(history), elapsed_seconds=round(time.time() - started, 1), status=status)
+        payload['coverage'] = list(coverage)
+        if observer:
+            payload.update(observer('report') or {})
         payload.update(extra)  # a checkpoint overrides `steps` with the steps its adapter was trained for
         payload['cumulative_steps'] = (ancestry['source_cumulative_steps'] if ancestry else 0) + payload['steps']
         return payload
@@ -644,13 +654,14 @@ def main():
             run_status=run_status, planned_steps=steps, checkpoint_every=a.checkpoint_every,
             base_model_id=a.model_id, base_revision=a.model_revision, manifest_sha256=manifest_sha256, base_weights=base_weights,
             init_adapter=ancestry,
-            checkpoints=list(checkpoints), selection=SELECTION, **extra))
+            checkpoints=list(checkpoints), selection=selection, **extra))
 
     def save_checkpoint(step, record):
         folder = a.out / 'checkpoints' / f'step-{step:06d}'
         model.save_pretrained(folder / 'adapter')
         checkpoints.append(dict(step=step, path=str(folder / 'adapter'),
                                 adapter_weights_sha256=sha256(folder / 'adapter' / 'adapter_model.safetensors'),
+                                adapter_config_sha256=sha256(folder / 'adapter' / 'adapter_config.json'),
                                 train_loss=record['train_loss'], valid_loss_by_task=record.get('valid_loss_by_task'),
                                 elapsed_seconds=record['elapsed_seconds']))
         # Bound to this step only: `steps` is what the saved adapter was trained for, never the plan.
@@ -666,26 +677,38 @@ def main():
             cursor += a.micro_batch_size
             for x in chunk:
                 trained_tokens[x['file']] = trained_tokens.get(x['file'], 0) + sum(1 for t in x['labels'] if t != -100)
+                coverage.append(dict(file=x['file'], **x['identity']))
             loss = batch_loss(model, chunk, a.device, pad_id, a.family) / accumulation
             if not torch.isfinite(loss):
                 raise FloatingPointError(f'non-finite loss at step {step}; stopping without saving')
             loss.backward()
+            if observer:
+                observer('backward', model=model, optimizer=optimizer, step=step)
             total += loss.item()
-        torch.nn.utils.clip_grad_norm_(params, 1.0)
+        health = observer('before_step', model=model, optimizer=optimizer, step=step) if observer else None
+        torch.nn.utils.clip_grad_norm_(params, 1.0, error_if_nonfinite=True)
+        applied_lr = optimizer.param_groups[0]['lr']
         optimizer.step(); schedule.step()
+        if observer:
+            health.update(observer('after_step', model=model, optimizer=optimizer, step=step))
         if a.max_train_seconds and step == 5:
             projected = (time.time() - train_started) / 5 * steps
             if projected > a.max_train_seconds:
                 raise SystemExit(f'projected training time {projected:.0f}s exceeds --max-train-seconds; stopping early')
         checkpoint_step = bool(a.checkpoint_every) and (step % a.checkpoint_every == 0 or step == steps)
         record = {'step': step, 'train_loss': round(total, 5), 'lr': schedule.get_last_lr()[0],
+                  'applied_lr': applied_lr, 'next_lr': schedule.get_last_lr()[0],
                   'elapsed_seconds': round(time.time() - started, 1)}
+        if health:
+            record['numerical_health'] = health
         if valid and (step % a.valid_every == 0 or step == steps or checkpoint_step):
             record['valid_loss_by_task'] = validate(model, valid, a.device, pad_id, a.micro_batch_size, a.family)
         history.append(record)
         print(json.dumps(record, ensure_ascii=False), flush=True)
         if checkpoint_step:
             save_checkpoint(step, record)
+    if observer:
+        observer('completion', coverage=coverage, steps=steps)
     a.out.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(a.out / 'adapter')
     if a.merge:
@@ -694,9 +717,12 @@ def main():
         tok.save_pretrained(a.out / 'merged')
     extra = {}
     if a.checkpoint_every:
-        last = dict(step=steps, path=str(a.out / 'adapter'), adapter_weights_sha256=sha256(a.out / 'adapter' / 'adapter_model.safetensors'))
-        last['equals_last_checkpoint'] = last['adapter_weights_sha256'] == checkpoints[-1]['adapter_weights_sha256']
-        extra = dict(checkpoints=checkpoints, last_step=last, selection=SELECTION)
+        last = dict(step=steps, path=str(a.out / 'adapter'),
+                    adapter_weights_sha256=sha256(a.out / 'adapter' / 'adapter_model.safetensors'),
+                    adapter_config_sha256=sha256(a.out / 'adapter' / 'adapter_config.json'))
+        last['equals_last_checkpoint'] = all(last[field] == checkpoints[-1][field]
+            for field in ('adapter_weights_sha256', 'adapter_config_sha256'))
+        extra = dict(checkpoints=checkpoints, last_step=last, selection=selection)
         ledger('complete', last_step=last)
     write_json(a.out / 'training.json', report('complete', **extra))
     print(f'complete: {steps} steps -> {a.out}')
