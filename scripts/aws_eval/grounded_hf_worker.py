@@ -25,7 +25,14 @@ from grounded_hf_lifecycle import (LIMITS, MAX_EXPORT, Client, authenticate_arch
     canonical, digest, exclusive_intent, object_sha, pins, read_bound, relative,
     remaining, require, save, timestamp, validate_data, validate_cost_admission, validate_bootstrap_admission,
     verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml,
-    inference_mode, followup_mode, eight_mode as is_eight)
+    inference_mode, followup_mode, eight_mode as is_eight, fresh_mode, lifetime_seconds, reserve_seconds)
+
+
+def fresh_module(plan):
+    if fresh_mode(plan):
+        import fresh_eight_worker
+        return fresh_eight_worker
+    return None
 
 
 def eight_module(plan):
@@ -130,10 +137,11 @@ def gpu_observation(deadline, *, with_usage=False):
 def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
     ordered = ordered_module(plan)
     eight = eight_module(plan)
-    allowed = (eight.phase_kind(phase) is not None if eight else
+    fresh = fresh_module(plan)
+    allowed = (fresh.phase_kind(phase) is not None if fresh else (eight.phase_kind(phase) is not None if eight else
         ((phase == 'runtime' or ordered.phase_kind(plan, phase) is not None) if ordered else
-         phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter')))
-    require(allowed and 0 < seconds <= 12600, 'Invalid phase/deadline')
+         phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter'))))
+    require(allowed and 0 < seconds <= lifetime_seconds(plan) - reserve_seconds(plan), 'Invalid phase/deadline')
     base = Path(base)
     unit = plan['identity']['run_id'] + '-' + phase
     properties = ['Type=exec', 'RemainAfterExit=yes', 'KillMode=control-group', 'SendSIGKILL=yes', 'TimeoutStopSec=10',
@@ -141,7 +149,7 @@ def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
         'TasksMax=128', 'OOMPolicy=kill', 'NoNewPrivileges=yes', 'ProtectSystem=strict',
         'ProtectHome=yes', 'PrivateNetwork=yes', 'RestrictAddressFamilies=AF_UNIX',
         'DevicePolicy=closed', 'PrivateDevices=no', 'RestrictSUIDSGID=yes', 'UMask=0077',
-        'LimitCORE=0', f'LimitFSIZE={LIMITS["output_bytes"]}', 'LimitNOFILE=256',
+        'LimitCORE=0', f'LimitFSIZE={plan["limits"]["output_bytes"] if fresh else LIMITS["output_bytes"]}', 'LimitNOFILE=256',
         f'WorkingDirectory={base / "code"}', f'ReadWritePaths={base / "output"}',
         'InaccessiblePaths=/root /home /run/credentials /var/lib/cloud',
         f'StandardOutput=append:{base / "output" / (phase + ".log")}',
@@ -249,13 +257,15 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, 
                 require(cgroup_empty(state) and state['Result'] == 'success' and state['ExecMainStatus'] == '0',
                         'Native stage failed: ' + phase + ': ' + str(state))
                 receipt = dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
-                if followup_mode(plan) or is_eight(plan):
+                if followup_mode(plan) or is_eight(plan) or fresh_mode(plan):
                     receipt.update(run_id=run, plan_sha256=digest(Path(base) / 'plan.json'),
                                    instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
                 return receipt
             time.sleep(0.5)
     finally:
-        stop_unit(unit, run, min(deadline + 15, time.time() + 30))
+        stopped = stop_unit(unit, run, min(deadline + 15, time.time() + 30))
+        if fresh_mode(plan) and 'receipt' in locals():
+            receipt.update(cleanup_verified=True, stopped_state=stopped)
         owned_units.remove(unit)
 
 
@@ -280,20 +290,22 @@ def export_inventory(root, maximum):
 
 def export_outputs(base, plan, report, deadline):
     base = Path(base)
-    inventory = export_inventory(base / 'output', LIMITS['output_bytes'])
+    output_limit = plan['limits']['output_bytes'] if fresh_mode(plan) else LIMITS['output_bytes']
+    archive_limit = min(plan['cost']['export_bytes'], 512 * 1024**2) if fresh_mode(plan) else MAX_EXPORT
+    inventory = export_inventory(base / 'output', output_limit)
     # Exact output membership is registered, not just an extension allowlist.
     permitted = set(plan['output_allowlist'])
     actual = {r['path'] for r in inventory['files']}
     require(actual <= permitted, 'Unregistered output member: ' + str(sorted(actual - permitted)))
     manifest = dict(run_id=plan['identity']['run_id'], plan_sha256=digest(base / 'plan.json'),
-                    status=report, **inventory, export_cap_bytes=MAX_EXPORT,
-                    total_output_cap_bytes=LIMITS['output_bytes'],
+                    status=report, **inventory, export_cap_bytes=archive_limit,
+                    total_output_cap_bytes=output_limit,
                     excluded=['public base weights', 'discarded synthetic capacity adapter'])
     payload = canonical(manifest)
     # Include archive headers/padding and terminal blocks in the same 2GiB cap.
     predicted = 10240 + sum(512 + ((r['bytes'] + 511) // 512) * 512 for r in inventory['files'])
     predicted += 512 + ((len(payload) + 511) // 512) * 512
-    require(predicted <= MAX_EXPORT, 'Export archive overhead exceeds envelope')
+    require(predicted <= archive_limit, 'Export archive overhead exceeds envelope')
     import io
     target = base / 'export.tar'
     with tarfile.open(target, 'x:', format=tarfile.USTAR_FORMAT) as archive:
@@ -306,14 +318,27 @@ def export_outputs(base, plan, report, deadline):
             info = tarfile.TarInfo(row['path']); info.size = row['bytes']; info.mode = 0o444
             with path.open('rb') as stream:
                 archive.addfile(info, stream)
-    require(target.stat().st_size <= MAX_EXPORT, 'Archive overflow')
+    require(target.stat().st_size <= archive_limit, 'Archive overflow')
     return dict(path=target, bytes=target.stat().st_size, sha256=digest(target), manifest=manifest)
+
+
+def replacement_egress_allowance(plan):
+    cap = plan['network']['egress_byte_cap']
+    if fresh_mode(plan):
+        # Bootstrap's independent counter is deleted during handoff. Reserve
+        # its entire possible consumption, even when actual traffic was lower.
+        bootstrap_reservation = 16 * 1024**2
+        require(type(cap) is int and cap > bootstrap_reservation,
+                'Cumulative egress cap leaves no post-bootstrap allowance')
+        return cap - bootstrap_reservation
+    return cap
 
 
 def install_network_cap(plan, deadline, base):
     # An actual packet-byte gate, not a billing alert. Fail if quota extension is
     # unavailable. All host outbound traffic shares the conservative allowance.
     base = Path(base)
+    allowance = replacement_egress_allowance(plan)
     owner = base / 'bootstrap-network-owner'
     info = owner.lstat()
     require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
@@ -324,7 +349,7 @@ def install_network_cap(plan, deadline, base):
     chain = 'TRID_' + hashlib.sha256(plan['identity']['run_id'].encode()).hexdigest()[:12]
     command(['iptables', '-N', chain], deadline)
     command(['iptables', '-A', chain, '-m', 'quota', '--quota',
-             str(plan['network']['egress_byte_cap']), '-j', 'RETURN'], deadline)
+             str(allowance), '-j', 'RETURN'], deadline)
     command(['iptables', '-A', chain, '-j', 'REJECT'], deadline)
     command(['iptables', '-I', 'OUTPUT', '1', '!', '-d', '127.0.0.0/8', '-j', chain], deadline)
     # IPv6 must not bypass the registered IPv4/egress model.
@@ -448,6 +473,7 @@ def bootstrap(plan, plan_sha, base):
     require(os.geteuid() == 0 and platform.machine() == 'x86_64', 'Root x86_64 supervisor required')
     ordered = ordered_module(plan)
     eight = eight_module(plan)
+    fresh = fresh_module(plan)
     base = Path(base)
     require(base == Path('/opt/trid-' + plan['identity']['run_id']) and not base.is_symlink(), 'Owned bootstrap root differs')
     exclusive_intent(base / 'bootstrap-dispatch.json', dict(plan_sha256=plan_sha))
@@ -459,12 +485,12 @@ def bootstrap(plan, plan_sha, base):
             and identity['availabilityZone'] == plan['network']['availability_zone'], 'IMDS instance identity mismatch')
     # Pending time is only an early, conservative local timer; release replaces
     # it with the controller's observed EC2 LaunchTime deadline.
-    deadline = timestamp(identity['pendingTime']) + 14400
-    require(time.time() < deadline - 1800, 'Bootstrap already outside workload window')
+    deadline = timestamp(identity['pendingTime']) + lifetime_seconds(plan)
+    require(time.time() < deadline - reserve_seconds(plan), 'Bootstrap already outside workload window')
     shutdown_at = dt.datetime.fromtimestamp(deadline - 60).strftime('%H:%M')
     command(['/sbin/shutdown', '-c'], initial_deadline)
     command(['/sbin/shutdown', '-h', shutdown_at], initial_deadline)
-    success_key = 'experimental_success' if eight else ('inference_success' if ordered else 'training_success')
+    success_key = 'experimental_success' if eight or fresh else ('inference_success' if ordered else 'training_success')
     report = {success_key: False}
     report.update(stages=[], run_id=ident['run_id'],
                   instance_id=identity['instanceId'], plan_sha256=plan_sha)
@@ -479,12 +505,12 @@ def bootstrap(plan, plan_sha, base):
         ticket = None
         if eight:
             path = eight.await_object(client, ident['bucket'], ident['code_prefix'] + 'termination.json',
-                base / 'termination.json', min(deadline - 1800, timestamp(identity['pendingTime']) + 600),
+                base / 'termination.json', min(deadline - reserve_seconds(plan), timestamp(identity['pendingTime']) + 600),
                 1024**2, max_polls=120)
             ticket = json.loads(path.read_text())
         else:
             for attempt in range(120):
-                require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 600),
+                require(time.time() < min(deadline - reserve_seconds(plan), timestamp(identity['pendingTime']) + 600),
                         'Independent termination ticket deadline exhausted')
                 try:
                     client('s3api', 'get-object', '--bucket', ident['bucket'], '--key', ident['code_prefix'] + 'termination.json',
@@ -498,7 +524,7 @@ def bootstrap(plan, plan_sha, base):
         client.deadline = deadline - 30
         acquire_phase = 'acquire14' if followup_mode(plan) else ('acquire8' if ordered else 'acquire')
         allocations = plan['workload']['phase_seconds'] if ordered else plan['phase_seconds']
-        acquisition_deadline = min(deadline - 1800, time.time() + allocations[acquire_phase])
+        acquisition_deadline = min(deadline - reserve_seconds(plan), time.time() + allocations[acquire_phase])
         budget = [plan['cost']['download_requests']]
         prerequisites = prepare_bootstrap_dependencies(plan, base, bootstrap_admission, acquisition_deadline, budget, units)
         gpu = gpu_observation(acquisition_deadline)
@@ -512,12 +538,12 @@ def bootstrap(plan, plan_sha, base):
         release = None
         if eight:
             path = eight.await_object(client, ident['bucket'], ident['code_prefix'] + 'release.json',
-                base / 'release.json', min(deadline - 1800, timestamp(identity['pendingTime']) + 900),
+                base / 'release.json', min(deadline - reserve_seconds(plan), timestamp(identity['pendingTime']) + 900),
                 1024**2, max_polls=180)
             release = json.loads(path.read_text())
         else:
             for attempt in range(120):
-                require(time.time() < min(deadline - 1800, timestamp(identity['pendingTime']) + 900),
+                require(time.time() < min(deadline - reserve_seconds(plan), timestamp(identity['pendingTime']) + 900),
                         'Release wait deadline exhausted')
                 try:
                     client('s3api', 'get-object', '--bucket', ident['bucket'], '--key', ident['code_prefix'] + 'release.json',
@@ -561,7 +587,12 @@ def bootstrap(plan, plan_sha, base):
         (base / 'output').mkdir(mode=0o700)
         command(['mount', '-t', 'tmpfs', '-o', 'size=2G,nr_inodes=4096,nosuid,nodev,noexec,mode=0700',
                  'trid-output', str(base / 'output')], acquisition_deadline)
-        os.chown(base / 'output', account.pw_uid, account.pw_gid)
+        if fresh:
+            # Root-owned sticky parent prevents later nonroot phases replacing
+            # accepted root-owned phase directories, not merely their files.
+            (base / 'output').chmod(0o1777)
+        else:
+            os.chown(base / 'output', account.pw_uid, account.pw_gid)
         for name in ('tmp', 'cache'):
             (base / 'output' / name).mkdir()
             os.chown(base / 'output' / name, account.pw_uid, account.pw_gid)
@@ -573,6 +604,9 @@ def bootstrap(plan, plan_sha, base):
                                 work_deadline, acquisition_deadline, budget, hosts, units)
         elif eight:
             eight.run_experiment(sys.modules[__name__], plan, base, report, client, gpu, account,
+                                 work_deadline, acquisition_deadline, budget, hosts, units)
+        elif fresh:
+            fresh.run_experiment(sys.modules[__name__], plan, base, report, client, gpu, account,
                                  work_deadline, acquisition_deadline, budget, hosts, units)
         else:
             for row in plan['model']['files']:
@@ -604,9 +638,13 @@ def bootstrap(plan, plan_sha, base):
             report[success_key] = False
         try:
             require(not report['stop_errors'], 'Export forbidden while an owned process remains unresolved')
-            if (base / 'output/capacity').exists():
+            if not fresh and (base / 'output/capacity').exists():
                 require(not (base / 'output/capacity').is_symlink(), 'Synthetic scratch ownership differs')
                 shutil.rmtree(base / 'output/capacity')
+            if fresh and (base / 'output/tmp/fresh-capacity').exists():
+                scratch = base / 'output/tmp/fresh-capacity'
+                require(not scratch.is_symlink(), 'Synthetic scratch ownership differs')
+                shutil.rmtree(scratch)
             if (base / 'output').exists():
                 # These directories are scratch only; unexpected content is not
                 # silently excluded. Every surviving file must be registered.
@@ -653,7 +691,7 @@ def native_runtime(plan, base):
             'Native Python/architecture differs')
     release = json.loads((Path(base) / 'release.json').read_text())
     require(os.environ['CUDA_VISIBLE_DEVICES'] == release['gpu']['uuid'], 'Exact GPU UUID allowlist differs')
-    observed = gpu_observation(min(release['deadline'] - 1800, time.time() + 15))
+    observed = gpu_observation(min(release['deadline'] - reserve_seconds(plan), time.time() + 15))
     verify_gpu_observation(observed, plan, release['gpu'])
     import torch
     require(torch.__version__ == plan['runtime']['packages']['torch'] and torch.version.cuda == plan['runtime']['torch_cuda']
@@ -680,7 +718,7 @@ def runtime_stage(plan, base):
     torch = native_runtime(plan, base)
     receipt = dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
         count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0))
-    if followup_mode(plan) or is_eight(plan):
+    if followup_mode(plan) or is_eight(plan) or fresh_mode(plan):
         receipt.update(run_id=plan['identity']['run_id'], plan_sha256=digest(Path(base) / 'plan.json'),
                        instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
     save(Path(base) / 'output/runtime.json', receipt)
@@ -911,7 +949,9 @@ def main():
     if args.phase == 'bootstrap':
         bootstrap(plan, args.plan_sha256, args.base)
         return
-    require(plan['limits'] == LIMITS, 'Native fixed resource policy differs')
+    expected_limits = dict(LIMITS, lifetime_seconds=lifetime_seconds(plan), reserve_seconds=reserve_seconds(plan),
+                           output_bytes=512 * 1024**2)
+    require(plan['limits'] == (expected_limits if fresh_mode(plan) else LIMITS), 'Native fixed resource policy differs')
     if args.phase == 'runtime':
         runtime_stage(plan, args.base)
         return
@@ -922,6 +962,10 @@ def main():
     eight = eight_module(plan)
     if eight:
         eight.child_stage(sys.modules[__name__], plan, args.base, args.phase)
+        return
+    fresh = fresh_module(plan)
+    if fresh:
+        fresh.child_stage(sys.modules[__name__], plan, args.base, args.phase)
         return
     require(args.phase in ('capacity', 'baseline', 'train', 'adapter'), 'Unknown training stage')
     validate_model(args.base / 'model', plan)

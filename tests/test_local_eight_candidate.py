@@ -2,6 +2,8 @@
 import copy
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -443,6 +445,255 @@ class CandidateAssessmentIntegrationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'identity/mode'):
                     A.completed_run(root,directory,{r['id']:r for r in fixture.inputs},
                         fixture.design,'unconstrained',contract=contract)
+
+
+class CudaExportIdentityTests(unittest.TestCase):
+    """Byte-only cloud completion tests; no cloud/model execution."""
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.state = Path(self.temporary.name)
+        self.output = self.state / 'fresh-export'
+        self.output.mkdir()
+        self.plan = dict(identity=dict(run_id='synthetic-cuda'),
+                         output_allowlist=['candidate.json', 'plan.json'])
+        dump(self.output / 'candidate.json', {'synthetic': True})
+        dump(self.output / 'plan.json', self.plan)
+        self.plan_sha = sha(self.output / 'plan.json')
+        self.status = dict(run_id='synthetic-cuda', plan_sha256=self.plan_sha,
+            experimental_success=True, stop_errors=[], instance_id='i-synthetic')
+        members = [dict(file_pin(self.output / name), path=name) for name in self.plan['output_allowlist']]
+        dump(self.output / 'export-manifest.json', dict(run_id='synthetic-cuda', plan_sha256=self.plan_sha,
+            status=self.status, files=members, total_bytes=sum(p['bytes'] for p in members)))
+        self.completion = dict(self.status, export=dict(sha256='a' * 64, bytes=1000))
+        dump(self.state / 'completion.json', self.completion)
+        self.controller = dict(state='complete', experimental_success=True,
+            evidence=dict(native_pipeline_success=True, completion=self.completion, export_sha256='a' * 64),
+            cleanup=dict(cleanup_state='complete', instance_terminated=True, instance_id='i-synthetic',
+                root_volume_ids=['vol-root'], recorded_volume_ids=['vol-root'],
+                absent_volume_ids=['vol-root'], remaining_volumes=[]))
+        dump(self.state / 'controller-result.json', self.controller)
+
+    def test_relocated_complete_export_is_accepted(self):
+        C.validate_cuda_export(self.output, self.plan, self.plan_sha)
+
+    def test_failure_partial_and_unclosed_cloud_never_qualify(self):
+        for changed in (
+            dict(self.controller, state='native_failed'),
+            dict(self.controller, schedule_cleanup_error='still armed'),
+            dict(self.controller, cleanup=dict(self.controller['cleanup'], instance_terminated=False)),
+            dict(self.controller, cleanup=dict(self.controller['cleanup'], absent_volume_ids=[])),
+            dict(self.controller, evidence=dict(self.controller['evidence'], export_sha256='b' * 64)),
+        ):
+            with self.subTest(changed=changed):
+                dump(self.state / 'controller-result.json', changed)
+                with self.assertRaises(ValueError):
+                    C.validate_cuda_export(self.output, self.plan, self.plan_sha)
+        dump(self.state / 'controller-result.json', self.controller)
+        (self.output / 'candidate.json').unlink()
+        with self.assertRaises(ValueError):
+            C.validate_cuda_export(self.output, self.plan, self.plan_sha)
+
+    def test_failure_artifact_or_rebound_failed_export_rejected(self):
+        dump(self.output / 'failure.json', dict(status='failed'))
+        with self.assertRaises(ValueError):
+            C.validate_cuda_export(self.output, self.plan, self.plan_sha)
+        (self.output / 'failure.json').unlink()
+        path = self.output / 'export-manifest.json'
+        export = load(path)
+        export['status']['experimental_success'] = False
+        dump(path, export)
+        with self.assertRaisesRegex(ValueError, 'not successful'):
+            C.validate_cuda_export(self.output, self.plan, self.plan_sha)
+
+
+class CudaCandidateIdentityTests(unittest.TestCase):
+    def setUp(self):
+        from scripts.aws_eval import fresh_eight_experiment as F
+        self.F = F
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.fixture = CandidateFixture(self.root)
+        self.output = self.root / 'export'
+        train = self.output / 'train'
+        train.mkdir(parents=True)
+        self.fixture.directory.rename(train / 'adapter')
+        self.training = load(self.fixture.training_path)
+        self.training.update(device='cuda', dtype_inventory={
+            group: {dtype + '@cuda:0': dict(tensors=1, elements=1, bytes=4)}
+            for group, dtype in [('base', 'torch.bfloat16'), ('adapter', 'torch.float32')]})
+        dump(train / 'checkpoints.json', load(self.fixture.ledger_path))
+        dump(train / 'training-worker.json', {'synthetic': True})
+        dump(self.output / 'capacity/capacity-worker.json', {'synthetic': True})
+        self.plan = dict(identity=dict(run_id=F.RUN_ID), data=dict(
+            policy=file_pin(self.fixture.policy_path), manifest=file_pin(self.root / 'training-manifest.json')))
+        plan_path = dump(self.output / 'plan.json', self.plan)
+        self.registration = dump(self.output / 'candidate.json',
+            dict(schema='trid-fresh-eight-cuda-candidate-v1', plan=dict(file_pin(plan_path), path='plan.json'),
+                 candidate_id=F.RUN_ID, arm='candidate', step=150))
+        self.addCleanup(patch.stopall)
+        patch.object(C, 'PROTOCOL_SHA', sha(self.fixture.protocol_path)).start()
+        patch.object(F, 'validate_data', return_value=dict(policy=self.fixture.policy)).start()
+        patch.object(F, 'validate_capacity').start()
+        patch.object(F, 'validate_training', side_effect=lambda *_: self.training).start()
+        patch.object(F, 'validate_supervision', side_effect=lambda root, phase, plan:
+            dict(worker_result=dict(file_pin(self.output / phase /
+                ('capacity-worker.json' if phase == 'capacity' else 'training-worker.json')),
+                path=phase + '/' + ('capacity-worker.json' if phase == 'capacity' else 'training-worker.json')))).start()
+        self.completed = patch.object(F, 'validate_completion').start()
+        self.export = patch.object(C, 'validate_cuda_export').start()
+
+    def resolve(self, complete=True):
+        return C.resolve_cuda_candidate(self.root, self.registration, sha(self.registration),
+                                        require_completion=complete)
+
+    def test_cuda_contract_is_distinct_and_final_consumers_require_completion(self):
+        contract = self.resolve()
+        self.assertEqual(contract['runtime'], 'cuda')
+        self.assertEqual(contract['producer'], 'trid-fresh-eight-cuda-paired-v1')
+        self.assertEqual(contract['registration']['path'], 'candidate.json')
+        self.assertEqual(contract['arms'], ['base', 'candidate'])
+        self.completed.assert_called_once()
+        self.export.assert_called_once()
+        self.completed.reset_mock()
+        self.export.reset_mock()
+        self.resolve(complete=False)
+        self.completed.assert_not_called()
+        self.export.assert_not_called()
+
+    def test_mps_inventory_cannot_impersonate_cuda(self):
+        self.training['dtype_inventory']['adapter'] = {
+            'torch.float32@mps:0': dict(tensors=1, elements=1, bytes=4)}
+        with self.assertRaisesRegex(ValueError, 'CUDA training dtype'):
+            self.resolve()
+
+    def test_final_configuration_and_ledger_are_bound(self):
+        ledger = self.output / 'train/checkpoints.json'
+        value = load(ledger)
+        value['last_step']['adapter_config_sha256'] = '0' * 64
+        dump(ledger, value)
+        with self.assertRaisesRegex(ValueError, 'report/ledger'):
+            self.resolve()
+
+    def test_cuda_answer_receipt_does_not_claim_mps(self):
+        contract = self.resolve(complete=False)
+        contract['policy_document']['evaluation']['generation'] = dict(E.GENERATION, backend='transformers-cuda')
+        with patch.object(E, 'decode_generation', return_value=dict(response_text='synthetic', termination_reason='eos')):
+            row = E.answer_record({}, 'base', {}, {'eos_token_id': 1}, [1], None, 0., {}, contract)
+        self.assertEqual(row['generation']['backend'], 'transformers-cuda')
+        self.assertIn('cuda_memory', row)
+        self.assertNotIn('mps_memory', row)
+        self.assertIsNone(row['adapter_weights_sha256'])
+
+    def test_cuda_requires_additional_executed_source_closure(self):
+        sources = producer_source_fixture(self.root)
+        with self.assertRaisesRegex(ValueError, 'mandatory producer'):
+            A.authenticate_producer_sources(self.root, sources, sources, A.CUDA_PRODUCER_SOURCES)
+
+
+class IsolatedCudaProducerSourceTests(unittest.TestCase):
+    def test_receipts_match_isolated_evaluation_imports_not_training_process(self):
+        # A new -I interpreter avoids contamination from trainer/observer imports
+        # in this test suite. These are the lightweight imports reached by the
+        # supervised evaluate child before model loading; no torch/model runs.
+        script = """
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+sys.path[:0] = [str(root), str(root / 'scripts'), str(root / 'scripts/aws_eval')]
+import fresh_eight_worker
+import evaluate_local_eight
+from scripts import local_eight_candidate
+from scripts.aws_eval import fresh_eight_experiment
+print(json.dumps(evaluate_local_eight.code_identity()))
+"""
+        result = subprocess.run([sys.executable, '-I', '-c', script, str(E.ROOT)],
+            check=True, capture_output=True, text=True, timeout=30)
+        sources = json.loads(result.stdout)
+        self.assertEqual(set(sources), A.CUDA_PRODUCER_SOURCES)
+        self.assertNotIn('scripts/local_mps_training.py', sources)
+        self.assertNotIn('scripts/train_open_weight_lora.py', sources)
+        self.assertFalse(any(name.startswith('trid/') for name in sources))
+        A.authenticate_producer_sources(E.ROOT, sources, sources, A.CUDA_PRODUCER_SOURCES)
+        for name in sources:
+            with self.subTest(missing=name):
+                incomplete = {key: value for key, value in sources.items() if key != name}
+                with self.assertRaisesRegex(ValueError, 'mandatory producer'):
+                    A.authenticate_producer_sources(E.ROOT, incomplete, sources, A.CUDA_PRODUCER_SOURCES)
+
+
+class CudaAssessmentIntegrationTests(unittest.TestCase):
+    def test_cuda_primary200_keeps_the_same_blind_protocol_and_gates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture = SyntheticExperiment(root)
+            directory = fixture.primary
+            manifest = load(directory / 'run-manifest.json')
+            adapter = dict(manifest['adapter'], step=150)
+            registration = dump(directory.parent / 'candidate.json', {'synthetic': True})
+            policy_path = dump(root / 'policy.json', {'synthetic': True})
+            protocol = dict(instructions='Synthetic paired protocol.', paired_consistency=True,
+                critical_errors_are_codes=True, critical_error_codes={'wrong_actor': 'Wrong actor.'})
+            protocol_path = dump(root / 'protocol.json', protocol)
+            metadata_path = dump(root / 'acquisition.json', dict(files=[
+                dict(path='synthetic.safetensors', bytes=3, sha256='a' * 64)]))
+            sources = {name: dict(file_pin(dump(root / name, {'synthetic_source': name})), path=name)
+                       for name in A.CUDA_PRODUCER_SOURCES}
+            plan_path = dump(directory.parent / 'plan.json',
+                dict(sources={name: entry['sha256'] for name, entry in sources.items()}))
+            contract = dict(arms=['base', 'candidate'], adapter_sha256=fixture.design['model']['adapter_sha256'],
+                adapter=adapter, adapter_directory=str(root / 'adapter'), candidate_id='synthetic',
+                registration=dict(file_pin(registration), path='candidate.json'), policy=file_pin(policy_path),
+                review_protocol=file_pin(protocol_path), runtime='cuda', producer='trid-fresh-eight-cuda-paired-v1',
+                plan=dict(file_pin(plan_path), path='plan.json'),
+                policy_document=dict(data=dict(frozen_dataset=file_pin(fixture.frozen_path)),
+                    model=dict(acquisition_manifest=file_pin(metadata_path)),
+                    evaluation=dict(development_gate={'synthetic': 'prospective'})))
+            manifest.update(schema=contract['producer'], arm_order=contract['arms'], adapter=adapter,
+                evaluation_contract=C.public_contract(contract), code=sources,
+                generation=dict(manifest['generation'], backend='transformers-cuda'),
+                runtime=dict(manifest['runtime'], device='cuda'))
+            manifest['model'].update(directory='model', acquisition_manifest=file_pin(metadata_path),
+                files={'synthetic.safetensors': dict(path='model/synthetic.safetensors', bytes=3, sha256='a' * 64)})
+            dump(directory / 'run-manifest.json', manifest)
+            loaded = load(directory / 'loaded-runtime.json')
+            loaded['code'] = sources
+            dump(directory / 'loaded-runtime.json', loaded)
+            for old_arm, arm in [('base', 'base'), ('step-000024', 'candidate')]:
+                rows = fixture.rows(directory, old_arm)
+                for row in rows:
+                    row.update(arm=arm, run_manifest_sha256=sha(directory / 'run-manifest.json'),
+                        loaded_runtime_sha256=sha(directory / 'loaded-runtime.json'), generation=manifest['generation'],
+                        candidate_manifest_sha256=sha(registration))
+                fixture.write_rows(directory, arm, rows, refresh=False)
+            completion = load(directory / 'completion.json')
+            completion.update(run_manifest_sha256=sha(directory / 'run-manifest.json'),
+                outputs={arm: dict(file_pin(directory / (arm + '-outputs.jsonl')),
+                    path=directory.name + '/' + arm + '-outputs.jsonl') for arm in contract['arms']})
+            dump(directory / 'completion.json', completion)
+            with patch.object(A, 'resolve_candidate', return_value=contract), \
+                 patch.object(A, 'review_protocol', return_value=protocol), \
+                 patch.object(A, 'ANONYMOUS_PROTOCOL_SHA', A.object_sha(protocol)):
+                out = root / 'cuda-blind'
+                A.make_packet(root, fixture.frozen_path, sha(fixture.frozen_path), directory, out,
+                    candidate_manifest=registration, candidate_sha=sha(registration))
+                packet = out / 'review-packet.json'
+                self.assertEqual(len(load(packet)['rows']), 400)
+                frozen = fixture.freeze(packet, fixture.reports(packet))
+                result = fixture.aggregate(frozen, out / 'private-mapping.json')
+                self.assertFalse(result['deployment_qualified'])
+                self.assertFalse(result['development_gate']['passed'])
+                self.assertIsNone(result['selected_step'])
+                self.assertEqual(result['role'], 'development_only_not_unseen_final')
+                manifest['runtime']['device'] = 'mps'
+                dump(directory / 'run-manifest.json', manifest)
+                completion['run_manifest_sha256'] = sha(directory / 'run-manifest.json')
+                dump(directory / 'completion.json', completion)
+                with self.assertRaisesRegex(ValueError, 'runtime/device'):
+                    A.completed_run(root, directory, {r['id']: r for r in fixture.inputs},
+                        fixture.design, 'unconstrained', contract=contract)
 
 
 if __name__ == '__main__':

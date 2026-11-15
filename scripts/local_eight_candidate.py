@@ -124,6 +124,8 @@ def resolve_candidate(root, manifest_path, expected_sha):
     registration_pin = file_pin(manifest_path)
     require(registration_pin['sha256'] == expected_sha, 'candidate registration hash differs')
     registration = load(bound(root, registration_pin))
+    if registration.get('schema') == 'trid-fresh-eight-cuda-candidate-v1':
+        return resolve_cuda_candidate(root, manifest_path, expected_sha)
     require(set(registration) == {'schema', 'policy', 'candidate_id', 'arm', 'step', 'supervision',
                                  'training', 'checkpoint_ledger', 'adapter'}
             and registration['schema'] == 'trid-local-eight-candidate-v1', 'candidate registration schema differs')
@@ -221,6 +223,127 @@ def resolve_candidate(root, manifest_path, expected_sha):
                 adapter_sha256=weights_sha, registration=registration_pin,
                 policy=registration['policy'], policy_document=policy,
                 candidate_id=registration['candidate_id'], review_protocol=policy['evaluation']['review_protocol'])
+
+
+def resolve_cuda_candidate(root, manifest_path, expected_sha, *, require_completion=True):
+    """CUDA has its own producer lineage; MPS receipts never satisfy it.
+
+    The producer may authenticate the completed training endpoint before inference.
+    Public consumers always require the subsequently completed cloud export too.
+    No grading references or review-protocol contents are read here.
+    """
+    from scripts.aws_eval import fresh_eight_experiment as profile
+    manifest_path = Path(manifest_path).resolve()
+    output = manifest_path.parent
+    registration_pin = file_pin(manifest_path)
+    require(registration_pin['sha256'] == expected_sha, 'candidate registration hash differs')
+    registration = load(manifest_path)
+    require(set(registration) == {'schema', 'plan', 'candidate_id', 'arm', 'step'}
+            and registration['schema'] == 'trid-fresh-eight-cuda-candidate-v1'
+            and registration['candidate_id'] == profile.RUN_ID
+            and registration['arm'] == 'candidate' and registration['step'] == 150,
+            'CUDA final candidate registration differs')
+    plan = load(profile.bound(output, registration['plan']))
+    data = profile.validate_data(root, plan)
+    policy = data['policy']
+    require(policy['evaluation']['review_protocol']['sha256'] == PROTOCOL_SHA,
+            'prospective protocol identity differs')
+    profile.validate_capacity(output, plan)
+    for phase in ('capacity', 'train'):
+        supervision = profile.validate_supervision(output, phase, plan)
+        expected = output / phase / ('capacity-worker.json' if phase == 'capacity' else 'training-worker.json')
+        require(profile.bound(output, supervision['worker_result']).resolve() == expected,
+                'CUDA supervisor accepted a different worker')
+    training = profile.validate_training(output, plan)
+    ledger = load(output / 'train/checkpoints.json')
+    for record in (training, ledger):
+        require(record['base_model_id'] == MODEL_ID and record['base_revision'] == REVISION
+                and record['base_weights'] == {'representation': 'hf-safetensors', 'dtype': 'torch.bfloat16'}
+                and record['init_adapter'] is None
+                and record['manifest_sha256'] == plan['data']['manifest']['sha256'],
+                'fresh official CUDA base/training lineage differs')
+    require(training['cumulative_steps'] == 150 and ledger['planned_steps'] == 150
+            and training['dtype'] == 'torch.bfloat16', 'CUDA final endpoint differs')
+    for key in ('batch_size', 'micro_batch_size', 'lr', 'seed', 'max_tokens', 'max_answer_tokens', 'family'):
+        require(training[key] == policy['training'][key], 'training configuration differs: ' + key)
+    require(training['lora'] == {k: policy['training'][k] for k in ('rank', 'alpha', 'dropout', 'targets')},
+            'training LoRA configuration differs')
+    for group, dtype in (('base', 'torch.bfloat16'), ('adapter', 'torch.float32')):
+        values = training.get('dtype_inventory', {}).get(group, {})
+        require(values and all(key in (dtype + '@cuda', dtype + '@cuda:0')
+                and entry['tensors'] > 0 and entry['elements'] > 0 and entry['bytes'] > 0
+                for key, entry in values.items()), 'actual CUDA training dtype inventory differs: ' + group)
+    require(training['checkpoints'] == ledger['checkpoints'] and training['last_step'] == ledger['last_step']
+            and ledger['checkpoint_every'] == 50, 'CUDA report/ledger differ')
+    directory = output / 'train/adapter'
+    names = {'adapter_config.json', 'adapter_model.safetensors', 'README.md'}
+    require({p.name for p in directory.iterdir()} == names, 'CUDA adapter membership differs')
+    files = {name: dict(file_pin(directory / name), path='train/adapter/' + name) for name in sorted(names)}
+    last = ledger['last_step']
+    for name, field in (('adapter_config.json', 'adapter_config_sha256'),
+                        ('adapter_model.safetensors', 'adapter_weights_sha256')):
+        require(last[field] == ledger['checkpoints'][-1][field] == files[name]['sha256'],
+                'CUDA final150 config/weights binding differs')
+    config = load(directory / 'adapter_config.json')
+    validate_adapter_config(config, policy['training']['targets'])
+    if require_completion:
+        profile.validate_completion(output, plan)
+        validate_cuda_export(output, plan, registration['plan']['sha256'])
+    registration_pin['path'] = 'candidate.json'
+    identity = dict(status='registered_final_development_candidate_not_selected', step=150, files=files,
+        checkpoint_ledger=dict(file_pin(output / 'train/checkpoints.json'), path='train/checkpoints.json'), config=config)
+    return dict(arms=['base', 'candidate'], adapter_directory=str(directory), adapter=identity,
+        adapter_sha256=files['adapter_model.safetensors']['sha256'], registration=registration_pin,
+        policy=plan['data']['policy'], policy_document=policy, candidate_id=registration['candidate_id'],
+        review_protocol=policy['evaluation']['review_protocol'], runtime='cuda',
+        producer='trid-fresh-eight-cuda-paired-v1', plan=registration['plan'])
+
+
+def validate_cuda_export(output, plan, plan_sha):
+    """Require exported success and independent controller compute/storage cleanup."""
+    from scripts.aws_eval import fresh_eight_experiment as profile
+    output = Path(output)
+    export = load(output / 'export-manifest.json')
+    status = export.get('status', {})
+    require(export.get('run_id') == plan['identity']['run_id'] and export.get('plan_sha256') == plan_sha
+            and status.get('run_id') == plan['identity']['run_id'] and status.get('plan_sha256') == plan_sha
+            and status.get('experimental_success') is True and status.get('stop_errors') == []
+            and not any(key in status for key in ('error', 'export_error')),
+            'CUDA cloud completion/export was not successful')
+    members = export.get('files', [])
+    names = [entry['path'] for entry in members]
+    require(len(names) == len(set(names)) and set(names) <= set(plan['output_allowlist'])
+            and {'candidate.json', 'plan.json'} <= set(names), 'CUDA export membership differs')
+    actual = {path.relative_to(output).as_posix() for path in output.rglob('*') if path.is_file()}
+    require(actual == set(names) | {'export-manifest.json'}, 'CUDA retrieved export membership differs')
+    for entry in members:
+        profile.bound(output, entry)
+    require(export.get('total_bytes') == sum(entry['bytes'] for entry in members),
+            'CUDA export byte denominator differs')
+    completion = load(output.parent / 'completion.json')
+    controller = load(output.parent / 'controller-result.json')
+    evidence = controller.get('evidence', {})
+    cleanup = controller.get('cleanup', {})
+    archive = completion.get('export', {})
+    require(type(archive.get('bytes')) is int and archive['bytes'] > 0
+            and isinstance(archive.get('sha256'), str) and len(archive['sha256']) == 64
+            and all(c in '0123456789abcdef' for c in archive['sha256']),
+            'CUDA exported archive identity missing')
+    require(all(completion.get(key) == value for key, value in status.items())
+            and completion.get('experimental_success') is True
+            and completion.get('stop_errors') == []
+            and not any(key in completion for key in ('error', 'export_error'))
+            and controller.get('state') == 'complete' and controller.get('experimental_success') is True
+            and not any(key in controller for key in ('error', 'evidence_error', 'schedule_cleanup_error'))
+            and evidence.get('native_pipeline_success') is True and evidence.get('completion') == completion
+            and evidence.get('export_sha256') == completion.get('export', {}).get('sha256'),
+            'CUDA independent cloud completion differs')
+    require(cleanup.get('cleanup_state') == 'complete' and cleanup.get('instance_terminated') is True
+            and cleanup.get('instance_id') == completion.get('instance_id')
+            and cleanup.get('root_volume_ids') and not cleanup.get('remaining_volumes')
+            and set(cleanup['root_volume_ids']) <= set(cleanup.get('recorded_volume_ids', []))
+            and set(cleanup.get('absent_volume_ids', [])) == set(cleanup.get('recorded_volume_ids', [])),
+            'CUDA instance/root-volume cleanup is not complete')
 
 
 def public_contract(contract):

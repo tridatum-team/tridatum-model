@@ -1,0 +1,219 @@
+"""Offline fresh600 lease regressions; fixtures are not live launch evidence."""
+import datetime as dt
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts/aws_eval'))
+import grounded_hf_lifecycle as L
+
+
+def plan_fixture():
+    run = 'fresh-eight-synthetic'
+    identity = dict(run_id=run, account='148761639313', region='ap-northeast-2',
+        schedule_group=run, schedule_name=run + '-deadline', bucket='fresh-synthetic', code_prefix=f'code/{run}/',
+        output_prefix=f'output/{run}/')
+    return dict(schema=L.FRESH_SCHEMA, identity=identity,
+        limits=dict(L.LIMITS, lifetime_seconds=7200, reserve_seconds=600, output_bytes=512 * 1024**2),
+        lifetime=dict(total_seconds=9000, termination_grace_seconds=1800, automatic_extension=False),
+        iam={'scheduler_role': {'arn': 'arn:aws:iam::148761639313:role/fresh-synthetic'}},
+        runtime=dict(gpu_name='NVIDIA L40S', gpu_catalog_mib=45776,
+            gpu_nvml_min_mib=45776, gpu_nvml_max_mib=49152, driver_version='synthetic'),
+        bundle={'bytes': 1024}, network={'egress_byte_cap': 2 * L.GIB},
+        cost=dict(cap_usd=10, retention_days=30, ancillary_bound_usd=0.25,
+            get_requests=4608, put_requests=4608, control_requests=4608, download_requests=100,
+            network_egress_bytes=3 * L.GIB, retained_bytes=L.GIB,
+            export_bytes=512 * 1024**2, controller_retrieval_bytes=L.GIB,
+            tax_rate=0.10, contingency_usd=1, termination_grace_seconds=1800,
+            scheduler_invocations=10000,
+            rates=dict(ec2_hour=2, ipv4_hour=0.005, ebs_gb_month=0.1,
+                s3_gb_month=0.025, egress_gb=0.1, s3_get=0.0000004,
+                s3_put=0.000005, scheduler_invocation=0.000001)))
+
+
+def release_fixture(plan):
+    return dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+        instance_id='i-0123456789abcdef0', launch_time=1000, deadline=8200,
+        schedule_verified=True,
+        gpu=dict(uuid='GPU-11111111-2222-3333-4444-555555555555', minor=0,
+            name='NVIDIA L40S', total_mib=46000, driver='synthetic'),
+        schedule=L.schedule_spec(plan, 'i-0123456789abcdef0', 1000))
+
+
+class FreshLifetimeTests(unittest.TestCase):
+    def test_total_includes_cleanup_and_keeps_legacy_unchanged(self):
+        plan = plan_fixture()
+        L.validate_fresh_lifetime(plan)
+        self.assertEqual(L.lifetime_seconds(plan), 7200)
+        self.assertEqual(L.reserve_seconds(plan), 600)
+        self.assertEqual(L.lifetime_seconds({'schema': L.EIGHT_SCHEMA}), 14400)
+        self.assertEqual(L.reserve_seconds({}), 1800)
+        self.assertTrue(L.bounded_mode(plan))
+        self.assertFalse(L.eight_mode(plan))
+
+    def test_rejects_unsealed_or_extended_lifetime(self):
+        mutations = [
+            lambda p: p['lifetime'].update(total_seconds=9001),
+            lambda p: p['lifetime'].update(automatic_extension=True),
+            lambda p: p['lifetime'].update(termination_grace_seconds=300),
+            lambda p: p['limits'].update(lifetime_seconds=9000),
+            lambda p: p['limits'].update(reserve_seconds=0),
+            lambda p: p['limits'].update(root_gib=100),
+        ]
+        for mutate in mutations:
+            with self.subTest(mutate=mutate):
+                plan = plan_fixture()
+                mutate(plan)
+                with self.assertRaises((ValueError, RuntimeError)):
+                    L.validate_fresh_lifetime(plan)
+
+    def test_schedule_uses_compute_cutoff_not_legacy_or_total(self):
+        plan = plan_fixture()
+        spec = L.schedule_spec(plan, 'i-owned', 1000)
+        expected = dt.datetime.fromtimestamp(8140, dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+        self.assertEqual(spec['ScheduleExpression'], 'at(' + expected + ')')
+        self.assertEqual(json.loads(spec['Target']['Input']), {'InstanceIds': ['i-owned']})
+        self.assertEqual(spec['Target']['RetryPolicy']['MaximumRetryAttempts'], 0)
+        self.assertEqual(spec['ActionAfterCompletion'], 'NONE')
+
+    def test_release_and_ticket_reject_old_four_hour_deadline(self):
+        plan = plan_fixture()
+        release = release_fixture(plan)
+        self.assertEqual(L.verify_termination_ticket(release, plan, 'a' * 64, release['instance_id'], 1100), 8200)
+        self.assertEqual(L.verify_release(release, plan, 'a' * 64, release['instance_id'], 1100), 7600)
+        release['deadline'] = 15400
+        for check in (L.verify_release, L.verify_termination_ticket):
+            with self.assertRaises((ValueError, RuntimeError)):
+                check(release, plan, 'a' * 64, release['instance_id'], 1100)
+
+    def test_cleanup_cutoff_uses_earlier_ambiguous_dispatch(self):
+        plan = plan_fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            L.save(state / 'approval-consumed.json', dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64))
+            L.save(state / 'launch-dispatched.json', dict(run_id=plan['identity']['run_id'],
+                plan_sha256='a' * 64, request_sha256='b' * 64, at=900))
+            L.save(state / 'release.json', release_fixture(plan))
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, state), 9900)
+
+    def test_new_ten_dollar_cost_and_no_inherited_five_dollar_reserve(self):
+        plan = plan_fixture()
+        result = L.cost_bound(plan)
+        self.assertLess(result['additional_pretax_bound_usd'], 10)
+        self.assertFalse(result['spending_hard_cap'])
+        plan['cost']['cap_usd'] = 20
+        with self.assertRaises((ValueError, RuntimeError)):
+            L.cost_bound(plan)
+
+    def test_cost_prices_total_billable_lifetime(self):
+        plan = plan_fixture()
+        original = L.cost_bound(plan)['additional_pretax_bound_usd']
+        plan['cost']['rates']['ec2_hour'] += 0.1
+        self.assertAlmostEqual(L.cost_bound(plan)['additional_pretax_bound_usd'] - original, 0.25)
+
+    def test_worker_policy_excludes_checkpoint_and_final_input_channels(self):
+        plan = plan_fixture()
+        identity = plan['identity']
+        code = f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}"
+        statements = [dict(Effect='Allow', Action=['s3:GetObject'], Resource=[code + name for name in
+            ('plan.json', 'bundle.tar', 'approval-consumed.json', 'termination.json', 'release.json')]),
+            dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
+                f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"]),
+            dict(Effect='Allow', Action=['s3:ListBucket'], Resource=[f"arn:aws:s3:::{identity['bucket']}"],
+                Condition={'StringEquals': {'s3:prefix': [identity['code_prefix'] + name
+                    for name in ('termination.json', 'release.json')]}})]
+        plan['iam']['instance_role'] = {'inline': {'fresh': {'Version': '2012-10-17', 'Statement': statements}}}
+        L.validate_worker_policy(plan)
+        statements[0]['Resource'].append(code + 'final-inputs.json')
+        with self.assertRaises((ValueError, RuntimeError)):
+            L.validate_worker_policy(plan)
+
+    def test_missing_schedule_proof_blocks_cleanup(self):
+        plan = plan_fixture()
+        cleanup = dict(cleanup_state='complete', instance_terminated=True,
+            instance_id='i-owned', root_volume_ids=['vol-owned'], remaining_volumes=[],
+            recorded_volume_ids=['vol-owned'], absent_volume_ids=['vol-owned'])
+        with tempfile.TemporaryDirectory() as directory:
+            def forbidden(*args, **kwargs):
+                raise AssertionError('No cloud call permitted without schedule provenance')
+            with self.assertRaises((ValueError, RuntimeError)):
+                L.cleanup_schedule(forbidden, plan['identity'], directory, cleanup, plan=plan, plan_sha='a' * 64)
+
+    def test_retention_requires_exact_prefix_and_multipart_abort(self):
+        plan = plan_fixture()
+        rules = [dict(ID='historical', Status='Enabled', Filter={'Prefix': 'old/'},
+                      Expiration={'Days': 30})]
+        rules.extend(dict(ID=name, Status='Enabled', Filter={'Prefix': plan['identity'][name]},
+            Expiration={'Days': 30}, AbortIncompleteMultipartUpload={'DaysAfterInitiation': 1})
+            for name in ('code_prefix', 'output_prefix'))
+        plan['cost']['bucket_lifecycle_configuration'] = {'Rules': rules}
+        L.validate_lifecycle_configuration(plan, {'Rules': rules})
+        del rules[-1]['AbortIncompleteMultipartUpload']
+        with self.assertRaises(RuntimeError):
+            L.validate_lifecycle_configuration(plan, {'Rules': rules})
+
+    def test_ambiguous_schedule_deletion_is_not_repeated(self):
+        plan = plan_fixture()
+        identity = plan['identity']
+        spec = L.schedule_spec(plan, 'i-owned', 1000)
+        arn = (f"arn:aws:scheduler:{identity['region']}:{identity['account']}:schedule/"
+               f"{identity['schedule_group']}/{identity['schedule_name']}")
+        snapshot = dict(spec, Arn=arn, CreationDate='2026-11-15T00:00:00Z',
+                        LastModificationDate='2026-11-15T00:00:00Z')
+        cleanup = dict(cleanup_state='complete', instance_terminated=True,
+            instance_id='i-owned', root_volume_ids=['vol-owned'], remaining_volumes=[],
+            recorded_volume_ids=['vol-owned'], absent_volume_ids=['vol-owned'])
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            L.save(state / 'approval-consumed.json', dict(run_id=identity['run_id'], plan_sha256='a' * 64))
+            L.save(state / 'schedule-intent.json', spec)
+            L.save(state / 'schedule-created.json', {'ScheduleArn': arn})
+            L.save(state / 'schedule-readback.json', snapshot)
+            L.save(state / 'schedule-delete-intent.json', {'ambiguous': True})
+            def forbidden(*args, **kwargs):
+                raise AssertionError('Ambiguous deletion must not call AWS')
+            with self.assertRaisesRegex(RuntimeError, 'Ambiguous prior schedule deletion'):
+                L.cleanup_schedule(forbidden, identity, state, cleanup, plan=plan, plan_sha='a' * 64)
+
+    def test_all_in_cost_cannot_omit_tax_or_contingency(self):
+        for key, value in (('tax_rate', 0), ('contingency_usd', 0),
+                           ('retained_bytes', 2 * L.GIB), ('network_egress_bytes', 2 * L.GIB),
+                           ('export_bytes', L.GIB), ('put_requests', 10001)):
+            with self.subTest(key=key):
+                plan = plan_fixture()
+                plan['cost'][key] = value
+                with self.assertRaises(RuntimeError):
+                    L.cost_bound(plan)
+
+    def test_controller_retrieval_limit_blocks_before_cloud_call(self):
+        client = L.Client(plan_fixture()['identity'])
+        client.retrieval_byte_limit = 1024
+        with self.assertRaisesRegex(RuntimeError, 'retrieval byte envelope'):
+            client('s3api', 'get-object', '--range', 'bytes=0-1024', 'never-created')
+        self.assertEqual(client.retrieval_bytes, 0)
+
+    def test_terminal_requires_all_three_owned_clean_stages(self):
+        plan = plan_fixture()
+        completion = dict(experimental_success=True, stop_errors=[], stages=[
+            dict(phase=phase, state='complete', cleanup_verified=True,
+                run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                instance_id='i-owned', unit=phase, invocation='synthetic',
+                gpu=release_fixture(plan)['gpu'])
+            for phase in ('capacity', 'train', 'evaluate')])
+        L.validate_fresh_terminal(plan, 'a' * 64, 'i-owned', completion)
+        completion['export_error'] = 'synthetic failure'
+        with self.assertRaises(RuntimeError):
+            L.validate_fresh_terminal(plan, 'a' * 64, 'i-owned', completion)
+        del completion['export_error']
+        completion['stages'][-1]['cleanup_verified'] = False
+        with self.assertRaises(RuntimeError):
+            L.validate_fresh_terminal(plan, 'a' * 64, 'i-owned', completion)
+        completion['stages'].pop()
+        with self.assertRaises(RuntimeError):
+            L.validate_fresh_terminal(plan, 'a' * 64, 'i-owned', completion)
+
+
+if __name__ == '__main__':
+    unittest.main()

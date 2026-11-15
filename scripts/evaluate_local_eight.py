@@ -1,4 +1,4 @@
-"""Offline paired BF16/MPS development diagnostic, never deployment selection.
+"""Offline paired BF16 development diagnostics, never deployment selection.
 
 Only a public JSON array of {id, messages} is accepted; reference/grade files are
 never loaded. Both arms use one base+adapter instance, native nonthinking prompts,
@@ -11,6 +11,13 @@ replay. Paired --candidate-manifest/--candidate-sha256 instead authenticate the
 prospectively fixed final step150 and accepted parent supervision. Candidate
 mode uses base/candidate arms, forbids export overrides and secondary decoder
 search, and only hashes the opaque review-protocol bytes (never parses them).
+
+The local CLI is MPS-only. The supervised fresh CUDA worker calls
+evaluate_cloud(plan, base), authenticating its separate CUDA training/cleanup
+receipts, loading a fresh official base, and producing all400 primary answers.
+CUDA receipts are explicitly attributed, portable on export, and cannot be
+accepted by impersonating local MPS provenance. Export and controller cleanup
+must complete before the resulting candidate can enter blind assessment.
 
 Each attempt is fsynced before generation and each completed answer immediately
 afterwards. An interruption leaves the immutable run identity, preflight, attempt
@@ -434,6 +441,14 @@ def mps_memory(torch):
                 peak_scope='runtime lifetime; only max_* APIs, when available, are peaks')
 
 
+def runtime_memory(torch, device):
+    if device == 'mps':
+        return mps_memory(torch)
+    return dict(bytes={name: int(getattr(torch.cuda, name)()) for name in
+        ('memory_allocated', 'memory_reserved', 'max_memory_allocated', 'max_memory_reserved')},
+        unsupported=[], peak_scope='CUDA runtime lifetime')
+
+
 def generation_target(model):
     return model.get_base_model() if hasattr(model, 'get_base_model') else model
 
@@ -499,16 +514,20 @@ def observe_generation_policy(model, expected_config):
 
 def answer_record(case, arm, binding, config, tokens, tokenizer, elapsed, memory, contract=None):
     decoded = decode_generation(tokenizer, tokens, config['eos_token_id'], GENERATION['max_new_tokens'])
-    return dict(**case, arm=arm, **binding, generation=dict(GENERATION),
+    generation = contract['policy_document']['evaluation']['generation'] if contract and contract.get('runtime') == 'cuda' else GENERATION
+    return dict(**case, arm=arm, **binding, generation=dict(generation),
                 adapter_weights_sha256=None if arm == 'base' else (contract['adapter_sha256'] if contract else ADAPTER_SHA),
                 generation_config=config, output_token_ids=tokens, **decoded,
                 exception=None, context_truncated=False, skipped_context=False,
                 truncated_output=decoded['termination_reason'] == 'length',
-                elapsed_seconds=elapsed, mps_memory=memory)
+                elapsed_seconds=elapsed, **{'cuda_memory' if contract and contract.get('runtime') == 'cuda' else 'mps_memory': memory})
 
 
 def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=None, contract=None):
     arms = contract['arms'] if contract else ARMS
+    device = 'cuda' if contract and contract.get('runtime') == 'cuda' else 'mps'
+    backend = torch.cuda if device == 'cuda' else torch.mps
+    generation = contract['policy_document']['evaluation']['generation'] if device == 'cuda' else GENERATION
     with contextlib.ExitStack() as stack:
         streams = {arm: stack.enter_context((out / f'{arm}-outputs.jsonl').open('x', encoding='utf-8'))
                    for arm in arms}
@@ -525,19 +544,19 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                         generation_kwargs['prefix_allowed_tokens_fn'] = decoder.prefix(
                             case, config.eos_token_id)
                     torch.manual_seed(GENERATION['seed'])
-                    torch.mps.manual_seed(GENERATION['seed'])
-                    ids = torch.tensor([case['prompt_token_ids']], dtype=torch.long, device='mps')
+                    backend.manual_seed(GENERATION['seed'])
+                    ids = torch.tensor([case['prompt_token_ids']], dtype=torch.long, device=device)
                     attention = torch.ones_like(ids)
-                    torch.mps.synchronize()
+                    backend.synchronize()
                     with (model.disable_adapter() if arm == 'base' else contextlib.nullcontext()):
                         with torch.inference_mode(), observe_generation_policy(model, config) as observed:
                             result = model.generate(input_ids=ids, attention_mask=attention,
                                                     generation_config=config, **generation_kwargs)
-                    torch.mps.synchronize()
+                    backend.synchronize()
                     tokens = result.sequences[0, len(case['prompt_token_ids']):].tolist()
                     elapsed = time.perf_counter() - started
                     row = answer_record(case, arm, binding, config.to_dict(), tokens,
-                                        tokenizer, elapsed, mps_memory(torch), contract=contract)
+                                        tokenizer, elapsed, runtime_memory(torch, device), contract=contract)
                     row['effective_generation_mode'] = observed['generation_mode']
                     append_row(streams[arm], row)
                     print(json.dumps(dict(event='answer_complete', id=case['id'], arm=arm,
@@ -550,7 +569,7 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                         error_detail['decoder_prefix'] = error.decoder_diagnostic
                     append_row(streams[arm], dict(**case, arm=arm, **binding,
                         adapter_weights_sha256=None if arm == 'base' else (contract['adapter_sha256'] if contract else ADAPTER_SHA),
-                        generation=dict(GENERATION), generation_config=config.to_dict(),
+                        generation=dict(generation), generation_config=config.to_dict(),
                         output_token_ids=tokens, generated_tokens=len(tokens), raw_output=None,
                         response_text=None, termination_reason='error', terminal_stop_token_id=None,
                         context_truncated=False, skipped_context=False, truncated_output=False,
@@ -597,6 +616,8 @@ def main(argv=None):
             require(args.export is None and args.decoder_profile == 'unconstrained',
                     'candidate registration forbids export overrides and secondary profile search')
             contract = resolve_candidate(ROOT, args.candidate_manifest, args.candidate_sha256)
+            require(contract.get('runtime', 'mps') == 'mps',
+                    'CUDA candidates require the supervised CUDA producer, never the local MPS entry point')
             policy = contract['policy_document']
             require(input_pin['sha256'] == policy['data']['evaluation_inputs']['sha256']
                     and model_pin['acquisition_manifest']['sha256'] == policy['model']['acquisition_manifest']['sha256']
@@ -691,6 +712,108 @@ def main(argv=None):
             message=str(error), elapsed_seconds=time.perf_counter() - started,
             completed_rows_retained=True, automatic_retry=False))
         print(json.dumps(dict(event='failed', type=type(error).__name__, message=str(error))), flush=True)
+        raise
+
+
+def evaluate_cloud(plan, base):
+    """Supervised CUDA generation only: fresh base plus final150, all200 pairs.
+
+    Inputs are public prompts and authenticated training/source receipts. Private
+    grading references and protocol text are neither opened nor interpreted.
+    Receipts use output-relative artifact pins and repository-relative source pins.
+    """
+    from scripts.aws_eval import fresh_eight_experiment as profile
+    from scripts.local_eight_candidate import resolve_cuda_candidate, public_contract
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
+    from peft import PeftModel
+    base = Path(base)
+    code = base / 'code'
+    output = base / 'output'
+    out = output / 'evaluation'
+    out.mkdir(parents=True, exist_ok=False)
+    started = time.perf_counter()
+    try:
+        require(torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+                'Native CUDA BF16 required; no CPU/MPS fallback')
+        for key in ('HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_DATASETS_OFFLINE'):
+            os.environ[key] = '1'
+        candidate = output / 'candidate.json'
+        contract = resolve_cuda_candidate(code, candidate, digest(candidate), require_completion=False)
+        require(contract['policy_document']['evaluation']['generation'] == profile.GENERATION,
+                'CUDA requested generation differs')
+        input_path = profile.bound(code, plan['workload']['evaluation_inputs'])
+        rows, _ = public_inputs(input_path, plan['workload']['evaluation_inputs']['sha256'])
+        rows = select_rows(rows, 'evaluation', [])
+        policy = contract['policy_document']
+        model_pin = model_identity(base / 'model', profile.bound(code, policy['model']['acquisition_manifest']))
+        model_pin['directory'] = 'model'
+        model_pin['acquisition_manifest'] = policy['model']['acquisition_manifest']
+        for name, entry in model_pin['files'].items():
+            entry['path'] = 'model/' + name
+        tokenizer = AutoTokenizer.from_pretrained(base / 'model', local_files_only=True, trust_remote_code=False)
+        prepared = preflight_prompts(tokenizer, rows)
+        decoder = dict(profile='unconstrained', semantic_truth_guarantee=False)
+        save_new(out / 'decoder-profile.json', decoder)
+
+        def sources():
+            actual = code_identity()
+            result = {}
+            for name, entry in actual.items():
+                require(plan['sources'].get(name) == entry['sha256'], 'Unsealed CUDA producer source: ' + name)
+                result[name] = dict(entry, path=name)
+            return result
+
+        identity = dict(schema=contract['producer'], mode='evaluation', model=model_pin,
+            adapter=contract['adapter'], input=plan['workload']['evaluation_inputs'],
+            selected_ids=[r['id'] for r in rows], generation=dict(profile.GENERATION), decoder_profile=decoder,
+            runtime=dict(python=sys.version, executable=sys.executable, platform=platform.platform(),
+                machine=platform.machine(), device='cuda', dtype='torch.bfloat16', cpu_fallback=False,
+                cuda_equivalence_claim=False, cuda_version=torch.version.cuda,
+                device_name=torch.cuda.get_device_name(), packages={name: importlib.metadata.version(name)
+                    for name in ('torch', 'transformers', 'peft', 'accelerate', 'safetensors', 'tokenizers', 'numpy')}),
+            code=sources(), arm_order=contract['arms'],
+            paired_order='each input: base with adapter disabled, then registered adapter enabled',
+            grading_access=False, retries=False, resume=False, evaluation_contract=public_contract(contract))
+        save_new(out / 'run-manifest.json', identity)
+        save_new(out / 'prompt-preflight.json', dict(status='passed', prompts=prepared,
+            all_selected_preflighted_before_weights=True, truncation=False))
+        loaded_at = time.perf_counter()
+        fresh = AutoModelForCausalLM.from_pretrained(base / 'model', torch_dtype=torch.bfloat16,
+            device_map={'': 'cuda:0'}, local_files_only=True, trust_remote_code=False, attn_implementation='sdpa')
+        model = PeftModel.from_pretrained(fresh, contract['adapter_directory'], is_trainable=False,
+            local_files_only=True, autocast_adapter_dtype=False)
+        model.eval()
+        require(all(p.device.type == 'cuda' and p.dtype == torch.bfloat16 for p in model.parameters()),
+                'CUDA inference device/dtype differs')
+        require(not any(p.requires_grad for p in model.parameters()), 'Inference parameters must be frozen')
+        config = GenerationConfig(do_sample=False, num_beams=1, max_new_tokens=768, use_cache=True,
+            eos_token_id=model.generation_config.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
+            bos_token_id=tokenizer.bos_token_id, return_dict_in_generate=True)
+        requested = config.to_dict()
+        config, generation_policy = resolve_generation_policy(model, config)
+        torch.cuda.synchronize()
+        save_new(out / 'loaded-runtime.json', dict(loader='fresh official HF safetensors; no training model reuse',
+            elapsed_seconds=time.perf_counter() - loaded_at, attention_implementation=model.config._attn_implementation,
+            generation_config=config.to_dict(), requested_generation_config=requested,
+            generation_policy=generation_policy, parameter_dtypes=sorted({str(p.dtype) for p in model.parameters()}),
+            buffer_dtypes=sorted({str(b.dtype) for b in model.buffers()}), cuda_memory=runtime_memory(torch, 'cuda'),
+            code=sources()))
+        binding = dict(run_manifest_sha256=digest(out / 'run-manifest.json'),
+            loaded_runtime_sha256=digest(out / 'loaded-runtime.json'), model_id=MODEL_ID, model_revision=REVISION,
+            input_sha256=plan['workload']['evaluation_inputs']['sha256'],
+            nominated_adapter_weights_sha256=contract['adapter_sha256'], mode='evaluation',
+            decoder_profile='unconstrained', decoder_profile_sha256=digest(out / 'decoder-profile.json'),
+            generation_policy_sha256=object_sha(generation_policy), candidate_manifest_sha256=digest(candidate))
+        run_pairs(torch, model, tokenizer, prepared, config, binding, out, contract=contract)
+        save_new(out / 'completion.json', dict(status='complete', mode='evaluation',
+            elapsed_seconds=time.perf_counter() - started, rows_per_arm=len(prepared),
+            outputs={arm: profile.pin(out / f'{arm}-outputs.jsonl', output) for arm in contract['arms']},
+            cuda_memory=runtime_memory(torch, 'cuda'), run_manifest_sha256=binding['run_manifest_sha256']))
+    except BaseException as error:
+        save_new(out / 'failure.json', dict(status='failed', type=type(error).__name__, message=str(error),
+            elapsed_seconds=time.perf_counter() - started, completed_rows_retained=True, automatic_retry=False))
         raise
 
 

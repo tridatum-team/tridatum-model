@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fail-safe first: this bootstrap must reach authenticated Python within 5 minutes.
+# All profiles, including fresh600: fail-safe before any network or ticket.
 /sbin/shutdown -h +5 || exit 1
 set -euo pipefail
 umask 077
@@ -39,6 +39,18 @@ import hashlib, json, pathlib, sys, tarfile
 p = json.loads(pathlib.Path('plan.json').read_text())
 b = p['bundle']
 assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= 128 * 1024**2
+if p.get('schema') == 'trid-fresh-eight-gpu-experiment-v1':
+    lease, limits, cost = p['lifetime'], p['limits'], p['cost']
+    assert lease['automatic_extension'] is False
+    assert 300 <= cost['termination_grace_seconds'] <= 1800
+    assert lease['termination_grace_seconds'] == cost['termination_grace_seconds']
+    assert limits['lifetime_seconds'] + cost['termination_grace_seconds'] == lease['total_seconds'] <= 9000
+    assert 300 <= limits['reserve_seconds'] < limits['lifetime_seconds'] <= 7200
+    assert cost['cap_usd'] == 10
+    assert b['bytes'] <= 32 * 1024**2 and limits['output_bytes'] == 512 * 1024**2
+    assert 0 < cost['export_bytes'] <= limits['output_bytes']
+    assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
+    assert p['network']['egress_byte_cap'] <= 2 * 1024**3
 assert len(b['files']) <= 4096
 files = {r['path']: r for r in b['files']}
 assert len(files) == len(b['files']) and sum(r['bytes'] for r in files.values()) <= b['unpacked_bytes'] <= 256 * 1024**2

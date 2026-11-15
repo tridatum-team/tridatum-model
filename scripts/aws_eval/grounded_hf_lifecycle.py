@@ -3,9 +3,16 @@
 `validate` is offline. `preflight` is read-only AWS admission. `launch` consumes
 approval before preflight and dispatches once; `reconcile` can only terminate.
 The old CPU/CUDA identities and approval paths are deliberately untouched.
+
+The distinct fresh600 CUDA profile uses a separately approved USD10 all-in
+envelope, a <=120-minute compute lease plus <=30-minute cleanup grace within
+150 minutes total, and final150 paired inference without parent checkpoint
+selection or delayed final-input channels. Its price calculation includes
+tax and contingency; legacy profiles retain their original contracts.
 """
 import argparse
 import datetime as dt
+from decimal import Decimal, ROUND_CEILING
 import hashlib
 import json
 import math
@@ -42,6 +49,7 @@ SHA = re.compile('[0-9a-f]{64}')
 INFERENCE_SCHEMA = 'trid-ordered-hf-inference-v1'
 FOLLOWUP_SCHEMA = 'trid-hf14-followup-v1'
 EIGHT_SCHEMA = 'trid-eight-sft-experiment-v1'
+FRESH_SCHEMA = 'trid-fresh-eight-gpu-experiment-v1'
 FOLLOWUP_PHASES = dict(acquire14=900, dev14=2400, val14=2400)
 CHECKPOINT_MAX = 32 * 1024**2
 CHECKPOINT_CHANNEL_BYTES = CHECKPOINT_MAX + 3 * 1024**2
@@ -50,6 +58,60 @@ ORDERED_PHASES = dict(acquire8=900, dev8=2400, val8=2400, parent_decision=300,
 ORDERED_MODELS = {
     'qwen8': ('Qwen/Qwen3-8B', 'b968826d9c46dd6066d109eabc6255188de91218'),
     'qwen14': ('Qwen/Qwen3-14B', '40c069824f4251a91eefaf281ebe4c544efd3e18')}
+
+def fresh_mode(plan):
+    return plan.get('schema') == FRESH_SCHEMA
+
+
+def fresh_module(plan):
+    require(fresh_mode(plan), 'Fresh helpers require the distinct fresh schema')
+    if __package__:
+        from . import fresh_eight_experiment
+    else:
+        import fresh_eight_experiment
+    return fresh_eight_experiment
+
+
+def bounded_mode(plan):
+    return inference_mode(plan) or eight_mode(plan) or fresh_mode(plan)
+
+
+def lifetime_seconds(plan):
+    """Scheduled compute lease; fresh total also includes the cleanup grace."""
+    return plan['limits']['lifetime_seconds'] if fresh_mode(plan) else LIMITS['lifetime_seconds']
+
+
+def reserve_seconds(plan):
+    return plan['limits']['reserve_seconds'] if fresh_mode(plan) else LIMITS['reserve_seconds']
+
+
+def export_limit(plan):
+    return plan['cost']['export_bytes'] if fresh_mode(plan) else MAX_EXPORT
+
+
+def output_limit(plan):
+    return plan['limits']['output_bytes'] if fresh_mode(plan) else LIMITS['output_bytes']
+
+
+def schedule_name(identity):
+    return identity.get('schedule_name', identity['run_id'])
+
+
+def validate_fresh_lifetime(plan):
+    limits, lifetime, cost = plan['limits'], plan['lifetime'], plan['cost']
+    require(set(lifetime) == {'total_seconds', 'termination_grace_seconds', 'automatic_extension'}
+            and lifetime['automatic_extension'] is False
+            and type(lifetime['total_seconds']) is int and 600 < lifetime['total_seconds'] <= 9000
+            and type(limits['lifetime_seconds']) is int
+            and type(limits['reserve_seconds']) is int
+            and 300 <= limits['reserve_seconds'] < limits['lifetime_seconds'] <= 7200
+            and lifetime['termination_grace_seconds'] == cost['termination_grace_seconds']
+            and 300 <= cost['termination_grace_seconds'] <= 1800
+            and limits['lifetime_seconds'] + cost['termination_grace_seconds'] == lifetime['total_seconds']
+            and limits == dict(LIMITS, lifetime_seconds=limits['lifetime_seconds'],
+                               reserve_seconds=limits['reserve_seconds'], output_bytes=512 * 1024**2),
+            'Fresh sealed total lifetime must include cleanup grace within 150 minutes')
+
 
 
 def eight_mode(plan):
@@ -78,7 +140,7 @@ def inference_mode(plan):
 
 
 def success_field(plan):
-    if eight_mode(plan):
+    if eight_mode(plan) or fresh_mode(plan):
         return 'experimental_success'
     return 'inference_success' if inference_mode(plan) else 'training_success'
 
@@ -370,6 +432,45 @@ def authenticate_archive(path, bundle, destination=None):
     return expected
 
 
+def fresh_cost_bound(plan):
+    """Decimal all-in admission: usage, explicit contingency, and tax; no free tier."""
+    cost, network = plan['cost'], plan['network']
+    validate_fresh_lifetime(plan)
+    require(type(cost['export_bytes']) is int and 0 < cost['export_bytes'] <= 512 * 1024**2
+            and type(cost['controller_retrieval_bytes']) is int
+            and cost['export_bytes'] + 8 * 1024**2 <= cost['controller_retrieval_bytes'] <= GIB
+            and type(network['egress_byte_cap']) is int
+            and cost['export_bytes'] + 16 * 1024**2 <= network['egress_byte_cap'] <= 2 * GIB
+            and cost['network_egress_bytes'] == 3 * GIB
+            and plan['bundle']['bytes'] <= 32 * 1024**2
+            and plan['bundle']['bytes'] + cost['export_bytes'] + 8 * 1024**2
+                <= cost['retained_bytes'] <= GIB
+            and cost['retention_days'] == 30
+            and 4608 <= cost['get_requests'] <= 10000
+            and 4608 <= cost['put_requests'] <= 10000
+            and 4608 <= cost['control_requests'] <= 10000
+            and type(cost['scheduler_invocations']) is int and cost['scheduler_invocations'] == 10000
+            and type(cost['tax_rate']) in (int, float) and cost['tax_rate'] == 0.10
+            and type(cost['contingency_usd']) in (int, float)
+            and math.isfinite(cost['contingency_usd']) and cost['contingency_usd'] >= 1,
+            'Fresh sealed egress/storage/request/tax/contingency envelope differs')
+    rates = {key: Decimal(str(value)) for key, value in cost['rates'].items()}
+    hours = Decimal(plan['lifetime']['total_seconds']) / Decimal(3600)
+    usage = hours * (rates['ec2_hour'] + rates['ipv4_hour'])
+    usage += Decimal(120) * rates['ebs_gb_month'] * hours / Decimal(28 * 24)
+    # Decimal GB is deliberately conservative for byte-denominated allowances.
+    usage += Decimal(cost['retained_bytes']) / Decimal(10**9) * rates['s3_gb_month'] * Decimal(31) / Decimal(28)
+    usage += Decimal(cost['network_egress_bytes']) / Decimal(10**9) * rates['egress_gb']
+    usage += cost['get_requests'] * rates['s3_get'] + cost['put_requests'] * rates['s3_put']
+    usage += cost['scheduler_invocations'] * rates['scheduler_invocation'] + Decimal(str(cost['ancillary_bound_usd']))
+    pretax = usage + Decimal(str(cost['contingency_usd']))
+    total = (pretax * (1 + Decimal(str(cost['tax_rate'])))).quantize(Decimal('0.01'), rounding=ROUND_CEILING)
+    require(total.is_finite() and total <= Decimal(10), 'Fresh all-in bound including tax exceeds USD10')
+    return dict(additional_pretax_bound_usd=float(pretax), all_in_bound_usd=str(total),
+                tax_rate=cost['tax_rate'], contingency_usd=cost['contingency_usd'],
+                invoice=False, spending_hard_cap=False)
+
+
 def cost_bound(plan):
     """Conservative bill model, not a claim that AWS exposes a spending hard cap."""
     cost = plan['cost']
@@ -379,7 +480,7 @@ def cost_bound(plan):
             'Missing GET/PUT/storage/egress/scheduler price closure')
     require(all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in prices.values()),
             'Prices require finite observed paid rates; no free-tier assumption')
-    cap = 20 if inference_mode(plan) or eight_mode(plan) else 50
+    cap = 10 if fresh_mode(plan) else (20 if inference_mode(plan) or eight_mode(plan) else 50)
     require(cost['cap_usd'] == cap and 0 < cost['retention_days'] <= 30
             and type(cost['retention_days']) is int
             and cost['ancillary_bound_usd'] >= 0
@@ -390,6 +491,8 @@ def cost_bound(plan):
     require(cost['get_requests'] >= 512 and cost['put_requests'] >= 16
             and cost['control_requests'] >= 1000 and cost['termination_grace_seconds'] >= 300,
             'Request/termination reserve does not cover bounded controller')
+    if fresh_mode(plan):
+        return fresh_cost_bound(plan)
     extra = eight_module(plan).CHANNEL_BYTES if eight_mode(plan) else (CHECKPOINT_CHANNEL_BYTES if ordered_mode(plan) else 0)
     if inference_mode(plan):
         require(cost['ancillary_bound_usd'] >= 5, 'Inference requires full USD5 ancillary reserve')
@@ -409,7 +512,7 @@ def cost_bound(plan):
             and cost['retained_bytes'] >= required_storage
             and cost['network_egress_bytes'] >= plan['network']['egress_byte_cap'] + LIMITS['output_bytes'] + extra,
             'Storage/host-egress plus independent S3 export-download allowance insufficient')
-    hours = (LIMITS['lifetime_seconds'] + cost['termination_grace_seconds']) / 3600
+    hours = (lifetime_seconds(plan) + cost['termination_grace_seconds']) / 3600
     total = hours * (prices['ec2_hour'] + prices['ipv4_hour'])
     total += 120 * prices['ebs_gb_month'] * hours / (28 * 24)
     # Expiration eligibility rounds up to the next UTC midnight. S3 stops billing
@@ -486,6 +589,13 @@ def validate_worker_policy(plan):
         f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
         dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
         f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])]
+    if fresh_mode(plan):
+        expected[0]['Resource'] = [f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}{name}"
+            for name in ('plan.json', 'bundle.tar', 'approval-consumed.json', 'termination.json', 'release.json')]
+        expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
+            Resource=[f"arn:aws:s3:::{identity['bucket']}"],
+            Condition={'StringEquals': {'s3:prefix': [identity['code_prefix'] + name
+                for name in ('termination.json', 'release.json')]}}))
     if eight_mode(plan):
         # Read only the seven bootstrap/control objects, never a wildcard data prefix.
         expected[0]['Resource'] = [f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}{name}"
@@ -505,7 +615,7 @@ def validate_worker_policy(plan):
 
 
 def validate_plan(plan, approval, plan_sha, *, now=None):
-    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA), 'Unknown plan schema')
+    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA, FRESH_SCHEMA), 'Unknown plan schema')
     ordered = inference_mode(plan)
     ident = plan['identity']
     run = ident['run_id']
@@ -521,7 +631,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/-]*/', ident[key])
                 and ident[key].endswith('/' + run + '/'), 'Dedicated literal exact-run S3 prefix required')
     require(ident['code_prefix'] != ident['output_prefix'], 'Separate code/output prefixes required')
-    require(plan['limits'] == LIMITS and plan['instance_type'] == 'g6e.2xlarge'
+    if fresh_mode(plan):
+        validate_fresh_lifetime(plan)
+    require((fresh_mode(plan) or plan['limits'] == LIMITS) and plan['instance_type'] == 'g6e.2xlarge'
             and plan['vcpus'] == 8 and plan['host_mib'] == 65536
             and plan['architecture'] == 'x86_64', 'Fixed resource envelope differs')
     if ordered:
@@ -535,6 +647,15 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                     workload_sha256=object_sha(plan['workload']), limits=LIMITS,
                     ebs_kms_key_arn=key_arn, automatic_retry=False, approved=True),
                 'Exact USD20 inference-only approval is missing or mismatched')
+    elif fresh_mode(plan):
+        key_arn = ebs_key_arn(plan)
+        require(plan['recipe'] == fresh_module(plan).RECIPE, 'Frozen fresh600 recipe differs')
+        require(approval == dict(schema=fresh_module(plan).APPROVAL_SCHEMA, run_id=run,
+            plan_sha256=plan_sha, instance_limit=1, additional_all_in_usd=10,
+            recipe=plan['recipe'], workload_sha256=object_sha(plan['workload']),
+            authorization_sha256=plan['authorization']['sha256'], limits=plan['limits'],
+            ebs_kms_key_arn=key_arn, automatic_retry=False, automatic_extension=False,
+            deployment=False, approved=True), 'Exact new USD10 fresh600 approval required')
     elif eight_mode(plan):
         key_arn = ebs_key_arn(plan)
         require(plan['recipe'] == eight_module(plan).RECIPE, 'Frozen eight training recipe differs')
@@ -572,7 +693,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         else:
             require('model' not in plan or plan['model'] == models['qwen8'], 'Initial model must be immutable 8B')
     else:
-        models = {'qwen8' if eight_mode(plan) else 'qwen14': plan['model']}
+        models = {'qwen8' if eight_mode(plan) or fresh_mode(plan) else 'qwen14': plan['model']}
     file_count = 0
     for model_key, model in models.items():
         model_id, revision = ORDERED_MODELS[model_key]
@@ -604,6 +725,11 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
     require(plan['bundle']['bytes'] <= 128 * 1024**2
             and plan['bundle']['unpacked_bytes'] <= 256 * 1024**2, 'Code/data bundle too large')
     bundled = pins(plan['bundle']['files'], plan['bundle']['unpacked_bytes'])
+    if fresh_mode(plan):
+        envelope = plan['resource_envelope']
+        require(plan['bundle']['bytes'] <= 32 * 1024**2
+                and envelope['path'] in bundled and bundled[envelope['path']] == envelope,
+                'Fresh resource authorization must be sealed into the bounded bundle')
     bootstrap = runtime['bootstrap']
     require(set(bootstrap) == {'admission', 'nvidia_modprobe'},
             'Only verified same-AMI venv plus the pinned historical modprobe package is supported')
@@ -620,6 +746,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
             and deb['url'].startswith('https://') and deb['url'].split('/')[2] in runtime['download_hosts'],
             'Pinned historical NVIDIA package/archive/member contract differs')
     required_sources = (SOURCES | eight_module(plan).SOURCE_NAMES) if eight_mode(plan) else (ordered_sources() if ordered else SOURCES)
+    if fresh_mode(plan):
+        required_sources = SOURCES | fresh_module(plan).SOURCE_NAMES | {'scripts/aws_eval/fresh_eight_launch.py'}
     require(required_sources <= set(bundled) and set(plan['sources']) >= required_sources
             and {n for n in bundled if n.endswith(('.py', '.sh'))} <= set(plan['sources'])
             and all(bundled[k]['sha256'] == v for k, v in plan['sources'].items()),
@@ -631,6 +759,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         validate_worker_policy(plan)
     elif eight_mode(plan):
         eight_module(plan).validate_workload(plan, bundled)
+        validate_worker_policy(plan)
+    elif fresh_mode(plan):
+        fresh_module(plan).validate_workload(plan, bundled)
         validate_worker_policy(plan)
     else:
         data = plan['data']
@@ -680,6 +811,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         required_outputs = ordered_output_members(plan)
     if eight_mode(plan):
         required_outputs = eight_module(plan).output_members(plan)
+    if fresh_mode(plan):
+        required_outputs = fresh_module(plan).output_members(plan)
     require(len(plan['output_allowlist']) == len(required_outputs)
             and set(plan['output_allowlist']) == required_outputs,
             'Exact registered export allowlist required')
@@ -824,7 +957,44 @@ def blind_messages(case):
     return messages
 
 
+def validate_fresh_resources(root, plan):
+    pin = plan['resource_envelope']
+    path = Path(root) / pin['path']
+    envelope = read_bound(path, pin['sha256'])
+    require(path.stat().st_size == pin['bytes']
+            and envelope['schema'] == 'trid-fresh-eight-gpu-resource-envelope-v1'
+            and envelope['identity'] == plan['identity']
+            and envelope['authorization'] == plan['authorization']
+            and envelope['instance_type'] == plan['instance_type'] == 'g6e.2xlarge'
+            and envelope['root_gib'] == 120 and envelope['root_encrypted'] is True
+            and envelope['root_delete_on_termination'] is True
+            and envelope['gpu_execution_lease_seconds_max'] == 7200
+            and envelope['termination_grace_seconds_max'] == 1800
+            and envelope['total_billable_lifetime_seconds_max'] == 9000
+            and envelope['whole_host_egress_bytes_max'] == 2 * GIB
+            and envelope['controller_retrieval_bytes_max'] == GIB
+            and envelope['priced_egress_bytes'] == 3 * GIB
+            and envelope['combined_retained_s3_bytes_max'] == GIB
+            and envelope['output_archive_bytes_max'] == 512 * 1024**2
+            and envelope['bundle_bytes_max'] == 32 * 1024**2
+            and envelope['s3_expiration_days'] == 30
+            and envelope['multipart_abort_days'] == 1
+            and envelope['scheduler_invocations_max'] == 10000
+            and Decimal(envelope['budget_usd']) == Decimal(10)
+            and Decimal(envelope['tax_assumption']) == Decimal('0.10')
+            and Decimal(envelope['contingency_before_tax_usd']) == Decimal(1),
+            'Parent-authorized fresh resource envelope differs')
+    price_pin = envelope['cost_evidence']
+    price_path = Path(root) / price_pin['path']
+    read_bound(price_path, price_pin['sha256'])
+    require(price_path.stat().st_size == price_pin['bytes'], 'Fresh parent cost evidence differs')
+    return envelope
+
+
 def validate_data(root, plan):
+    if fresh_mode(plan):
+        validate_fresh_resources(root, plan)
+        return fresh_module(plan).validate_data(root, plan)
     if eight_mode(plan):
         return eight_module(plan).validate_data(root, plan)
     if inference_mode(plan):
@@ -902,10 +1072,20 @@ class Client:
     def __init__(self, identity, deadline=None, request_limit=4096):
         self.identity, self.deadline = identity, deadline
         self.request_limit, self.requests = request_limit, 0
+        self.retrieval_byte_limit, self.retrieval_bytes = None, 0
 
     def __call__(self, service, operation, *args, region=None):
         require(self.requests < self.request_limit, 'AWS request envelope exhausted')
         self.requests += 1
+        if self.retrieval_byte_limit is not None and (service, operation) == ('s3api', 'get-object'):
+            require('--range' in args, 'Bounded controller GET requires an explicit byte range')
+            match = re.fullmatch(r'bytes=0-([0-9]+)', args[args.index('--range') + 1])
+            require(match is not None, 'Unknown controller retrieval byte range')
+            requested = int(match[1]) + 1
+            require(self.retrieval_bytes + requested <= self.retrieval_byte_limit,
+                    'Controller retrieval byte envelope exhausted')
+            # Charge attempted bytes even when the response is ambiguous or absent.
+            self.retrieval_bytes += requested
         seconds = min(45, remaining(self.deadline)) if self.deadline else 45
         region = region or self.identity['region']
         endpoint = ['--endpoint-url', f'https://s3.{region}.amazonaws.com'] if service == 's3api' else []
@@ -1006,7 +1186,7 @@ def observe_volume_identity(client, identity, row, evidence, evidence_path=None)
 
 def cleanup_cutoff(plan, plan_sha, state):
     """One absolute priced cutoff, including an ambiguous launch's saved dispatch."""
-    require(inference_mode(plan) or eight_mode(plan), 'Absolute cleanup cutoff requires bounded experimental plan')
+    require(bounded_mode(plan), 'Absolute cleanup cutoff requires bounded experimental plan')
     state = Path(state)
     identity = plan['identity']
     consumed = json.loads((state / 'approval-consumed.json').read_text())
@@ -1029,11 +1209,11 @@ def cleanup_cutoff(plan, plan_sha, state):
         require(receipt['run_id'] == identity['run_id'] and receipt['plan_sha256'] == plan_sha
                 and type(receipt['launch_time']) in (int, float)
                 and math.isfinite(receipt['launch_time']) and receipt['launch_time'] > 0
-                and receipt['deadline'] == receipt['launch_time'] + LIMITS['lifetime_seconds'],
+                and receipt['deadline'] == receipt['launch_time'] + lifetime_seconds(plan),
                 'Cleanup cutoff launch evidence differs')
         verify_schedule(receipt['schedule'], schedule_spec(plan, receipt['instance_id'], receipt['launch_time']))
         launch_times.append(receipt['launch_time'])
-    return min(launch_times) + LIMITS['lifetime_seconds'] + plan['cost']['termination_grace_seconds']
+    return min(launch_times) + lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
 
 
 def reconcile(client, identity, expected, deadline, *, evidence, evidence_path=None,
@@ -1150,6 +1330,9 @@ def validate_lifecycle_configuration(plan, observed):
                 exact.append(rule)
         require(len(exact) == 1 and exact[0].get('Expiration') == {'Days': plan['cost']['retention_days']},
                 'Existing exact-prefix expiration closure missing; do not overwrite bucket rules')
+        if fresh_mode(plan):
+            require(exact[0].get('AbortIncompleteMultipartUpload') == {'DaysAfterInitiation': 1},
+                    'Fresh owned prefixes require one-day incomplete multipart cleanup')
     return observed
 
 
@@ -1414,14 +1597,14 @@ def verify_launched_resources(client, plan, row):
 def schedule_spec(plan, instance_id, launch_time):
     identity = plan['identity']
     # Schedule one minute early: scheduler's 60-second precision cannot push the
-    # requested invocation past the four-hour deadline.
-    when = dt.datetime.fromtimestamp(launch_time + 14400 - 60, dt.timezone.utc)
+    # requested invocation past the sealed compute deadline.
+    when = dt.datetime.fromtimestamp(launch_time + lifetime_seconds(plan) - 60, dt.timezone.utc)
     expression = 'at(' + when.strftime('%Y-%m-%dT%H:%M:%S') + ')'
     target = dict(Arn='arn:aws:scheduler:::aws-sdk:ec2:terminateInstances',
                   RoleArn=plan['iam']['scheduler_role']['arn'],
                   Input=json.dumps({'InstanceIds': [instance_id]}),
                   RetryPolicy={'MaximumEventAgeInSeconds': 60, 'MaximumRetryAttempts': 0})
-    return dict(Name=identity['run_id'], GroupName=identity['schedule_group'],
+    return dict(Name=schedule_name(identity), GroupName=identity['schedule_group'],
                 ScheduleExpression=expression, ScheduleExpressionTimezone='UTC',
                 FlexibleTimeWindow={'Mode': 'OFF'}, State='ENABLED',
                 ActionAfterCompletion='NONE', Target=target)
@@ -1437,7 +1620,7 @@ def ordered_schedule_readback(observed, spec, identity):
     """Authenticate the complete configuration and the particular creation."""
     snapshot = {key: value for key, value in observed.items() if key != 'ResponseMetadata'}
     arn = (f"arn:aws:scheduler:{identity['region']}:{identity['account']}:schedule/"
-           f"{identity['schedule_group']}/{identity['run_id']}")
+           f"{identity['schedule_group']}/{schedule_name(identity)}")
     require(set(snapshot) == set(spec) | {'Arn', 'CreationDate', 'LastModificationDate'}
             and snapshot['Arn'] == arn
             and all(snapshot[key] == value for key, value in spec.items()),
@@ -1451,8 +1634,8 @@ def ordered_schedule_readback(observed, spec, identity):
 def verify_termination_ticket(ticket, plan, plan_sha, instance_id, now):
     require(ticket['run_id'] == plan['identity']['run_id'] and ticket['plan_sha256'] == plan_sha
             and ticket['instance_id'] == instance_id and ticket['schedule_verified'] is True
-            and ticket['deadline'] == ticket['launch_time'] + 14400
-            and ticket['launch_time'] <= now < ticket['deadline'] - 1800,
+            and ticket['deadline'] == ticket['launch_time'] + lifetime_seconds(plan)
+            and ticket['launch_time'] <= now < ticket['deadline'] - reserve_seconds(plan),
             'Independent termination ticket rejected')
     verify_schedule(ticket['schedule'], schedule_spec(plan, instance_id, ticket['launch_time']))
     return ticket['deadline']
@@ -1461,12 +1644,12 @@ def verify_termination_ticket(ticket, plan, plan_sha, instance_id, now):
 def verify_release(release, plan, plan_sha, instance_id, now):
     require(release['run_id'] == plan['identity']['run_id'] and release['plan_sha256'] == plan_sha
             and release['instance_id'] == instance_id and release['schedule_verified'] is True
-            and release['deadline'] == release['launch_time'] + 14400
-            and release['launch_time'] <= now < release['deadline'] - 1800,
+            and release['deadline'] == release['launch_time'] + lifetime_seconds(plan)
+            and release['launch_time'] <= now < release['deadline'] - reserve_seconds(plan),
             'Worker release barrier rejected')
     verify_gpu_observation(release['gpu'], plan)
     verify_schedule(release['schedule'], schedule_spec(plan, instance_id, release['launch_time']))
-    return release['deadline'] - 1800
+    return release['deadline'] - reserve_seconds(plan)
 
 
 def put_json(client, identity, key, value, path):
@@ -1716,10 +1899,27 @@ def validate_followup_completion(completion, plan, plan_sha, instance_id, archiv
 
 
 
+def validate_fresh_terminal(plan, plan_sha, instance_id, completion):
+    require(completion['experimental_success'] is True and completion['stop_errors'] == []
+            and not completion.get('error') and not completion.get('export_error')
+            and [stage['phase'] for stage in completion['stages']] == ['capacity', 'train', 'evaluate'],
+            'Fresh success requires complete capacity/training/paired inference without errors')
+    for stage in completion['stages']:
+        require(stage['state'] == 'complete' and stage['cleanup_verified'] is True
+                and stage['run_id'] == plan['identity']['run_id'] and stage['plan_sha256'] == plan_sha
+                and stage['instance_id'] == instance_id and stage['unit'] and stage['invocation']
+                and stage['gpu'], 'Fresh successful stage ownership/cleanup is incomplete')
+
+
 def collect_export(client, plan, plan_sha, state, instance_id):
     """Retrieve bounded evidence only; native completion is not quality acceptance."""
     state = Path(state)
     identity = plan['identity']
+    if fresh_mode(plan):
+        client.retrieval_byte_limit = plan['cost']['controller_retrieval_bytes']
+        exclusive_intent(state / 'export-retrieval-intent.json',
+            dict(run_id=identity['run_id'], plan_sha256=plan_sha, instance_id=instance_id,
+                 byte_limit=plan['cost']['controller_retrieval_bytes']))
     completion_path = state / 'completion.json'
     client('s3api', 'get-object', '--bucket', identity['bucket'],
            '--key', identity['output_prefix'] + 'completion.json', '--range', 'bytes=0-1048575',
@@ -1728,7 +1928,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
     require(completion['run_id'] == identity['run_id'] and completion['instance_id'] == instance_id
             and completion['plan_sha256'] == plan_sha, 'Completion ownership differs')
     pin = completion['export']
-    require(type(pin['bytes']) is int and 0 < pin['bytes'] <= MAX_EXPORT
+    require(type(pin['bytes']) is int and 0 < pin['bytes'] <= export_limit(plan)
             and SHA.fullmatch(pin['sha256']), 'Export envelope differs')
     path = state / 'export.tar'
     client('s3api', 'get-object', '--bucket', identity['bucket'],
@@ -1747,7 +1947,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
     if not (native and followup_mode(plan)):
         rows = manifest['files'] + [dict(path='export-manifest.json', bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())]
         authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
-            unpacked_bytes=LIMITS['output_bytes'], files=rows))
+            unpacked_bytes=output_limit(plan), files=rows))
     if inference_mode(plan):
         require('training_success' not in completion, 'Training completion cannot authorize inference')
         if native and followup_mode(plan):
@@ -1782,6 +1982,15 @@ def collect_export(client, plan, plan_sha, state, instance_id):
                 'Eight independently retrieved dev/parent provenance differs')
             eight_module(plan).validate_dev_export(plan, plan_sha, receipt, destination)
             eight_module(plan).validate_completion(plan, plan_sha, completion, destination)
+    elif fresh_mode(plan):
+        require(manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
+                'Fresh terminal manifest status differs')
+        if native:
+            validate_fresh_terminal(plan, plan_sha, instance_id, completion)
+            destination = state / 'fresh-export'
+            authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
+                unpacked_bytes=output_limit(plan), files=rows), destination)
+            fresh_module(plan).validate_completion(destination, plan)
     else:
         require(not native or [s['phase'] for s in completion['stages']]
                 == ['capacity', 'baseline', 'train', 'adapter'], 'Incomplete native stage receipt')
@@ -1790,7 +1999,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
         require(bound['run_id'] == identity['run_id'] and bound['instance_id'] == instance_id
                 and bound['plan_sha256'] == plan_sha, 'Persisted GPU release ownership differs')
         for stage in [completion['runtime_unit'], *completion['stages']]:
-            if (not inference_mode(plan) and not eight_mode(plan)) or 'gpu' in stage:
+            if (not bounded_mode(plan)) or 'gpu' in stage:
                 verify_gpu_observation(stage['gpu'], plan, bound['gpu'])
     return dict(native_pipeline_success=native, semantic_acceptance='not_evaluated',
                 completion=completion, export_sha256=pin['sha256'])
@@ -1804,15 +2013,15 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
             'No termination proof; retain independent protection')
     path = Path(state) / 'schedule-intent.json'
     if not path.exists():
-        require(plan is None or not (inference_mode(plan) or eight_mode(plan)),
+        require(plan is None or not bounded_mode(plan),
                 'Missing ordered schedule intent; retain independent protection')
         return
     spec = json.loads(path.read_text())
-    require(spec['Name'] == identity['run_id'] and spec['GroupName'] == identity['schedule_group']
+    require(spec['Name'] == schedule_name(identity) and spec['GroupName'] == identity['schedule_group']
             and json.loads(spec['Target']['Input']) == {'InstanceIds': [cleanup['instance_id']]},
             'Schedule cleanup ownership conflict')
     snapshot = None
-    if plan is not None and (inference_mode(plan) or eight_mode(plan)):
+    if plan is not None and bounded_mode(plan):
         require(identity == plan['identity'] and SHA.fullmatch(plan_sha or ''),
                 'Ordered schedule cleanup requires exact plan identity')
         consumed = json.loads((Path(state) / 'approval-consumed.json').read_text())
@@ -1825,12 +2034,12 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
                 and created.get('ScheduleArn') == snapshot['Arn'],
                 'Ordered schedule successful creation provenance differs')
     deletion = None
-    if plan is not None and eight_mode(plan):
+    if plan is not None and (eight_mode(plan) or fresh_mode(plan)):
         deletion = dict(run_id=identity['run_id'], plan_sha256=plan_sha,
-            name=identity['run_id'], group_name=identity['schedule_group'],
+            name=schedule_name(identity), group_name=identity['schedule_group'],
             schedule_readback_sha256=object_sha(snapshot),
             request=dict(service='scheduler', operation='delete-schedule',
-                args=['--name', identity['run_id'], '--group-name', identity['schedule_group']]))
+                args=['--name', schedule_name(identity), '--group-name', identity['schedule_group']]))
         intent_path = Path(state) / 'schedule-delete-intent.json'
         result_path = Path(state) / 'schedule-delete-result.json'
         if result_path.exists():
@@ -1843,7 +2052,7 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
             return
         require(not intent_path.exists(), 'Ambiguous prior schedule deletion; never repeat mutation')
     try:
-        observed = client('scheduler', 'get-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
+        observed = client('scheduler', 'get-schedule', '--name', schedule_name(identity), '--group-name', identity['schedule_group'])
     except AWSCallError as exc:
         if exc.code == 'ResourceNotFoundException':
             return
@@ -1855,7 +2064,7 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
         verify_schedule(observed, spec)
     if deletion is not None:
         exclusive_intent(intent_path, deletion)
-    response = client('scheduler', 'delete-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
+    response = client('scheduler', 'delete-schedule', '--name', schedule_name(identity), '--group-name', identity['schedule_group'])
     if deletion is not None:
         exclusive_intent(result_path, dict(**deletion, state='accepted', response=response))
 
@@ -1877,7 +2086,9 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     state = Path(state)
     state.mkdir(parents=True, exist_ok=True)
     identity = plan['identity']
-    ordered = inference_mode(plan) or eight_mode(plan)
+    if fresh_mode(plan):
+        client.retrieval_byte_limit = plan['cost']['controller_retrieval_bytes']
+    ordered = bounded_mode(plan)
     dispatch_root = Path(dispatch_state) if dispatch_state is not None else state
     if ordered:
         require(dispatch_root.is_dir() and state.resolve().is_relative_to(dispatch_root.resolve()),
@@ -1960,8 +2171,8 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         require(len(rows) == 1 and owned(rows[0], identity, expected) == expected, 'Launch not exactly observable')
         observe_volume_identity(client, identity, rows[0], evidence, evidence_path)
         launch_time = timestamp(rows[0]['LaunchTime'])
-        deadline = launch_time + 14400
-        require(clock() < deadline - 1800, 'Launch visibility too late')
+        deadline = launch_time + lifetime_seconds(plan)
+        require(clock() < deadline - reserve_seconds(plan), 'Launch visibility too late')
         result.update(instance_id=expected, launch_time=launch_time, deadline=deadline,
                       state='scheduled', phase='scheduler_setup')
         spec = schedule_spec(plan, expected, launch_time)
@@ -1970,10 +2181,10 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         # keeps protection until observed termination, never retries creation.
         schedule_created = True
         created = client('scheduler', 'create-schedule', '--cli-input-json', json.dumps(spec), '--client-token', identity['run_id'])
-        if inference_mode(plan) or eight_mode(plan):
+        if bounded_mode(plan):
             exclusive_intent(state / 'schedule-created.json', created)
-        observed = client('scheduler', 'get-schedule', '--name', identity['run_id'], '--group-name', identity['schedule_group'])
-        if inference_mode(plan) or eight_mode(plan):
+        observed = client('scheduler', 'get-schedule', '--name', schedule_name(identity), '--group-name', identity['schedule_group'])
+        if bounded_mode(plan):
             exclusive_intent(state / 'schedule-readback.json', observed)
             snapshot = ordered_schedule_readback(observed, spec, identity)
             require(set(created) <= {'ScheduleArn', 'ResponseMetadata'}
@@ -1987,7 +2198,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         readiness = None
         # Finite polls, not model/launch retries; GET requests are pre-budgeted.
         for attempt in range(120):
-            require(clock() < min(launch_time + 600, deadline - 1800), 'Bootstrap readiness deadline exhausted')
+            require(clock() < min(launch_time + 600, deadline - reserve_seconds(plan)), 'Bootstrap readiness deadline exhausted')
             try:
                 path = state / 'ready-download.json'
                 client('s3api', 'get-object', '--bucket', identity['bucket'],
@@ -2028,7 +2239,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     finally:
         if dispatched:
             cleanup_deadline = clock() + plan['cost']['termination_grace_seconds']
-            if inference_mode(plan) or eight_mode(plan):
+            if bounded_mode(plan):
                 cleanup_deadline = min(cleanup_deadline, cleanup_cutoff(plan, plan_sha, state))
             result['cleanup'] = reconcile(client, identity, expected, cleanup_deadline,
                 evidence=evidence, evidence_path=evidence_path, clock=clock, pause=pause)
@@ -2070,7 +2281,7 @@ def main():
                 'Reconciliation requires exact local consumed approval')
         evidence = load_volume_identity(args.state, plan, args.plan_sha256)
         cleanup_deadline = time.time() + plan['cost']['termination_grace_seconds']
-        if inference_mode(plan) or eight_mode(plan):
+        if bounded_mode(plan):
             cleanup_deadline = min(cleanup_deadline, cleanup_cutoff(plan, args.plan_sha256, args.state))
         result = reconcile(client, plan['identity'], evidence['instance_id'], cleanup_deadline,
                            evidence=evidence, evidence_path=args.state / 'volume-identity.json')
