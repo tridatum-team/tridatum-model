@@ -681,6 +681,8 @@ class LocalEvaluationGuardContracts(unittest.TestCase):
         self.registration_path = self.root / 'local-registration.json'
         for name in ('candidate.json', 'inputs.json', 'metadata.json'):
             (self.root / name).write_text('{}')
+        self.public_rows = [public_row(f'synthetic-{index:03d}') for index in range(200)]
+        (self.root / 'inputs.json').write_text(json.dumps(self.public_rows))
         self.args = E.parser().parse_args([
             '--model-directory', str(self.root / 'model'), '--model-metadata', str(self.root / 'metadata.json'),
             '--inputs', str(self.root / 'inputs.json'), '--inputs-sha256', E.digest(self.root / 'inputs.json'),
@@ -716,16 +718,49 @@ class LocalEvaluationGuardContracts(unittest.TestCase):
              patch.object(self.candidate, 'resolve_candidate', return_value=self.contract):
             return E.local_registration(self.registration_path, self.args.local_registration_sha256, self.args)
 
-    def test_exact_local_policy_accepts_only_primary200_and_twelve_hours(self):
+    def test_exact_local_policy_accepts_evaluation_and_one_question_smoke(self):
         registration, _ = self.resolve()
         self.assertEqual(registration['supervision']['evaluation_deadline_seconds'], 43200)
-        for field, value in [('mode', 'smoke'), ('decoder_profile', 'json-schema'),
-                             ('export', self.root / 'other')]:
-            original = getattr(self.args, field)
-            setattr(self.args, field, value)
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'primary200'):
-                self.resolve()
-            setattr(self.args, field, original)
+        self.args.mode = 'smoke'
+        self.args.smoke_id = ['synthetic-007']
+        self.registration['command'] = E.evaluation_command(self.args)
+        self.publish()
+        self.assertEqual(self.resolve()[0]['command'], E.evaluation_command(self.args))
+        self.args.export = self.root / 'other-adapter'
+        with self.assertRaises(ValueError):
+            self.resolve()
+
+    def test_guarded_selection_and_decoder_refuse_invalid_commands(self):
+        for mode, identifiers, decoder in [
+            ('smoke', [], 'unconstrained'),
+            ('smoke', ['synthetic-001', 'synthetic-002'], 'unconstrained'),
+            ('smoke', ['synthetic-001', 'synthetic-001'], 'unconstrained'),
+            ('smoke', ['unknown'], 'unconstrained'),
+            ('evaluation', ['synthetic-001'], 'unconstrained'),
+            ('smoke', ['synthetic-001'], 'json-schema'),
+        ]:
+            with self.subTest(mode=mode, identifiers=identifiers, decoder=decoder):
+                self.args.mode, self.args.smoke_id, self.args.decoder_profile = mode, identifiers, decoder
+                self.registration['command'] = E.evaluation_command(self.args)
+                self.publish()
+                with self.assertRaises(ValueError):
+                    self.resolve()
+
+    def test_registered_mode_and_id_must_match_invocation_even_without_args(self):
+        self.args.mode, self.args.smoke_id = 'smoke', ['synthetic-007']
+        self.registration['command'] = E.evaluation_command(self.args)
+        self.publish()
+        for mode, identifiers in [('evaluation', []), ('smoke', ['synthetic-008'])]:
+            with self.subTest(mode=mode, identifiers=identifiers):
+                self.args.mode, self.args.smoke_id = mode, identifiers
+                with self.assertRaises(ValueError):
+                    self.resolve()
+        self.registration['command'][-1] = 'unknown'
+        self.publish()
+        with patch.object(E, 'ROOT', self.root), \
+             patch.object(self.candidate, 'resolve_candidate', return_value=self.contract):
+            with self.assertRaises(ValueError):
+                E.local_registration(self.registration_path, self.args.local_registration_sha256)
 
     def test_resealed_deadline_memory_command_and_source_substitutions_fail(self):
         original = copy.deepcopy(self.registration)
@@ -749,14 +784,18 @@ class LocalEvaluationGuardContracts(unittest.TestCase):
                 E.local_registration(self.registration_path, self.args.local_registration_sha256, self.args)
 
     def test_unguarded_cuda_candidate_stops_before_torch_import(self):
-        argv = E.evaluation_command(self.args)[4:]
         model = dict(acquisition_manifest=self.registration['model_metadata'], directory=str(self.args.model_directory))
-        with patch.object(E, 'public_inputs', return_value=([], self.registration['inputs'])), \
-             patch.object(E, 'select_rows', return_value=[]), patch.object(E, 'model_identity', return_value=model), \
-             patch.object(self.candidate, 'resolve_candidate', return_value=self.contract):
-            with self.assertRaisesRegex(ValueError, 'guarded local evaluation'):
-                E.main(argv)
-        self.assertFalse((self.args.out / 'run-manifest.json').exists())
+        for mode in ('evaluation', 'smoke'):
+            with self.subTest(mode=mode):
+                self.args.mode = mode
+                self.args.smoke_id = ['synthetic-007'] if mode == 'smoke' else []
+                self.args.out = self.root / ('unguarded-' + mode)
+                with patch.object(E, 'model_identity', return_value=model), \
+                     patch.object(self.candidate, 'resolve_candidate', return_value=self.contract), \
+                     patch.dict(sys.modules, {'torch': None}):
+                    with self.assertRaisesRegex(ValueError, 'guarded local evaluation'):
+                        E.main(E.evaluation_command(self.args)[4:])
+                self.assertFalse((self.args.out / 'run-manifest.json').exists())
 
     def test_host_refusal_never_spawns_worker_or_releases_gate(self):
         import subprocess
@@ -769,14 +808,26 @@ class LocalEvaluationGuardContracts(unittest.TestCase):
         self.assertFalse(result['startup_released'])
         self.assertFalse(result['cleanup']['accepted'])
 
-    def test_battery_child_waits_for_gate_and_is_reaped_before_acceptance(self):
-        # Battery authorization changes only power admission, not owned cleanup.
+    def guarded_child(self, mode='evaluation', *, completion_change=None, manifest_change=None,
+                      answer_change=None, missing_answer=False):
+        self.args.mode = mode
+        self.args.smoke_id = ['synthetic-007'] if mode == 'smoke' else []
+        self.child_count = getattr(self, 'child_count', 0) + 1
+        self.args.out = self.root / f'answers-{self.child_count}'
+        self.registration.update(output=str(self.args.out),
+            supervision_output=str(self.root / f'supervision-{self.child_count}'),
+            command=E.evaluation_command(self.args))
         registration_pin = self.publish()
+        self.resolve()
+        selected_ids = [row['id'] for row in E.select_rows(self.public_rows, mode, self.args.smoke_id)]
+        changes = dict(mode=mode, selected_ids=selected_ids, completion=completion_change or {},
+            manifest=manifest_change or {}, answer=answer_change or {}, missing_answer=missing_answer)
         script = r"""
 import hashlib, json, os, sys
 from pathlib import Path
 r = json.loads(sys.argv[1])
 registered = json.loads(sys.argv[2])
+changes = json.loads(sys.argv[3])
 fd = int(os.environ['TRID_MPS_GATE_FD'])
 assert os.getppid() == int(os.environ['TRID_MPS_PARENT'])
 assert os.read(fd, 1) == b'G'
@@ -787,16 +838,32 @@ def save(path, value):
     path.write_text(json.dumps(value))
 def pin(path):
     return dict(path=str(path), bytes=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
-save(out / 'run-manifest.json', dict(local_registration=registered, code=r['sources']))
+manifest = dict(local_registration=registered, code=r['sources'], mode=changes['mode'],
+    selected_ids=changes['selected_ids'], arm_order=['base', 'candidate'],
+    decoder_profile=dict(profile='unconstrained'))
+manifest.update(changes['manifest'])
+save(out / 'run-manifest.json', manifest)
 save(out / 'loaded-runtime.json', dict(code=r['sources']))
+manifest_sha = pin(out / 'run-manifest.json')['sha256']
 for arm in ('base', 'candidate'):
-    (out / (arm + '-outputs.jsonl')).write_text('')
-save(out / 'completion.json', dict(status='complete', rows_per_arm=200,
-    run_manifest_sha256=pin(out / 'run-manifest.json')['sha256'],
-    outputs={arm: pin(out / (arm + '-outputs.jsonl')) for arm in ('base', 'candidate')}))
+    rows = [dict(id=identifier, arm=arm, mode=changes['mode'], response_text='Synthetic answer.',
+        termination_reason='eos', truncated_output=False,
+        run_manifest_sha256=manifest_sha, exception=None) for identifier in changes['selected_ids']]
+    if arm == 'candidate':
+        for row in rows:
+            row.update(changes['answer'])
+        if changes['missing_answer']:
+            rows.pop()
+    (out / (arm + '-outputs.jsonl')).write_text(''.join(json.dumps(row) + '\n' for row in rows))
+completion = dict(status='complete', mode=changes['mode'], rows_per_arm=len(changes['selected_ids']),
+    run_manifest_sha256=manifest_sha,
+    outputs={arm: pin(out / (arm + '-outputs.jsonl')) for arm in ('base', 'candidate')})
+completion.update(changes['completion'])
+save(out / 'completion.json', completion)
 save(Path(r['supervision_output']) / 'telemetry.json', dict(allocator_bytes=0, driver_bytes=0))
 """
-        command = [sys.executable, '-c', script, json.dumps(self.registration), json.dumps(registration_pin)]
+        command = [sys.executable, '-c', script, json.dumps(self.registration),
+                   json.dumps(registration_pin), json.dumps(changes)]
         registration = dict(self.registration, command=command)
         original_members = self.guard.group_members
 
@@ -808,11 +875,62 @@ save(Path(r['supervision_output']) / 'telemetry.json', dict(allocator_bytes=0, d
              patch.object(self.guard, 'host_probe', return_value=host), \
              patch.object(self.guard, 'group_members', side_effect=members):
             result = E.supervised_evaluation(self.args, registration, registration_pin)
+        return result
+
+    def test_battery_child_waits_for_gate_and_is_reaped_before_acceptance(self):
+        # Battery authorization changes only power admission, not owned cleanup.
+        result = self.guarded_child()
         self.assertEqual(result['status'], 'accepted', result)
         self.assertTrue(result['startup_released'])
         self.assertTrue(result['cleanup']['leader_reaped'])
         self.assertEqual(result['cleanup']['remaining_members'], [])
         self.assertTrue(result['signals'])
+
+    def test_guarded_one_question_smoke_completes_both_arms(self):
+        result = self.guarded_child('smoke')
+        self.assertEqual(result['status'], 'accepted', result)
+        completion = E.load_json(self.args.out / 'completion.json')
+        self.assertEqual(completion['mode'], 'smoke')
+        self.assertEqual(completion['rows_per_arm'], 1)
+        for arm in ('base', 'candidate'):
+            rows = [json.loads(line) for line in (self.args.out / f'{arm}-outputs.jsonl').read_text().splitlines()]
+            self.assertEqual([(row['id'], row['arm']) for row in rows], [('synthetic-007', arm)])
+
+    def test_guarded_smoke_rejects_incomplete_or_mislabeled_receipts(self):
+        variants = [
+            dict(completion_change=dict(mode='evaluation')),
+            dict(completion_change=dict(mode=None)),
+            dict(completion_change=dict(rows_per_arm=200)),
+            dict(completion_change=dict(status='failed')),
+            dict(completion_change=dict(outputs={})),
+            dict(completion_change=dict(run_manifest_sha256='0' * 64)),
+            dict(manifest_change=dict(mode='evaluation')),
+            dict(manifest_change=dict(selected_ids=['synthetic-008'])),
+            dict(manifest_change=dict(arm_order=['base'])),
+            dict(answer_change=dict(id='synthetic-008')),
+            dict(answer_change=dict(mode='evaluation')),
+            dict(answer_change=dict(arm='base')),
+            dict(answer_change=dict(run_manifest_sha256='0' * 64)),
+            dict(answer_change=dict(response_text='')),
+            dict(answer_change=dict(response_text=' \n\t')),
+            dict(answer_change=dict(response_text=None)),
+            dict(answer_change=dict(termination_reason='length')),
+            dict(answer_change=dict(termination_reason='error')),
+            dict(answer_change=dict(truncated_output=True)),
+            dict(answer_change=dict(exception={'message': 'failed'})),
+            dict(missing_answer=True),
+        ]
+        for change in variants:
+            with self.subTest(change=change):
+                result = self.guarded_child('smoke', **change)
+                self.assertEqual(result['status'], 'failed', result)
+                self.assertTrue(result['cleanup']['accepted'])
+                self.assertIn('acceptance_error', result)
+
+    def test_smoke_completion_cannot_satisfy_evaluation(self):
+        result = self.guarded_child(completion_change=dict(mode='smoke', rows_per_arm=1))
+        self.assertEqual(result['status'], 'failed', result)
+        self.assertIn('acceptance_error', result)
 
     def test_battery_authorization_preserves_host_and_memory_rejections(self):
         limits = E.LOCAL_LIMITS
@@ -846,12 +964,14 @@ save(Path(r['supervision_output']) / 'telemetry.json', dict(allocator_bytes=0, d
         registration_pin = self.publish()
         self.args.out.mkdir()
         completion = self.args.out / 'completion.json'
-        completion.write_text('{}')
-        manifest = dict(local_registration=registration_pin,
+        manifest = dict(local_registration=registration_pin, mode='evaluation',
+            selected_ids=[row['id'] for row in self.public_rows],
             evaluation_contract=dict(registration=self.registration['candidate']),
             input=self.registration['inputs'], generation=E.GENERATION,
             model=dict(directory=self.registration['model_directory']), code=self.registration['sources'])
         (self.args.out / 'run-manifest.json').write_text(json.dumps(manifest))
+        completion.write_text(json.dumps(dict(mode='evaluation',
+            run_manifest_sha256=E.digest(self.args.out / 'run-manifest.json'))))
         (self.args.out / 'loaded-runtime.json').write_text(json.dumps(dict(code=self.registration['sources'])))
         supervisor = Path(self.registration['supervision_output'])
         supervisor.mkdir()

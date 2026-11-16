@@ -626,7 +626,8 @@ def evaluation_command(args):
         '--inputs', str(args.inputs.resolve()), '--inputs-sha256', args.inputs_sha256,
         '--candidate-manifest', str(args.candidate_manifest.resolve()),
         '--candidate-sha256', args.candidate_sha256, '--mode', args.mode,
-        '--decoder-profile', args.decoder_profile, '--out', str(args.out.resolve())]
+        '--decoder-profile', args.decoder_profile, '--out', str(args.out.resolve())] + [
+        value for identifier in args.smoke_id for value in ('--smoke-id', identifier)]
 
 
 def local_registration(path, expected_sha, args=None):
@@ -669,17 +670,34 @@ def local_registration(path, expected_sha, args=None):
                 and relative.parts[0] in ('scripts', 'trid') and relative.suffix == '.py'
                 and name == relative.as_posix() and bound(ROOT, entry) == (ROOT / relative).resolve(),
                 'Local source path substitution')
-    if args is not None:
-        require(args.mode == 'evaluation' and not args.smoke_id and args.export is None
-                and args.decoder_profile == 'unconstrained' and args.candidate_manifest is not None,
-                'Guarded candidate requires exactly primary200 paired evaluation')
-        require(registration['command'] == evaluation_command(args)
-                and candidate == args.candidate_manifest.resolve()
-                and registration['candidate']['sha256'] == args.candidate_sha256
-                and inputs == args.inputs.resolve() and registration['inputs']['sha256'] == args.inputs_sha256
-                and metadata == args.model_metadata.resolve()
-                and registration['model_directory'] == str(args.model_directory.resolve())
-                and output == args.out.resolve(), 'Local registered command differs')
+    command = registration['command']
+    require(isinstance(command, list) and all(isinstance(value, str) for value in command),
+            'Local registered command differs')
+    try:
+        registered_args = parser().parse_args(command[4:])
+    except SystemExit as error:
+        raise ValueError('Local registered command differs') from error
+    require(registered_args.candidate_manifest is not None
+            and command == evaluation_command(registered_args),
+            'Local registered command differs')
+    if args is None:
+        args = registered_args
+    require(args.export is None and args.decoder_profile == 'unconstrained'
+            and args.candidate_manifest is not None
+            and (args.mode == 'evaluation' and not args.smoke_id
+                 or args.mode == 'smoke' and len(args.smoke_id) == 1),
+            'Guarded candidate requires primary200 evaluation or one explicit smoke ID')
+    selected = select_rows(public_inputs(inputs, registration['inputs']['sha256'])[0],
+                           args.mode, args.smoke_id)
+    require(len(selected) == (1 if args.mode == 'smoke' else 200),
+            'Guarded public input selection differs')
+    require(command == evaluation_command(args)
+            and candidate == args.candidate_manifest.resolve()
+            and registration['candidate']['sha256'] == args.candidate_sha256
+            and inputs == args.inputs.resolve() and registration['inputs']['sha256'] == args.inputs_sha256
+            and metadata == args.model_metadata.resolve()
+            and registration['model_directory'] == str(args.model_directory.resolve())
+            and output == args.out.resolve(), 'Local registered command differs')
     return registration, registration_pin
 
 
@@ -816,7 +834,11 @@ def supervised_evaluation(args, registration, registration_pin):
                     'Local evaluation or owned-process cleanup failed')
             require(guard.telemetry_check(out / 'telemetry.json', limits) is not None, 'Missing MPS telemetry')
             completion = load_json(args.out / 'completion.json')
-            require(completion.get('status') == 'complete' and completion.get('rows_per_arm') == 200
+            selected_ids = [row['id'] for row in select_rows(
+                public_inputs(args.inputs, args.inputs_sha256)[0], args.mode, args.smoke_id)]
+            require(len(selected_ids) == (1 if args.mode == 'smoke' else 200)
+                    and completion.get('status') == 'complete' and completion.get('mode') == args.mode
+                    and completion.get('rows_per_arm') == len(selected_ids)
                     and set(completion.get('outputs', {})) == {'base', 'candidate'},
                     'Local paired completion is incomplete')
             for name in ('run-manifest.json', 'loaded-runtime.json'):
@@ -824,10 +846,27 @@ def supervised_evaluation(args, registration, registration_pin):
                 authenticate_local_sources(registration, receipt['code'])
             manifest = load_json(args.out / 'run-manifest.json')
             require(manifest.get('local_registration') == registration_pin
+                    and manifest.get('mode') == args.mode and manifest.get('selected_ids') == selected_ids
+                    and manifest.get('arm_order') == ['base', 'candidate']
+                    and manifest.get('decoder_profile', {}).get('profile') == 'unconstrained'
                     and completion.get('run_manifest_sha256') == digest(args.out / 'run-manifest.json'),
                     'Local worker registration/completion binding differs')
             for arm, entry in completion['outputs'].items():
                 require(entry == pin(args.out / (arm + '-outputs.jsonl')), 'Local completed output pin differs')
+                if args.mode == 'smoke':
+                    with (args.out / (arm + '-outputs.jsonl')).open(encoding='utf-8') as stream:
+                        answers = [strict_json(line) for line in stream]
+                    require(len(answers) == 1 and isinstance(answers[0], dict),
+                            'Local smoke requires one answer per arm')
+                    answer = answers[0]
+                    require(answer.get('id') == selected_ids[0] and answer.get('arm') == arm
+                            and answer.get('mode') == 'smoke'
+                            and answer.get('run_manifest_sha256') == completion['run_manifest_sha256']
+                            and 'exception' in answer and answer['exception'] is None
+                            and isinstance(answer.get('response_text'), str) and answer['response_text'].strip()
+                            and answer.get('termination_reason') == 'eos'
+                            and answer.get('truncated_output') is False,
+                            'Local smoke answer is incomplete or its binding differs')
             result['completion'] = pin(args.out / 'completion.json')
             result['status'] = 'accepted'
         except BaseException as error:
@@ -885,7 +924,16 @@ def accepted_local_supervision(registration_pin, directory):
     require(bound(ROOT, result['completion']) == Path(directory).resolve() / 'completion.json',
             'Local accepted completion differs')
     manifest = load(Path(directory) / 'run-manifest.json')
+    registered_args = parser().parse_args(registration['command'][4:])
+    selected_ids = [row['id'] for row in select_rows(
+        public_inputs(registered_args.inputs, registered_args.inputs_sha256)[0],
+        registered_args.mode, registered_args.smoke_id)]
+    completion = load(Path(directory) / 'completion.json')
     require(manifest.get('local_registration') == registration_pin
+            and manifest.get('mode') == registered_args.mode
+            and manifest.get('selected_ids') == selected_ids
+            and completion.get('mode') == registered_args.mode
+            and completion.get('run_manifest_sha256') == digest(Path(directory) / 'run-manifest.json')
             and manifest['evaluation_contract']['registration']['sha256'] == registration['candidate']['sha256']
             and manifest['input']['sha256'] == registration['inputs']['sha256']
             and manifest['generation'] == registration['generation']
