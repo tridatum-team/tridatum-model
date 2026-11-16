@@ -44,12 +44,12 @@ snapshots; its run_status stays "in_progress" and no <out>/adapter or <out>/trai
 finishes. <out>/adapter stays the exact last step, never a "best" pick; which checkpoint serves is selected
 elsewhere (development behaviour plus task-balanced validation, not training loss), so training.json records
 selection status "unselected". No optimizer state is saved; checkpoints are not resume points.
-On MPS with --family qwen3 the base weights are loaded by load_qwen3_pread: each tensor is read on its own with
-safetensors backend='pread' into CPU memory (no mmap-backed weight storage retained), moved to the device through
-PyTorch's allocator (the supervisor's memory cap applies), assigned into a meta-built model and its CPU allocation
-released (OS page-cache/RSS behaviour not guaranteed; no memory fit claimed); the tied lm_head shard is never read,
-checkpoint keys/shapes are checked before any read and no initialised stand-in exists for a missing weight. Other
-devices use from_pretrained(...).to(device) unchanged.
+On MPS with --family qwen3 the base weights are loaded by load_qwen3_pread: safetensors validates headers,
+then bounded contiguous CPU reads fill one final PyTorch-allocated device tensor (the supervisor's cap applies).
+Each MPS copy is synchronized before reusing its CPU buffer; no mmap-backed weight storage is retained.
+The meta-built model receives each completed tensor sequentially (OS page-cache/RSS behaviour is not guaranteed;
+no memory fit claimed). Tied lm_head bytes are never read; checkpoint keys/shapes are checked before any read.
+Other devices use from_pretrained(...).to(device) unchanged.
 With --base-gguf <q8_0.gguf> --base-gguf-sha256 <hex> (qwen3 only) the frozen base is instead the serving GGUF's
 Q8_0 blocks, loaded by q8_gguf_base.load_qwen3_q8_gguf: int8 weights + fp16 block-32 scales held as frozen
 Parameters (the exact bytes llama.cpp serves), dequantised per bounded row chunk on the fly in forward and backward,
@@ -322,17 +322,64 @@ def tied_output_keys(model):
     input_key = next(name for name, module in model.named_modules() if module is inputs) + '.weight'
     return {name for name, p in model.named_parameters(remove_duplicate=False) if p is inputs.weight} - {input_key}, input_key
 
+PREAD_CHUNK_BYTES = 32 * 1024 * 1024
+_PREAD_DTYPES = {'F32': torch.float32, 'BF16': torch.bfloat16, 'F16': torch.float16}
+
+
+def _copy_pread_tensor(source, offset, tensor, source_dtype, chunk_bytes):
+    """Read a validated contiguous safetensors range into one final allocation, in flat element order.
+
+    A reusable bytearray shares storage with frombuffer. If casting, its source bytes plus the explicit CPU
+    conversion fit chunk_bytes; same-dtype device copies avoid implicit device-side cast staging. Flattening
+    the destination is a view, so scalar, empty and arbitrarily wide-row shapes need no oversized read.
+    The unbuffered source implements seek/readinto. Returns (chunks, peak CPU payload bytes), excluding RSS/cache.
+    """
+    itemsize = source_dtype.itemsize
+    cast_itemsize = tensor.element_size() if source_dtype != tensor.dtype else 0
+    staging_itemsize = itemsize + cast_itemsize
+    if chunk_bytes < staging_itemsize:
+        raise ValueError(f'pread chunk budget {chunk_bytes} is smaller than one {staging_itemsize}-byte staged element')
+    elements = tensor.numel()
+    if not elements:
+        return 0, 0
+    flat = tensor.view(-1)  # contiguous final allocation; never reshape/copy the full destination
+    chunk_elements = min(elements, chunk_bytes // staging_itemsize)
+    buffer = bytearray(chunk_elements * itemsize)
+    view = memoryview(buffer)
+    source.seek(offset)
+    chunks = 0
+    for start in range(0, elements, chunk_elements):
+        count = min(chunk_elements, elements - start)
+        nbytes, filled = count * itemsize, 0
+        while filled < nbytes:
+            read = source.readinto(view[filled:nbytes])
+            if not read:
+                raise EOFError(f'truncated safetensors payload at byte {offset + start * itemsize + filled}')
+            filled += read
+        staged = torch.frombuffer(buffer, dtype=source_dtype, count=count)
+        if cast_itemsize:
+            staged = staged.to(dtype=tensor.dtype)  # bounded CPU cast; no second full device allocation
+        try:
+            flat[start:start + count].copy_(staged)
+        finally:
+            # Even if copy_ raises after queuing work, retain the CPU source until transfers complete.
+            if tensor.device.type == 'mps':
+                torch.mps.synchronize()
+        chunks += 1
+        del staged  # no pending copy may retain this buffer when the next read overwrites it
+    return chunks, len(buffer) + chunk_elements * cast_itemsize
+
+
 
 @torch.no_grad()
 def load_qwen3_pread(model_dir, dtype, device):
-    """Qwen3ForCausalLM from a local safetensors directory, one tensor at a time: safetensors' official
-    `backend='pread'` reads a single tensor into CPU memory (no mmap-backed weight storage is retained, unlike
-    `from_pretrained(...).to(device)`, which keeps the mapped shard alive while it copies module by module), the
-    tensor is moved to `device`/`dtype` through PyTorch's own allocator (so the supervisor's MPS memory fraction cap
-    applies to every device allocation), assigned into a meta-built model and the per-tensor CPU allocation released
-    before the next tensor is read. Peak transient CPU staging is one tensor (Qwen3-1.7B: the 622 MB embedding); the
-    kernel may still cache file pages, so OS page-cache and RSS behaviour are not guaranteed and no memory fit is
-    claimed. The model is built on the meta device (buffers such as
+    """Qwen3ForCausalLM from a local safetensors directory, one final device allocation per tensor.
+    Safetensors validates headers without materializing weights. Its 0.8 CPU pread slicing reads a whole tensor,
+    so payloads instead use unbuffered readinto on validated byte offsets, with one reusable CPU buffer
+    shared by torch.frombuffer. Source plus optional CPU-cast payloads total at most 32 MiB. Contiguous views
+    fill a single PyTorch-allocated device destination. MPS copies synchronize before buffer reuse; no second
+    full device tensor is staged. The allocator cap still applies; framework overhead/cache/RSS are not bounded.
+    The model is built on the meta device (buffers such as
     rotary `inv_freq` are computed normally), checkpoint headers are checked against every expected key and shape
     BEFORE any tensor bytes are read, the canonical `tie_weights()` is re-applied and generation_config.json, dtype
     and eval mode follow from_pretrained. A tied output key (`lm_head.weight`) present in the checkpoint is only
@@ -363,12 +410,17 @@ def load_qwen3_pread(model_dir, dtype, device):
         shards = [SAFE_WEIGHTS_NAME]
     else:
         raise FileNotFoundError(f'{model_dir} has neither {SAFE_WEIGHTS_INDEX_NAME} nor {SAFE_WEIGHTS_NAME}')
-    sizes = {'F32': 4, 'BF16': 2, 'F16': 2}
     plan, seen, problems = [], {}, []
     for shard in shards:
         with safe_open(model_dir / shard, framework='pt', device='cpu', backend='pread') as f:
             keys = list(f.keys())
             header = {k: (f.get_slice(k).get_shape(), f.get_slice(k).get_dtype()) for k in keys}
+        # safe_open has already validated offsets, lengths, shapes, dtypes and the complete file layout.
+        # Read only that header here; calling its CPU get_slice()[...] would stage the entire tensor.
+        with open(model_dir / shard, 'rb', buffering=0) as source:
+            header_size = int.from_bytes(source.read(8), 'little')
+            layout = json.loads(source.read(header_size))
+        offsets = {key: 8 + header_size + layout[key]['data_offsets'][0] for key in keys}
         for key, (shape, kind) in header.items():
             if key in seen:
                 problems.append(f'{key} appears in {seen[key]} and {shard}')
@@ -378,16 +430,21 @@ def load_qwen3_pread(model_dir, dtype, device):
                 problems.append(f'unexpected key {key} in {shard}')
             elif tuple(shape) != want:
                 problems.append(f'{key}: checkpoint shape {list(shape)} != model shape {list(want)}')
-        nbytes = {k: math.prod(shape) * sizes.get(kind, 0) for k, (shape, kind) in header.items()}
-        plan.append(dict(file=shard, keys=keys, bytes=nbytes))
+            if key not in redundant and kind not in _PREAD_DTYPES:
+                problems.append(f'{key}: unsupported checkpoint dtype {kind}')
+        nbytes = {key: layout[key]['data_offsets'][1] - layout[key]['data_offsets'][0] for key in keys}
+        plan.append(dict(file=shard, keys=keys, bytes=nbytes, offsets=offsets,
+                         dtypes={key: kind for key, (_, kind) in header.items()}))
     missing = sorted(set(expected) - redundant - set(seen))
     if missing:
         problems.append(f'missing parameters: {missing}')
     if problems:
         raise ValueError(f'{model_dir} does not match {type(model).__name__}: ' + '; '.join(problems))
 
-    report = dict(backend='pread', staging='cpu-per-tensor', device=str(device), dtype=str(dtype), tied_output_keys=sorted(redundant),
-                  input_key=input_key, shards=[], parameters=0, bytes_loaded=0, bytes_skipped=0, cast=0)
+    report = dict(backend='safetensors-validated-readinto', staging='cpu-contiguous-chunk', device=str(device), dtype=str(dtype),
+                  staging_chunk_bytes=PREAD_CHUNK_BYTES, staging_peak_bytes=0, staging_chunks=0,
+                  tied_output_keys=sorted(redundant), input_key=input_key,
+                  shards=[], parameters=0, bytes_loaded=0, bytes_skipped=0, cast=0)
     for entry in plan:
         wanted = [k for k in entry['keys'] if k not in redundant]
         skipped = [k for k in entry['keys'] if k in redundant]
@@ -397,15 +454,17 @@ def load_qwen3_pread(model_dir, dtype, device):
         report['bytes_skipped'] += record['bytes_skipped']
         if not wanted:
             continue  # the whole shard is redundant (Qwen3-1.7B shard 2 = lm_head.weight only): never read
-        with safe_open(model_dir / entry['file'], framework='pt', device='cpu', backend='pread') as f:
+        with open(model_dir / entry['file'], 'rb', buffering=0) as source:
             for key in wanted:  # redundant keys of a mixed shard are simply never fetched
                 module_name, _, attr = key.rpartition('.')
                 module = model.get_submodule(module_name)
                 target = getattr(module, attr)
-                staged = f.get_tensor(key)  # one tensor on CPU via pread(2)
-                report['cast'] += int(staged.dtype != target.dtype)
-                tensor = staged.to(device=device, dtype=target.dtype)  # PyTorch-allocated device copy (cap-accounted)
-                del staged  # the CPU staging copy is released before the next tensor is read
+                source_dtype = _PREAD_DTYPES[entry['dtypes'][key]]
+                report['cast'] += int(source_dtype != target.dtype)
+                tensor = torch.empty(target.shape, device=device, dtype=target.dtype)
+                chunks, peak_bytes = _copy_pread_tensor(source, entry['offsets'][key], tensor, source_dtype, PREAD_CHUNK_BYTES)
+                report['staging_chunks'] += chunks
+                report['staging_peak_bytes'] = max(report['staging_peak_bytes'], peak_bytes)
                 module.load_state_dict({attr: tensor}, strict=False, assign=True)
                 report['parameters'] += 1
                 report['bytes_loaded'] += entry['bytes'][key]

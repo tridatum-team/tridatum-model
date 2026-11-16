@@ -670,7 +670,10 @@ class PreadLoaderTests(unittest.TestCase):
             self.assertEqual(ours[key].dtype, dtype, key)
             self.assertEqual(ours[key].device.type, 'cpu', key)
             self.assertTrue(torch.equal(ours[key], theirs[key]), key)
-        self.assertIs(model.lm_head.weight, model.model.embed_tokens.weight)  # tied storage, one unique tensor
+        if canonical.config.tie_word_embeddings:
+            self.assertIs(model.lm_head.weight, model.model.embed_tokens.weight)
+        else:
+            self.assertIsNot(model.lm_head.weight, model.model.embed_tokens.weight)
         self.assertEqual(sum(1 for _ in model.parameters()), sum(1 for _ in canonical.parameters()))
         buffers = dict(model.named_buffers())
         self.assertEqual(set(buffers), set(dict(canonical.named_buffers())))
@@ -693,27 +696,177 @@ class PreadLoaderTests(unittest.TestCase):
                 model, report = trainer.load_qwen3_pread(self.model_dir, dtype, 'cpu')
                 self.assert_equivalent(model, self.canonical(self.model_dir, dtype), dtype)
                 unique = len(model.state_dict()) - 1
-                self.assertEqual((report['backend'], report['staging'], report['tied_output_keys'], report['input_key']),
-                                 ('pread', 'cpu-per-tensor', ['lm_head.weight'], 'model.embed_tokens.weight'))
+                self.assertEqual(report['tied_output_keys'], ['lm_head.weight'])
+                self.assertEqual(report['input_key'], 'model.embed_tokens.weight')
                 self.assertEqual(report['parameters'], unique)
                 self.assertEqual(report['cast'], 0 if dtype == torch.bfloat16 else unique)
                 self.assertEqual([s['file'] for s in report['shards']], ['model.safetensors'])
                 self.assertGreater(report['bytes_loaded'], 0)
 
+    class ObservedRead:
+        """Observe real unbuffered file reads and their backing allocation, not mocked tensor results."""
+        def __init__(self, source, testcase, budget, short_read=None):
+            self.source, self.testcase, self.budget = source, testcase, budget
+            self.short_read = short_read
+            self.payloads, self.positions, self.buffers = [], [], []
+
+        def seek(self, offset):
+            return self.source.seek(offset)
+
+        def readinto(self, view):
+            self.testcase.assertLessEqual(len(view), self.budget)
+            self.testcase.assertLessEqual(len(view.obj), self.budget)
+            self.buffers.append(id(view.obj))
+            self.positions.append(self.source.tell())
+            read = self.source.readinto(view if self.short_read is None else view[:self.short_read])
+            self.payloads.append(read)
+            return read
+
+    @staticmethod
+    def file_offsets(source):
+        source.seek(0)
+        size = int.from_bytes(source.read(8), 'little')
+        header = json.loads(source.read(size))
+        return {key: 8 + size + item['data_offsets'][0]
+                for key, item in header.items() if key != '__metadata__'}
+
+    def test_real_reads_cover_scalars_empty_tensors_and_wide_rows(self):
+        from safetensors.torch import save_file
+        shapes = [(), (0,), (2, 0, 5), (15,), (16,), (17,), (2, 3, 19), (2, 5, 7), (3, 4, 4)]
+        for source_dtype in (torch.bfloat16, torch.float16, torch.float32):
+            with self.subTest(source_dtype=source_dtype):
+                tensors = {}
+                for index, shape in enumerate(shapes):
+                    size = torch.Size(shape).numel()
+                    tensors[str(index)] = (torch.arange(size) % 127 - 63).to(source_dtype).reshape(shape)
+                path = self.base / f'chunks-{source_dtype}.safetensors'
+                save_file(tensors, path)
+                with open(path, 'rb', buffering=0) as f:
+                    offsets = self.file_offsets(f)
+                    for key, expected in tensors.items():
+                        for dtype in (torch.bfloat16, torch.float32):
+                            with self.subTest(shape=tuple(expected.shape), dtype=dtype):
+                                source = self.ObservedRead(f, self, 33)  # also check non-element-aligned budgets
+                                destination = torch.empty(expected.shape, dtype=dtype)
+                                allocation = destination.data_ptr()
+                                chunks, peak = trainer._copy_pread_tensor(source, offsets[key], destination, source_dtype, 33)
+                                self.assertTrue(torch.equal(destination, expected.to(dtype)))
+                                self.assertEqual(destination.data_ptr(), allocation)
+                                self.assertEqual(chunks, len(source.payloads))
+                                source_peak = max(source.payloads, default=0)
+                                cast_peak = source_peak // source_dtype.itemsize * dtype.itemsize if dtype != source_dtype else 0
+                                self.assertEqual(peak, source_peak + cast_peak)
+                                self.assertLessEqual(peak, 33)
+                                self.assertEqual(sum(source.payloads), expected.numel() * expected.element_size())
+                                self.assertLessEqual(len(set(source.buffers)), 1)
+                                cursor = offsets[key]
+                                for position, size in zip(source.positions, source.payloads):
+                                    self.assertEqual(position, cursor)
+                                    cursor += size
+
+    def test_default_budget_splits_a_real_tensor_at_32_mib(self):
+        from safetensors.torch import load_file
+        from safetensors.torch import save_file
+        budget = 32 * 1024 * 1024
+        self.assertEqual(trainer.PREAD_CHUNK_BYTES, budget)
+        expected = torch.zeros(budget // 2 + 1, dtype=torch.bfloat16)
+        expected[0], expected[-2], expected[-1] = 1.5, -2.25, 3.5
+        path = self.base / 'budget-boundary.safetensors'
+        save_file({'weight': expected}, path)
+        with open(path, 'rb', buffering=0) as f:
+            offset = self.file_offsets(f)['weight']
+            source = self.ObservedRead(f, self, budget)
+            destination = torch.empty_like(expected)
+            chunks, peak = trainer._copy_pread_tensor(source, offset, destination, expected.dtype, trainer.PREAD_CHUNK_BYTES)
+        self.assertTrue(torch.equal(destination, expected))
+        self.assertEqual(source.payloads, [budget, 2])
+        self.assertEqual((chunks, peak), (2, budget))
+        self.assertEqual(len(set(source.buffers)), 1)
+        self.assertTrue(torch.equal(destination, load_file(path)['weight']))
+
+    def test_bf16_bits_survive_short_reads_and_chunk_reuse(self):
+        from safetensors.torch import save_file
+        bits = torch.arange(65536, dtype=torch.int32).to(torch.int16)
+        expected = bits.view(torch.bfloat16)
+        path = self.base / 'bf16-bits.safetensors'
+        save_file({'weight': expected}, path)
+        with open(path, 'rb', buffering=0) as f:
+            offset = self.file_offsets(f)['weight']
+            source = self.ObservedRead(f, self, 1024, short_read=257)
+            destination = torch.empty_like(expected)
+            chunks, peak = trainer._copy_pread_tensor(source, offset, destination, expected.dtype, 1024)
+        self.assertTrue(torch.equal(destination.view(torch.int16), bits))  # includes every NaN and signed zero bit pattern
+        self.assertEqual((chunks, peak), (128, 1024))
+        self.assertEqual(sum(source.payloads), expected.numel() * 2)
+        self.assertEqual(len(set(source.buffers)), 1)
+
+    def test_truncation_during_payload_read_raises(self):
+        from safetensors.torch import save_file
+        path = self.base / 'truncated-payload.safetensors'
+        expected = torch.arange(33, dtype=torch.bfloat16)
+        save_file({'weight': expected}, path)
+        with open(path, 'r+b', buffering=0) as f:
+            offset = self.file_offsets(f)['weight']
+            f.truncate(offset + expected.numel() * expected.element_size() - 1)
+            with self.assertRaises(EOFError):
+                trainer._copy_pread_tensor(f, offset, torch.empty_like(expected), expected.dtype, 32)
+
+    def test_chunked_tied_and_untied_models_equal_canonical_outputs(self):
+        tensors = self.unique_tensors()
+        head = tensors['model.embed_tokens.weight'].mul(-0.5)
+        untied = self.sharded_copy('untied-chunks', tensors, {'lm_head.weight': head})
+        config_path = untied / 'config.json'
+        config = json.loads(config_path.read_text())
+        config['tie_word_embeddings'] = False
+        config_path.write_text(json.dumps(config))
+        copy_tensor = trainer._copy_pread_tensor
+        for folder in (self.model_dir, untied):
+            for dtype in (torch.bfloat16, torch.float32):
+                with self.subTest(folder=folder.name, dtype=dtype):
+                    reads, staging_peaks = [], []
+
+                    def observed_copy(source, offset, tensor, source_dtype, budget):
+                        observed = self.ObservedRead(source, self, budget)
+                        result = copy_tensor(observed, offset, tensor, source_dtype, budget)
+                        reads.extend(observed.payloads)
+                        staging_peaks.append(result[1])
+                        return result
+
+                    # Smaller than a model row: exercise flat chunk boundaries inside rows of every large weight.
+                    with unittest.mock.patch.object(trainer, 'PREAD_CHUNK_BYTES', 42), \
+                            unittest.mock.patch.object(trainer, '_copy_pread_tensor', side_effect=observed_copy):
+                        model, report = trainer.load_qwen3_pread(folder, dtype, 'cpu')
+                    self.assert_equivalent(model, self.canonical(folder, dtype), dtype, name_or_path=folder)
+                    self.assertGreater(len(reads), report['parameters'])
+                    self.assertEqual(report['staging_chunks'], len(reads))
+                    self.assertEqual(report['staging_peak_bytes'], max(staging_peaks))
+                    self.assertLessEqual(report['staging_peak_bytes'], 42)
+                    self.assertEqual(report['staging_chunk_bytes'], 42)
+                    self.assertEqual(report['bytes_loaded'], sum(reads))
+                    if folder == untied:
+                        self.assertEqual(report['tied_output_keys'], [])
+                        self.assertTrue(torch.equal(model.lm_head.weight, head.to(dtype)))
+                        self.assertFalse(torch.equal(model.lm_head.weight, model.model.embed_tokens.weight))
+
     def test_tied_lm_head_shard_is_shape_checked_but_never_read(self):
         tensors = self.unique_tensors()
         self.assertNotIn('lm_head.weight', tensors)
         embed = tensors['model.embed_tokens.weight']
-        garbage = torch.full_like(embed, 3.0)  # would change every logit if the loader used it
-        folder = self.sharded_copy('tied-head', tensors, {'lm_head.weight': garbage})
-        model, report = trainer.load_qwen3_pread(folder, torch.bfloat16, 'cpu')
-        self.assert_equivalent(model, self.canonical(self.model_dir, torch.bfloat16), torch.bfloat16, name_or_path=folder)
-        second = report['shards'][1]
-        self.assertEqual((second['file'], second['loaded'], second['skipped_tied']),
-                         ('model-00002-of-00002.safetensors', 0, ['lm_head.weight']))
-        self.assertEqual(second['bytes_skipped'], embed.numel() * 2)
-        self.assertEqual(report['bytes_skipped'], embed.numel() * 2)
-        self.assertEqual(report['parameters'], len(tensors))
+        canonical = self.canonical(self.model_dir, torch.bfloat16)
+        for dtype in (torch.bfloat16, torch.float64, torch.int64):
+            with self.subTest(dtype=dtype):
+                garbage = torch.full(embed.shape, 3, dtype=dtype)  # would change logits if used, even after casting
+                folder = self.sharded_copy(f'tied-head-{dtype}', tensors, {'lm_head.weight': garbage})
+                model, report = trainer.load_qwen3_pread(folder, torch.bfloat16, 'cpu')
+                self.assert_equivalent(model, canonical, torch.bfloat16, name_or_path=folder)
+                second = report['shards'][1]
+                self.assertEqual((second['file'], second['loaded'], second['skipped_tied']),
+                                 ('model-00002-of-00002.safetensors', 0, ['lm_head.weight']))
+                self.assertEqual(second['bytes_loaded'], 0)
+                self.assertEqual(second['bytes_skipped'], garbage.numel() * garbage.element_size())
+                self.assertEqual(report['bytes_skipped'], garbage.numel() * garbage.element_size())
+                self.assertEqual(report['parameters'], len(tensors))
+                self.assertEqual(report['bytes_loaded'], sum(value.numel() * value.element_size() for value in tensors.values()))
 
     def test_missing_unexpected_or_misshaped_weights_are_refused_before_loading(self):
         tensors = self.unique_tensors()
@@ -723,12 +876,42 @@ class PreadLoaderTests(unittest.TestCase):
             'unexpected': (dict(tensors, **{'model.extra.weight': torch.ones(2)}), None, 'unexpected key model.extra.weight'),
             'misshaped': (dict(tensors, **{'model.norm.weight': torch.ones(3, dtype=torch.bfloat16)}), None, 'model.norm.weight: checkpoint shape \\[3\\]'),
             'misshaped-tied-head': (tensors, {'lm_head.weight': embed[:, :8].clone()}, 'lm_head.weight: checkpoint shape'),
+            'duplicate': (tensors, {'model.norm.weight': tensors['model.norm.weight']}, 'model.norm.weight appears in'),
+            'unsupported-dtype': (dict(tensors, **{'model.norm.weight': tensors['model.norm.weight'].to(torch.int64)}),
+                                  None, 'model.norm.weight: unsupported checkpoint dtype I64'),
         }
         for name, (shard1, shard2, message) in cases.items():
             with self.subTest(name):
                 folder = self.sharded_copy(name, shard1, shard2)
-                with self.assertRaisesRegex(ValueError, message):
-                    trainer.load_qwen3_pread(folder, torch.bfloat16, 'cpu')
+                with unittest.mock.patch.object(trainer, '_copy_pread_tensor', wraps=trainer._copy_pread_tensor) as copy:
+                    with self.assertRaisesRegex(ValueError, message):
+                        trainer.load_qwen3_pread(folder, torch.bfloat16, 'cpu')
+                    copy.assert_not_called()
+
+    def test_malformed_safetensors_metadata_is_refused_before_copy(self):
+        from safetensors import SafetensorError
+        for defect in ('offset', 'negative-shape', 'truncated'):
+            with self.subTest(defect=defect):
+                folder = self.sharded_copy(f'malformed-{defect}', self.unique_tensors())
+                shard = folder / 'model-00001-of-00002.safetensors'
+                data = shard.read_bytes()
+                header_size = int.from_bytes(data[:8], 'little')
+                header = json.loads(data[8:8 + header_size])
+                if defect == 'truncated':
+                    shard.write_bytes(data[:-1])
+                else:
+                    metadata = header['model.norm.weight']
+                    if defect == 'offset':
+                        metadata['data_offsets'][1] = len(data) * 2
+                    else:
+                        metadata['shape'] = [-1]
+                    encoded = json.dumps(header).encode()
+                    encoded += b' ' * (-len(encoded) % 8)
+                    shard.write_bytes(len(encoded).to_bytes(8, 'little') + encoded + data[8 + header_size:])
+                with unittest.mock.patch.object(trainer, '_copy_pread_tensor', wraps=trainer._copy_pread_tensor) as copy:
+                    with self.assertRaises(SafetensorError):
+                        trainer.load_qwen3_pread(folder, torch.bfloat16, 'cpu')
+                    copy.assert_not_called()
 
 
 class Q8GgufBaseTests(unittest.TestCase):
