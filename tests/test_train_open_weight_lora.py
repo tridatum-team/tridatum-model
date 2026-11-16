@@ -703,6 +703,30 @@ class PreadLoaderTests(unittest.TestCase):
                 self.assertEqual([s['file'] for s in report['shards']], ['model.safetensors'])
                 self.assertGreater(report['bytes_loaded'], 0)
 
+    @unittest.skipUnless(sys.platform == 'darwin', 'Darwin per-descriptor uncached reads')
+    def test_uncached_setup_failure_propagates_and_closes_unread_payload(self):
+        import errno
+        import fcntl
+        import os
+
+        failure = OSError(errno.EIO, 'uncached payload setup failed')
+        descriptors, positions = [], []
+
+        def fail_setup(fd, command, argument):
+            descriptors.append(fd)
+            positions.append(os.lseek(fd, 0, os.SEEK_CUR))
+            raise failure
+
+        with unittest.mock.patch.object(fcntl, 'fcntl', side_effect=fail_setup):
+            with self.assertRaises(OSError) as raised:
+                trainer.load_qwen3_pread(self.model_dir, torch.bfloat16, 'cpu')
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(positions, [0])
+        for fd in descriptors:
+            with self.assertRaises(OSError) as closed:
+                os.fstat(fd)
+            self.assertEqual(closed.exception.errno, errno.EBADF)
+
     class ObservedRead:
         """Observe real unbuffered file reads and their backing allocation, not mocked tensor results."""
         def __init__(self, source, testcase, budget, short_read=None):

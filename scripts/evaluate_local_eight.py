@@ -88,8 +88,11 @@ def object_sha(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
-def digest(path):
+def digest(path, *, uncached=False):
     with Path(path).open('rb') as stream:
+        if uncached and sys.platform == 'darwin':
+            import fcntl
+            fcntl.fcntl(stream.fileno(), fcntl.F_NOCACHE, 1)
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
@@ -97,11 +100,12 @@ def load_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
-def pin(path):
+def pin(path, *, uncached=False):
     path = Path(path)
     require(path.is_file() and not path.is_symlink() and path.stat().st_nlink == 1,
             'Expected an ordinary, unshared local file: ' + str(path))
-    return dict(path=str(path.resolve()), bytes=path.stat().st_size, sha256=digest(path))
+    return dict(path=str(path.resolve()), bytes=path.stat().st_size,
+                sha256=digest(path, uncached=uncached))
 
 
 def save_new(path, value):
@@ -389,7 +393,7 @@ def model_identity(directory, metadata_path):
             'Model directory must contain exactly the eleven official pinned files')
     files = {}
     for name, entry in expected.items():
-        actual = pin(directory / name)
+        actual = pin(directory / name, uncached=name.endswith('.safetensors'))
         require(actual['bytes'] == entry['bytes'] and actual['sha256'] == entry['sha256'],
                 'Model file body authentication failed: ' + name)
         files[name] = actual

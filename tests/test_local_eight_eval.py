@@ -6,6 +6,7 @@ adapter state and fail-stop behavior, not to claim model inference correctness.
 """
 import contextlib
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -44,6 +45,26 @@ class LocalInputContracts(unittest.TestCase):
         self.assertEqual(identity['sha256'], E.digest(path))
         with self.assertRaisesRegex(ValueError, 'hash differs'):
             E.public_inputs(path, '0' * 64)
+
+    def test_uncached_pin_preserves_complete_body_identity(self):
+        path = self.root / 'body.safetensors'
+        body = bytes(range(256)) * 4096 + b'final bytes'
+        path.write_bytes(body)
+        expected = dict(path=str(path.resolve()), bytes=len(body),
+                        sha256=hashlib.sha256(body).hexdigest())
+        self.assertEqual(E.pin(path), expected)
+        self.assertEqual(E.pin(path, uncached=True), expected)
+        path.write_bytes(body[:-1] + b'!')
+        changed = E.pin(path, uncached=True)
+        self.assertEqual(changed['bytes'], expected['bytes'])
+        self.assertEqual(changed['sha256'], hashlib.sha256(body[:-1] + b'!').hexdigest())
+        self.assertNotEqual(changed['sha256'], expected['sha256'])
+
+    def test_uncached_pin_on_non_darwin_needs_no_fcntl(self):
+        path = self.write_inputs([public_row()])
+        expected = E.pin(path)
+        with patch.object(E.sys, 'platform', 'linux'), patch.dict(sys.modules, {'fcntl': None}):
+            self.assertEqual(E.pin(path, uncached=True), expected)
 
     def test_references_and_malformed_messages_are_rejected(self):
         variants = []
@@ -118,6 +139,17 @@ class LocalInputContracts(unittest.TestCase):
             identity = E.model_identity(model, manifest)
             self.assertEqual(len(identity['files']), 11)
             self.assertTrue(identity['body_hashes_authenticated'])
+            for entry in metadata['files']:
+                self.assertEqual(identity['files'][entry['path']]['sha256'], entry['sha256'])
+            if sys.platform == 'darwin':
+                import fcntl
+                failure = OSError('synthetic F_NOCACHE setup failure')
+                with patch.object(fcntl, 'fcntl', side_effect=failure):
+                    # Ordinary pins, even of weights, keep their default behavior.
+                    self.assertEqual(E.pin(model / shards[0]), identity['files'][shards[0]])
+                    with self.assertRaises(OSError) as caught:
+                        E.model_identity(model, manifest)
+                    self.assertIs(caught.exception, failure)
             (model / shards[0]).write_bytes(b'tampered pinned bytes!')
             with self.assertRaisesRegex(ValueError, 'body authentication failed'):
                 E.model_identity(model, manifest)

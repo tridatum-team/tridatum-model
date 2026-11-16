@@ -455,6 +455,9 @@ def load_qwen3_pread(model_dir, dtype, device):
         if not wanted:
             continue  # the whole shard is redundant (Qwen3-1.7B shard 2 = lm_head.weight only): never read
         with open(model_dir / entry['file'], 'rb', buffering=0) as source:
+            if sys.platform == 'darwin':
+                import fcntl
+                fcntl.fcntl(source.fileno(), fcntl.F_NOCACHE, 1)
             for key in wanted:  # redundant keys of a mixed shard are simply never fetched
                 module_name, _, attr = key.rpartition('.')
                 module = model.get_submodule(module_name)
