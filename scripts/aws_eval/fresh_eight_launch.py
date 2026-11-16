@@ -91,6 +91,7 @@ else:
 
 require = lifecycle.require
 SCHEMA = 'trid-fresh-eight-prerequisites-v2'
+EVALUATION_SCHEMA = 'trid-cuda-evaluation-prerequisites-v1'
 HELPERS = {'scripts/aws_eval/fresh_eight_launch.py', 'scripts/aws_eval/grounded_hf_lifecycle.py'}
 ROLE_KEYS = ('instance_role', 'scheduler_role')
 
@@ -150,11 +151,33 @@ def verify_tags(rows, identity):
             'Exact fresh resource tags differ')
 
 
-def validate_registration(reg, root):
+def evaluation_registration(reg):
+    return reg.get('schema') == EVALUATION_SCHEMA
+
+
+def validate_lineage(root, pin):
+    """Only the controller opens the original full recovery evidence closure."""
+    import sys
+    scripts = str(Path(__file__).resolve().parents[1])
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import local_eight_candidate
+    lineage = bound_json(root, pin)
+    candidate = lineage['candidate']
+    actual = local_eight_candidate.cuda_evaluation_lineage(
+        Path(root), safe_path(root, candidate['path']), candidate['sha256'])
+    require(lineage == actual, 'Staged CUDA evaluation lineage differs from authenticated final150')
+
+
+def validate_registration(reg, root, *, active=True):
     fields = {'schema', 'approved', 'automatic_retry', 'identity', 'controller_arn', 'authorization',
               'resource_envelope', 'aggregate_ledger', 'sources', 'iam', 'network', 'bucket_lifecycle_before',
               'retention_days', 'lifecycle_rule_ids', 'bundle'}
-    require(set(reg) == fields and reg['schema'] == SCHEMA and reg['approved'] is True
+    evaluation = evaluation_registration(reg)
+    require(active or evaluation, 'Historical prerequisite admission is CUDA-evaluation-only')
+    if evaluation:
+        fields = (fields - {'aggregate_ledger'}) | {'lineage_binding'}
+    require(set(reg) == fields and reg['schema'] in (SCHEMA, EVALUATION_SCHEMA) and reg['approved'] is True
             and reg['automatic_retry'] is False, 'Exact parent prerequisite registration required')
     ident = reg['identity']
     run = ident['run_id']
@@ -179,10 +202,16 @@ def validate_registration(reg, root):
     require(set(reg['network']) == {'vpc_id', 'subnet_id', 'availability_zone', 'security_group_name',
                                     'security_group_description'}, 'Exact parent network required')
     pin_bytes(root, reg['authorization'])
-    pin_bytes(root, reg['aggregate_ledger'])
+    if evaluation:
+        pin_bytes(root, reg['lineage_binding'])
+        if active:
+            validate_lineage(root, reg['lineage_binding'])
+    else:
+        pin_bytes(root, reg['aggregate_ledger'])
     envelope = bound_json(root, reg['resource_envelope'])
     pin_bytes(root, envelope['cost_evidence'])
-    lifecycle.validate_fresh_resources(root, dict(reg, instance_type='g6e.2xlarge'))
+    validator = lifecycle.validate_evaluation_resources if evaluation else lifecycle.validate_fresh_resources
+    validator(root, dict(reg, instance_type='g6e.2xlarge'))
     require(envelope['billing_hard_cap'] is False, 'Resource budget is conditional, not a billing hard cap')
     require(reg['retention_days'] == envelope['s3_expiration_days']
             and envelope['multipart_abort_days'] == 1, 'Envelope retention differs')
@@ -192,7 +221,7 @@ def validate_registration(reg, root):
         pin_bytes(root, pin)
     for name, executing in (('scripts/aws_eval/fresh_eight_launch.py', __file__),
                             ('scripts/aws_eval/grounded_hf_lifecycle.py', lifecycle.__file__)):
-        require(lifecycle.digest(Path(executing)) == source_pins[name]['sha256'],
+        require(not active or lifecycle.digest(Path(executing)) == source_pins[name]['sha256'],
                 'Executing helper differs from parent source seal: ' + name)
     require(set(reg['iam']) == set(ROLE_KEYS), 'Only two fresh roles allowed')
     for key in ROLE_KEYS:
@@ -200,7 +229,7 @@ def validate_registration(reg, root):
         require(set(policy) == {'arn', 'trust', 'inline'} and policy['arn'] ==
                 f"arn:aws:iam::{ident['account']}:role/{ident[key]}" and policy['inline'], 'Exact fresh role ARN/policies required')
         require(all(re.fullmatch(r'[\w+=,.@-]{1,128}', n) for n in policy['inline']), 'Invalid inline policy name')
-    shell = dict(schema=lifecycle.FRESH_SCHEMA, identity=ident, iam=reg['iam'])
+    shell = dict(schema=lifecycle.EVALUATION_SCHEMA if evaluation else lifecycle.FRESH_SCHEMA, identity=ident, iam=reg['iam'])
     lifecycle.validate_worker_policy(shell)
     lifecycle.verify_scheduler_trust(reg['iam']['scheduler_role'], ident)
     require(reg['iam']['instance_role']['trust'] == {'Version': '2012-10-17', 'Statement': [
@@ -214,6 +243,14 @@ def validate_registration(reg, root):
     require(set(reg['bundle']) == {'local_path', 'files'}, 'Explicit bundle files only')
     safe_path(root, reg['bundle']['local_path'])
     lifecycle.pins(reg['bundle']['files'], 256 * 1024**2)
+    if evaluation:
+        files = {row['path']: row for row in reg['bundle']['files']}
+        require(all(files.get(reg[key]['path']) == reg[key]
+                    for key in ('authorization', 'resource_envelope', 'lineage_binding'))
+                and all(files.get(name) == pin for name, pin in source_pins.items()),
+                'CUDA evaluation bundle must bind authorization, lineage and current source closure')
+        require(not any(name.endswith(('.tar', '.tar.gz', '.zip')) for name in files),
+                'Historical recovery archives must not be uploaded')
     return reg
 
 
@@ -262,7 +299,8 @@ def prepare_bundle(reg, root, state):
     bundle = dict(reg['bundle'], bytes=target.stat().st_size, sha256=lifecycle.digest(target),
                   unpacked_bytes=sum(p['bytes'] for p in files.values()))
     envelope = bound_json(root, reg['resource_envelope'])
-    require(bundle['bytes'] <= envelope['bundle_bytes_max'] <= 32 * 1024**2, 'Bundle too large')
+    cap = 128 * 1024**2 if evaluation_registration(reg) else 32 * 1024**2
+    require(bundle['bytes'] <= envelope['bundle_bytes_max'] <= cap, 'Bundle too large')
     lifecycle.authenticate_archive(target, bundle)
     return record(Path(state) / 'bundle-prepared.json', bundle)
 
@@ -474,12 +512,21 @@ def prepare_prerequisites(reg, registration_sha, state, client):
         registration_sha256=registration_sha, identity=identity, resources=observed))
 
 
-def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha):
-    require(lifecycle.fresh_mode(plan) and plan['identity'] == reg['identity'] and plan['iam'] == reg['iam']
+def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha, *, active=True):
+    evaluation = evaluation_registration(reg)
+    require(active or evaluation, 'Historical final-plan admission is CUDA-evaluation-only')
+    require((lifecycle.evaluation_mode(plan) if evaluation else lifecycle.fresh_mode(plan))
+            and plan['identity'] == reg['identity'] and plan['iam'] == reg['iam']
             and plan['controller_arn'] == reg['controller_arn'] and plan['authorization'] == reg['authorization']
-            and plan['resource_envelope'] == reg['resource_envelope']
-            and plan['aggregate_ledger'] == reg['aggregate_ledger'],
+            and plan['resource_envelope'] == reg['resource_envelope'],
             'Final plan not bound to parent registration')
+    if evaluation:
+        require(plan['workload']['lineage_binding'] == reg['lineage_binding'],
+                'Final CUDA lineage differs from parent registration')
+        if active:
+            validate_lineage(root, reg['lineage_binding'])
+    else:
+        require(plan['aggregate_ledger'] == reg['aggregate_ledger'], 'Final aggregate ledger differs')
     envelope = bound_json(root, reg['resource_envelope'])
     require(plan['bundle']['bytes'] <= envelope['bundle_bytes_max']
             and plan['limits']['output_bytes'] <= envelope['output_archive_bytes_max']
@@ -502,8 +549,10 @@ def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha)
             and plan['cost']['retention_days'] == reg['retention_days'], 'Final resource observations differ')
     for key in ROLE_KEYS:
         require(resources[key]['inventory'] == plan['iam'][key], 'Final IAM observations differ')
-    result = lifecycle.validate_plan(plan, approval, plan_sha)
-    lifecycle.authenticate_archive(safe_path(root, plan['bundle']['local_path']), plan['bundle'])
+    result = lifecycle.validate_plan(plan, approval, plan_sha,
+                                    now=None if active else lifecycle.timestamp(plan['checked_at']))
+    if active:
+        lifecycle.authenticate_archive(safe_path(root, plan['bundle']['local_path']), plan['bundle'])
     for name, sha in plan['sources'].items():
         path = safe_path(root, name)
         require(path.is_file() and lifecycle.digest(path) == sha, 'Final source pin differs: ' + name)
@@ -831,7 +880,9 @@ def main():
             record(binding_path, binding)
         plan = lifecycle.read_bound(args.plan, args.plan_sha256) if args.plan else None
         if plan is not None:
-            require(plan['identity'] == reg['identity'] and lifecycle.fresh_mode(plan), 'Wrong final plan identity')
+            require(plan['identity'] == reg['identity']
+                    and (lifecycle.evaluation_mode(plan) if evaluation_registration(reg) else lifecycle.fresh_mode(plan)),
+                    'Wrong final plan identity')
         needs_final = args.action in ('validate', 'stage', 'launch')
         if needs_final:
             require(plan is not None and args.approval and args.approval_sha256, 'Parent-bound plan and approval required')
@@ -857,7 +908,7 @@ def main():
         else:
             result = owned_prerequisite_cleanup(reg, args.registration_sha256, args.state, client, plan, args.plan_sha256)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        if result.get('cleanup_state') == 'unresolved' or (args.action == 'launch' and not result.get('training_success')):
+        if result.get('cleanup_state') == 'unresolved' or (args.action == 'launch' and not result.get(lifecycle.success_field(plan))):
             raise SystemExit(1)
     finally:
         os.close(descriptor)

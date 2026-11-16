@@ -2,9 +2,11 @@
 import copy
 import hashlib
 import json
+import tarfile
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts import assess_expanded_experiment as assessment
 from scripts.evaluate_local_eight import mois_schema
@@ -730,6 +732,302 @@ class ExpandedAssessmentTests(unittest.TestCase):
                 reports = self.fixture.reports(packet_path)
                 with self.assertRaises(ValueError):
                     self.fixture.freeze(packet_path, reports)
+
+
+class CudaEvaluationAssessmentTests(unittest.TestCase):
+    """The CUDA admission seam feeds exactly the existing anonymous200 pipeline."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.fixture = SyntheticExperiment(self.root)
+        self.directory = self.root / 'run/cloud-state/cuda-evaluation-export/evaluation'
+        self.directory.parent.mkdir(parents=True)
+        self.fixture.primary.rename(self.directory)
+        self.fixture.primary = self.directory
+        self.registration = dump(self.root / 'candidate.json', {'synthetic_original_final150': True})
+        self.protocol = dict(instructions='Judge the synthetic whole pairs independently.',
+            paired_consistency=True, critical_errors_are_codes=True,
+            critical_error_codes={'wrong_actor': 'Wrong actor.'})
+        protocol_path = dump(self.root / 'protocol.json', self.protocol)
+        manifest = load(self.directory / 'run-manifest.json')
+        manifest.update(schema='trid-cuda-eight-paired-v1', arm_order=['base', 'candidate'])
+        manifest['adapter']['step'] = 150
+        manifest['runtime']['device'] = 'cuda'
+        manifest['generation'] = dict(GENERATION, backend='transformers-cuda')
+        self.contract = dict(arms=['base', 'candidate'], adapter_sha256=ADAPTER_SHA,
+            adapter=manifest['adapter'], registration=file_pin(self.registration),
+            training_runtime='cuda', inference_runtime='mps',
+            producer='trid-fresh-eight-cuda-training-candidate-v2',
+            review_protocol=file_pin(protocol_path),
+            policy_document=dict(data=dict(frozen_dataset=file_pin(self.fixture.frozen_path)),
+                                 evaluation=dict(development_gate={'synthetic': 'six unchanged gates'})))
+        manifest['evaluation_contract'] = assessment.public_contract(self.contract)
+        dump(self.directory / 'run-manifest.json', manifest)
+        loaded = load(self.directory / 'loaded-runtime.json')
+        loaded['parameter_dtypes'] = ['torch.bfloat16', 'torch.float32']
+        loaded['parameter_inventory'] = {
+            group: {dtype + '@cuda:0': dict(tensors=1, elements=1, bytes=size)}
+            for group, dtype, size in [('base', 'torch.bfloat16', 2), ('adapter', 'torch.float32', 4)]}
+        dump(self.directory / 'loaded-runtime.json', loaded)
+        for old, arm in zip(ARMS, self.contract['arms']):
+            rows = self.fixture.rows(self.directory, old)
+            for row in rows:
+                row.update(arm=arm, generation=manifest['generation'],
+                    run_manifest_sha256=sha(self.directory / 'run-manifest.json'),
+                    loaded_runtime_sha256=sha(self.directory / 'loaded-runtime.json'),
+                    candidate_manifest_sha256=sha(self.registration))
+            self.fixture.write_rows(self.directory, arm, rows, refresh=False)
+        (self.directory / 'step-000024-outputs.jsonl').unlink()
+        self.refresh_completion()
+        for target, value in (
+            ('resolve_candidate', self.contract), ('review_protocol', self.protocol),
+            ('authenticate_cuda_evaluation', dict(pins={}, public_input=self.fixture.paths['evaluation_inputs'])),
+        ):
+            mocked = patch.object(assessment, target, return_value=value)
+            mocked.start()
+            self.addCleanup(mocked.stop)
+        protocol_patch = patch.object(assessment, 'ANONYMOUS_PROTOCOL_SHA', assessment.object_sha(self.protocol))
+        protocol_patch.start()
+        self.addCleanup(protocol_patch.stop)
+
+    def refresh_completion(self):
+        completion = load(self.directory / 'completion.json')
+        completion.update(run_manifest_sha256=sha(self.directory / 'run-manifest.json'),
+            outputs={arm: file_pin(self.directory / (arm + '-outputs.jsonl'), self.directory)
+                     for arm in ('base', 'candidate')})
+        dump(self.directory / 'completion.json', completion)
+
+    def packet(self, name='cuda-blind'):
+        out = self.root / name
+        assessment.make_packet(self.root, self.fixture.frozen_path, sha(self.fixture.frozen_path),
+            self.directory, out, candidate_manifest=self.registration, candidate_sha=sha(self.registration))
+        return out / 'review-packet.json', out / 'private-mapping.json'
+
+    def test_full_cuda200_uses_same_blind_pairs_and_six_development_gates_without_mps_files(self):
+        with patch('scripts.evaluate_local_eight.model_identity', side_effect=AssertionError('no Mac model read')), \
+             patch('scripts.evaluate_local_eight.accepted_local_supervision', side_effect=AssertionError('no MPS receipt')):
+            packet, mapping = self.packet()
+            rows = load(packet)['rows']
+            self.assertEqual(len(rows), 400)
+            self.assertEqual(len({row['pair_id'] for row in rows}), 200)
+            self.assertTrue(all('arm' not in row for row in rows))
+            frozen = self.fixture.freeze(packet, self.fixture.reports(packet))
+            result = self.fixture.aggregate(frozen, mapping)
+        self.assertEqual((result['primary']['cases'], result['primary']['answers']), (200, 400))
+        self.assertEqual(len(result['development_gate']['checks']), 6)
+        self.assertFalse(result['deployment_qualified'])
+        self.assertIsNone(result['selected_step'])
+        self.assertTrue(result['historical_scores_unchanged'])
+        self.assertEqual(result['evaluation_contract']['inference_runtime'], 'mps')
+
+    def test_cuda_empty_and_length_limited_answers_remain_structural_failures_in_all400(self):
+        rows = self.fixture.rows(self.directory, 'candidate')
+        rows[0]['response_text'] = ' '
+        rows[1].update(termination_reason='length', truncated_output=True)
+        self.fixture.write_rows(self.directory, 'candidate', rows, refresh=False)
+        self.refresh_completion()
+        packet, mapping = self.packet()
+        self.assertEqual(len(load(packet)['rows']), 400)
+        self.assertEqual(sum(not row['structural']['pass'] for row in load(packet)['rows']), 2)
+        frozen = self.fixture.freeze(packet, self.fixture.reports(packet))
+        result = self.fixture.aggregate(frozen, mapping)
+        self.assertEqual(result['primary']['arms']['candidate']['structural_pass'], 198)
+        self.assertEqual(result['primary']['answers'], 400)
+
+    def test_cuda_partial_smoke_mislabeled_or_cross_run_rows_cannot_shrink_denominator(self):
+        original = self.fixture.rows(self.directory, 'candidate')
+        variants = [original[:-1], original + [original[0]],
+                    [dict(original[0], mode='smoke'), *original[1:]],
+                    [dict(original[0], run_manifest_sha256='0' * 64), *original[1:]],
+                    [dict(original[0], candidate_manifest_sha256='0' * 64), *original[1:]],
+                    [dict(original[0], loaded_runtime_sha256='0' * 64), *original[1:]]]
+        for index, rows in enumerate(variants):
+            self.fixture.write_rows(self.directory, 'candidate', rows, refresh=False)
+            self.refresh_completion()
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                self.packet('invalid-' + str(index))
+
+    def test_cuda_output_paths_cannot_claim_remote_absolute_endpoints(self):
+        completion = load(self.directory / 'completion.json')
+        completion['outputs']['base']['path'] = '/opt/trid/output/evaluation/base-outputs.jsonl'
+        dump(self.directory / 'completion.json', completion)
+        with self.assertRaisesRegex(ValueError, 'portable'):
+            self.packet()
+
+    def test_cuda_schema_never_admits_without_original_candidate_or_with_smoke_mode(self):
+        cases = assessment.indexed(self.fixture.inputs, 'synthetic')
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            assessment.completed_run(self.root, self.directory, cases, self.fixture.design, 'unconstrained')
+        manifest = load(self.directory / 'run-manifest.json')
+        manifest['mode'] = 'smoke'
+        dump(self.directory / 'run-manifest.json', manifest)
+        self.refresh_completion()
+        with self.assertRaisesRegex(ValueError, 'identity/mode'):
+            self.packet()
+
+
+class CudaEvaluationEvidenceTests(unittest.TestCase):
+    """Exercise consumer custody/collection checks with synthetic component contracts."""
+
+    def setUp(self):
+        from scripts import local_eight_candidate as C
+        from scripts.aws_eval import fresh_eight_evaluation as E
+        from scripts.aws_eval import fresh_eight_launch as F
+        from scripts.aws_eval import grounded_hf_lifecycle as L
+        self.C, self.E, self.F, self.L = C, E, F, L
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.run = self.root / 'run'
+        self.state = self.run / 'cloud-state'
+        self.exported = self.state / 'cuda-evaluation-export'
+        self.directory = self.exported / 'evaluation'
+        self.directory.mkdir(parents=True)
+        self.sources = self.root / 'staged'
+        self.sources.mkdir()
+        self.code_name = 'scripts/aws_eval/synthetic_evaluation.py'
+        code = dump(self.sources / self.code_name, {'historical_execution': True})
+        self.code = {self.code_name: file_pin(code, self.sources)}
+        candidate_path = dump(self.root / 'original-candidate.json', {'original': 'final150'})
+        self.contract = dict(registration=file_pin(candidate_path), adapter_sha256=ADAPTER_SHA)
+        self.lineage = dict(schema='synthetic-parent-lineage', provenance={'original': 'full-closure'},
+                            adapter_sha256=ADAPTER_SHA)
+        lineage = dump(self.sources / 'lineage-binding.json', self.lineage)
+        source_manifest = dump(self.sources / 'source-manifest.json', dict(files=list(self.code.values())))
+        inputs = dump(self.root / 'public.json', [{'id': 'synthetic', 'messages': []}])
+        self.manifest = dict(code=self.code, evaluation_contract=self.lineage['provenance'],
+                             input=file_pin(inputs), runtime=dict(gpu_uuid='GPU-synthetic', instance_id='i-123'))
+        self.loaded = dict(code=self.code, gpu_uuid='GPU-synthetic')
+        bundle_path = self.run / 'source-bundle.tar'
+        bundle_files = [*self.code.values(), file_pin(lineage, self.sources), file_pin(source_manifest, self.sources)]
+        self.archive(bundle_path, self.sources, bundle_files)
+        bundle = dict(file_pin(bundle_path, self.root), local_path=str(bundle_path.relative_to(self.root)),
+                      files=bundle_files, unpacked_bytes=1024**2)
+        del bundle['path']
+        self.plan = dict(schema=E.SCHEMA, identity=dict(run_id='synthetic-run'),
+            ami=dict(RootDeviceName='/dev/root'), bundle=bundle,
+            sources={self.code_name: self.code[self.code_name]['sha256']},
+            output_allowlist=['plan.json', 'runtime.json', 'lineage-binding.json', 'source-manifest.json'],
+            workload=dict(lineage_binding=file_pin(lineage, self.sources),
+                          source_manifest=file_pin(source_manifest, self.sources)))
+        for path in (self.run / 'plan.json', self.exported / 'plan.json'):
+            dump(path, self.plan)
+        self.plan_sha = sha(self.run / 'plan.json')
+        identity = dict(run_id='synthetic-run', schedule_group='synthetic-group',
+            instance_profile='synthetic-profile', **{key: 'synthetic-' + key for key in F.ROLE_KEYS})
+        registration = dump(self.run / 'registration.json', dict(identity=identity))
+        self.registration_sha = sha(registration)
+        dump(self.run / 'approval.json', {'synthetic': 'approved'})
+        runtime = dict(packages={'synthetic': 'runtime'})
+        dump(self.exported / 'runtime.json', runtime)
+        dump(self.exported / 'lineage-binding.json', self.lineage)
+        dump(self.exported / 'source-manifest.json', load(source_manifest))
+        self.status = dict(run_id='synthetic-run', plan_sha256=self.plan_sha, instance_id='i-123',
+            evaluation_success=True, stop_errors=[], runtime=runtime,
+            runtime_unit=dict(gpu={'synthetic': True}), stages=[dict(gpu={'synthetic': True})])
+        members = [file_pin(self.exported / name, self.exported) for name in self.plan['output_allowlist']]
+        export_manifest = dump(self.exported / 'export-manifest.json',
+            dict(run_id='synthetic-run', plan_sha256=self.plan_sha, status=self.status,
+                 files=members, total_bytes=sum(p['bytes'] for p in members)))
+        self.archive(self.state / 'export.tar', self.exported,
+                     [*members, file_pin(export_manifest, self.exported)])
+        export_pin = file_pin(self.state / 'export.tar')
+        del export_pin['path']
+        completion = dict(self.status, export=export_pin)
+        dump(self.state / 'completion.json', completion)
+        cleanup = dict(cleanup_state='complete', instance_terminated=True, instance_id='i-123',
+            root_volume_ids=['vol-123'], recorded_volume_ids=['vol-123'], absent_volume_ids=['vol-123'],
+            remaining_volumes=[])
+        self.controller = dict(state='complete', evaluation_success=True, instance_id='i-123', cleanup=cleanup,
+            evidence=dict(native_pipeline_success=True, evidence_kind='authenticated_archive',
+                export_state='authenticated_terminal', completion=completion, export_sha256=export_pin['sha256']))
+        dump(self.state / 'controller-result.json', self.controller)
+        dump(self.state / 'volume-identity.json',
+            dict(L.volume_identity(self.plan['identity'], self.plan_sha, '/dev/root'),
+                 instance_id='i-123', root_volume_ids=['vol-123'], volumes={'vol-123': {}}))
+        dump(self.state / 'approval-consumed.json', dict(run_id='synthetic-run', plan_sha256=self.plan_sha))
+        dump(self.state / 'release.json', dict(run_id='synthetic-run', plan_sha256=self.plan_sha,
+                                              instance_id='i-123', gpu={'uuid': 'GPU-synthetic'}))
+        dump(self.state / 'registration-consumed.json',
+             dict(registration_sha256=self.registration_sha, identity=identity))
+        owned = dict(registration_sha256=self.registration_sha, resources={'security_group': {'GroupId': 'sg-123'}})
+        dump(self.state / 'owned-prerequisites.json', owned)
+        dump(self.state / 'owned-cleanup-started.json', owned)
+        dump(self.state / 'owned-cleanup-complete.json', dict(registration_sha256=self.registration_sha,
+            cleanup_state='complete', retained_prefix_lifecycle_rules=True, s3_mutations=0))
+        deletions = {
+            'schedule-group': ('scheduler', 'delete-schedule-group', ['--name', identity['schedule_group']], 'ResourceNotFoundException'),
+            'profile': ('iam', 'delete-instance-profile', ['--instance-profile-name', identity['instance_profile']], 'NoSuchEntity'),
+            'security-group': ('ec2', 'delete-security-group', ['--group-id', 'sg-123'], 'InvalidGroup.NotFound'),
+            **{key: ('iam', 'delete-role', ['--role-name', identity[key]], 'NoSuchEntity') for key in F.ROLE_KEYS}}
+        for name, (service, operation, args, error) in deletions.items():
+            intent = dict(registration_sha256=self.registration_sha, service=service, operation=operation, args=args)
+            dump(self.state / ('cleanup-' + name + '-intent.json'), intent)
+            dump(self.state / ('cleanup-' + name + '-response.json'), dict(request=intent, response={}))
+            dump(self.state / ('cleanup-' + name + '-readback.json'),
+                 dict(request=intent, observation=dict(absent=True, error_code=error)))
+        # Component validators have separate tests; here their synthetic contracts
+        # isolate archive custody and consumer-owned evidence cross-bindings.
+        for module, name, value in (
+            (F, 'validate_registration', None), (F, 'validate_final', None),
+            (E, 'validate_completion', None),
+            (E, 'validate_supervision', dict(unit=self.status['stages'][0])),
+            (L, 'validate_evaluation_terminal', None), (L, 'verify_gpu_observation', None),
+            (L, 'output_limit', 1024**2), (C, 'cuda_evaluation_lineage', self.lineage),
+        ):
+            mocked = patch.object(module, name, return_value=value)
+            mocked.start()
+            self.addCleanup(mocked.stop)
+        source_patch = patch.object(E, 'REQUIRED_SOURCES', {self.code_name})
+        source_patch.start()
+        self.addCleanup(source_patch.stop)
+
+    @staticmethod
+    def archive(path, root, members):
+        with tarfile.open(path, 'w', format=tarfile.USTAR_FORMAT) as stream:
+            for member in members:
+                stream.add(root / member['path'], arcname=member['path'], recursive=False)
+
+    def admit(self):
+        return assessment.authenticate_cuda_evaluation(self.root, self.directory,
+            self.contract, self.manifest, self.loaded)
+
+    def test_archived_source_admission_is_independent_of_later_checkout(self):
+        dump(self.root / self.code_name, {'later_checkout': True})
+        result = self.admit()
+        self.assertEqual(result['public_input'], (self.root / 'public.json').resolve())
+        self.assertGreater(len(result['pins']), 10)
+
+    def test_source_archive_or_original_lineage_tampering_is_rejected(self):
+        with patch.object(self.C, 'cuda_evaluation_lineage', return_value=dict(self.lineage, adapter_sha256='0' * 64)):
+            with self.assertRaisesRegex(ValueError, 'original candidate lineage'):
+                self.admit()
+        path = self.run / 'source-bundle.tar'
+        path.write_bytes(path.read_bytes() + b'tampered')
+        with self.assertRaises(ValueError):
+            self.admit()
+
+    def test_partial_export_incomplete_cleanup_and_foreign_deletion_are_rejected(self):
+        for change in (
+            lambda value: value.update(evaluation_success=False),
+            lambda value: value['evidence'].update(export_state='authenticated_partial'),
+            lambda value: value['cleanup'].update(absent_volume_ids=[]),
+            lambda value: value['cleanup'].update(instance_id='i-foreign'),
+        ):
+            controller = copy.deepcopy(self.controller)
+            change(controller)
+            dump(self.state / 'controller-result.json', controller)
+            with self.assertRaises(ValueError):
+                self.admit()
+        dump(self.state / 'controller-result.json', self.controller)
+        readback = self.state / 'cleanup-profile-readback.json'
+        value = load(readback)
+        value['request']['args'] = ['--instance-profile-name', 'foreign']
+        dump(readback, value)
+        with self.assertRaisesRegex(ValueError, 'deletion readback'):
+            self.admit()
 
 
 class ExpandedAssessmentPanelTests(unittest.TestCase):

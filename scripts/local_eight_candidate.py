@@ -384,6 +384,43 @@ def validate_cuda_export(output, plan, plan_sha, *, root=None):
     return provenance
 
 
+def cuda_evaluation_lineage(root, manifest_path, expected_sha):
+    """Portable commitment to the fully reauthenticated original final150 closure.
+
+    This is evidence, not a replacement candidate or an inference-runtime override.
+    Only the final adapter and this binding need travel to the evaluation worker.
+    """
+    root = Path(root).resolve()
+    contract = resolve_candidate(root, manifest_path, expected_sha)
+    require(contract.get('producer') == 'trid-fresh-eight-cuda-training-candidate-v2'
+            and contract['adapter']['step'] == 150,
+            'CUDA evaluation requires the original authenticated final150 candidate')
+
+    def portable(value):
+        if isinstance(value, dict):
+            result = {key: portable(item) for key, item in value.items()}
+            if set(value) == {'path', 'bytes', 'sha256'}:
+                path = Path(value['path'])
+                if path.is_absolute():
+                    result['path'] = path.resolve().relative_to(root).as_posix()
+            return result
+        if isinstance(value, list):
+            return [portable(item) for item in value]
+        return value
+
+    result = dict(schema='trid-cuda-evaluation-lineage-v1',
+                  candidate=portable(contract['registration']),
+                  adapter_sha256=contract['adapter_sha256'],
+                  adapter_files=portable(contract['adapter']['files']),
+                  provenance=portable(public_contract(contract)))
+    if contract.get('collection_finalization'):
+        custody = bound(root, contract['collection_finalization']).parent / 'collection-finalization-source-archive.json'
+        require(custody.is_file(), 'CUDA evaluation requires historical finalization source custody')
+        result['finalization_source_custody'] = portable(file_pin(custody))
+        result['finalization_source_archive'] = load(custody)['source_archive']
+    return result
+
+
 def public_contract(contract):
     return {key: value for key, value in contract.items() if key not in ('policy_document', 'adapter_directory', 'adapter')}
 

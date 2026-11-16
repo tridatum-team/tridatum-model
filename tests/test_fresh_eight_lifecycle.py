@@ -46,6 +46,140 @@ def release_fixture(plan):
         schedule=L.schedule_spec(plan, 'i-0123456789abcdef0', 1000))
 
 
+def evaluation_plan_fixture():
+    plan = plan_fixture()
+    plan.update(schema=L.EVALUATION_SCHEMA,
+        limits=dict(L.LIMITS, lifetime_seconds=18900, reserve_seconds=300, output_bytes=512 * 1024**2),
+        lifetime=dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False))
+    plan['cost'].update(cap_usd=20, retained_bytes=2 * L.GIB)
+    return plan
+
+
+class CudaEvaluationLifecycleTests(unittest.TestCase):
+    def test_evaluation_uses_new_lease_and_never_training_success(self):
+        plan = evaluation_plan_fixture()
+        self.assertTrue(L.bounded_mode(plan))
+        self.assertFalse(L.fresh_mode(plan))
+        self.assertEqual(L.success_field(plan), 'evaluation_success')
+        self.assertEqual(L.lifetime_seconds(plan), 18900)
+        self.assertEqual(L.reserve_seconds(plan), 300)
+        self.assertEqual(L.export_limit(plan), 512 * 1024**2)
+        spec = L.schedule_spec(plan, 'i-evaluation', 1000)
+        cutoff = dt.datetime.fromtimestamp(19840, dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+        self.assertEqual(spec['ScheduleExpression'], 'at(' + cutoff + ')')
+        self.assertEqual(spec['Target']['RetryPolicy']['MaximumRetryAttempts'], 0)
+
+    def test_new_grant_prices_all_five_and_half_hours(self):
+        plan = evaluation_plan_fixture()
+        original = L.cost_bound(plan)
+        self.assertLessEqual(float(original['all_in_bound_usd']), 20)
+        self.assertNotIn('aggregate_budget_usd', original)
+        plan['cost']['rates']['ec2_hour'] += 0.1
+        self.assertAlmostEqual(L.cost_bound(plan)['additional_pretax_bound_usd']
+                               - original['additional_pretax_bound_usd'], 0.55)
+
+    def test_old_grants_deadline_extensions_and_unpriced_egress_fail(self):
+        for section, key, value in [('cost', 'cap_usd', 4.11), ('cost', 'cap_usd', 10),
+                ('cost', 'termination_grace_seconds', 1800),
+                ('cost', 'network_egress_bytes', 2 * L.GIB),
+                ('network', 'egress_byte_cap', 3 * L.GIB),
+                ('lifetime', 'total_seconds', 19801), ('limits', 'lifetime_seconds', 18901)]:
+            with self.subTest(section=section, key=key, value=value):
+                plan = evaluation_plan_fixture()
+                plan[section][key] = value
+                with self.assertRaises((RuntimeError, ValueError)):
+                    L.cost_bound(plan)
+        plan = evaluation_plan_fixture()
+        plan['cost']['rates']['ec2_hour'] = 100
+        with self.assertRaisesRegex(RuntimeError, 'new USD20'):
+            L.cost_bound(plan)
+
+    def test_evaluation_terminal_requires_exact_owned_reaped_phases(self):
+        plan = evaluation_plan_fixture()
+        stages = [dict(phase=phase, state='complete', unit=plan['identity']['run_id'] + '-' + phase,
+            invocation='new-' + phase, gpu={'uuid': 'GPU-owned'}, run_id=plan['identity']['run_id'],
+            plan_sha256='a' * 64, instance_id='i-owned', cleanup_verified=True,
+            stopped_state={'ActiveState': 'inactive'}) for phase in ('runtime', 'evaluation')]
+        completion = dict(evaluation_success=True, quality_accepted=False, stop_errors=[],
+            completion_scope='cuda_evaluation_only_existing_final150', runtime_unit=stages[0], stages=stages[1:])
+        L.validate_evaluation_terminal(plan, 'a' * 64, 'i-owned', completion)
+        for key, value in [('instance_id', 'i-other'), ('cleanup_verified', False),
+                           ('unit', 'other-evaluation'), ('phase', 'train')]:
+            old = stages[1][key]
+            stages[1][key] = value
+            with self.assertRaises((RuntimeError, ValueError)):
+                L.validate_evaluation_terminal(plan, 'a' * 64, 'i-owned', completion)
+            stages[1][key] = old
+        completion['quality_accepted'] = True
+        with self.assertRaises((RuntimeError, ValueError)):
+            L.validate_evaluation_terminal(plan, 'a' * 64, 'i-owned', completion)
+
+    def test_evaluation_cleanup_cutoff_includes_grace_once(self):
+        plan = evaluation_plan_fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            L.save(state / 'approval-consumed.json', dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64))
+            L.save(state / 'launch-dispatched.json', dict(run_id=plan['identity']['run_id'],
+                plan_sha256='a' * 64, request_sha256='b' * 64, at=900))
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, state), 20700)
+
+    def test_failed_evaluation_collection_stays_failed_and_is_one_shot(self):
+        plan = evaluation_plan_fixture()
+        completion = dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64,
+                          instance_id='i-owned', evaluation_success=False, error='smoke failed')
+        def client(service, operation, *args):
+            self.assertEqual((service, operation), ('s3api', 'get-object'))
+            Path(args[-1]).write_text(json.dumps(completion))
+        with tempfile.TemporaryDirectory() as directory:
+            result = L.collect_export(client, plan, 'a' * 64, directory, 'i-owned')
+            self.assertFalse(result['native_pipeline_success'])
+            self.assertEqual(result['semantic_acceptance'], 'not_evaluated')
+            self.assertEqual(client.retrieval_byte_limit, L.GIB)
+            with self.assertRaises(FileExistsError):
+                L.collect_export(client, plan, 'a' * 64, directory, 'i-owned')
+
+    def test_training_success_cannot_authorize_evaluation_collection(self):
+        plan = evaluation_plan_fixture()
+        def client(service, operation, *args):
+            Path(args[-1]).write_text(json.dumps(dict(run_id=plan['identity']['run_id'],
+                plan_sha256='a' * 64, instance_id='i-owned', training_success=True)))
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, 'explicit terminal failure'):
+                L.collect_export(client, plan, 'a' * 64, directory, 'i-owned')
+
+    def test_full_polling_and_export_ranges_fit_controller_reservation(self):
+        plan = evaluation_plan_fixture()
+        reserved = 120 * 1024**2 + 1024**2 + plan['cost']['export_bytes']
+        self.assertEqual(reserved, 633 * 1024**2)
+        self.assertLessEqual(reserved, plan['cost']['controller_retrieval_bytes'])
+        # The paid5.5h bound never turns30s monitoring into unbounded requests.
+        self.assertLessEqual((L.lifetime_seconds(plan) + 29) // 30, 630)
+        plan['cost']['controller_retrieval_bytes'] = reserved - 1
+        with self.assertRaises((RuntimeError, ValueError)):
+            L.cost_bound(plan)
+
+    def test_request_and_attempted_retrieval_caps_stop_before_another_call(self):
+        from types import SimpleNamespace
+        plan = evaluation_plan_fixture()
+        client = L.Client(plan['identity'], request_limit=10000)
+        client.requests = 10000
+        with patch.object(L.subprocess, 'run') as subprocess_run:
+            with self.assertRaisesRegex(RuntimeError, 'request envelope exhausted'):
+                client('ec2', 'describe-instances')
+            subprocess_run.assert_not_called()
+        client = L.Client(plan['identity'], request_limit=10000)
+        client.retrieval_byte_limit = L.GIB
+        client.retrieval_bytes = L.GIB - 1024**2
+        with patch.object(L.subprocess, 'run', return_value=SimpleNamespace(
+                returncode=1, stderr='ambiguous failed transfer', stdout='')) as subprocess_run:
+            with self.assertRaises(L.AWSCallError):
+                client('s3api', 'get-object', '--range', 'bytes=0-1048575', 'unused')
+            self.assertEqual(client.retrieval_bytes, L.GIB)
+            with self.assertRaisesRegex(RuntimeError, 'retrieval byte envelope exhausted'):
+                client('s3api', 'get-object', '--range', 'bytes=0-0', 'unused')
+            subprocess_run.assert_called_once()
+
+
 class FreshLifetimeTests(unittest.TestCase):
     def test_total_includes_cleanup_and_keeps_legacy_unchanged(self):
         plan = plan_fixture()

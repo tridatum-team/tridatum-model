@@ -571,9 +571,21 @@ def validate_finalization_registration(root, registration_path, *, active=False)
             and authorization.get('max_metadata_bytes') == 3 * 1024**2,
             'Parent finalization permission differs')
     bound(root, authorization['context'])
+    if not active:
+        custody_path = state / 'collection-finalization-source-archive.json'
+        if custody_path.exists():
+            pin(root, custody_path)
+            custody = load(custody_path)
+            require(set(custody) == {'schema', 'finalization_registration', 'source_archive'}
+                    and custody['schema'] == 'trid-finalization-source-archive-v1'
+                    and custody['finalization_registration'] == pin(root, registration_path),
+                    'Historical finalization source custody differs')
+            authenticate_recovery_sources(root, custody['source_archive'], r['sources'])
     expected = finalization_spec(root, state, prior_path, bound(root, r['source_archive']),
                                  bound(root, r['authorization']), r['deadline'])
     expected['registered_at'] = r['registered_at']
+    if not active and custody_path.exists():
+        expected['sources'] = r['sources']
     require(r == expected, 'Finalization registration or predecessor evidence differs')
     started, failure = load(bound(root, r['prior_started'])), load(bound(root, r['prior_failure']))
     require(started['registration'] == r['prior_registration']

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Offline expanded diagnostic assessment; never selection or deployment qualification.
 
-Final150 candidates use native local MPS inference. CUDA training candidates
-require authenticated capacity/training/export and independent cleanup first;
-their training provenance never stands in for MPS inference receipts. Historical
-scores and the immutable paired review/gate protocol are not reinterpreted.
+Final150 candidates use authenticated local MPS or separately registered CUDA
+evaluation-only inference. CUDA training provenance never stands in for inference
+receipts: both execution paths require their own source/runtime/export/cleanup.
+Historical scores and the immutable paired review/gate protocol are not reinterpreted.
 Only primary200 development cases qualify, never secondary or deployment.
 
 Commands (all paths belong to --root):
@@ -211,6 +211,164 @@ def frozen_dataset(root, path, expected_sha):
     return frozen, design, inputs, metadata, references
 
 
+def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded):
+    """Admit one independently collected CUDA execution, never historical scores."""
+    import tempfile
+    from scripts import local_eight_candidate as candidate
+    from scripts.aws_eval import fresh_eight_evaluation as evaluation
+    from scripts.aws_eval import fresh_eight_launch as launch
+    from scripts.aws_eval import grounded_hf_lifecycle as lifecycle
+
+    root, directory = Path(root).resolve(), Path(directory).resolve()
+    exported, state = directory.parent, directory.parent.parent
+    require(directory.name == 'evaluation' and exported.name == 'cuda-evaluation-export',
+            'CUDA assessment requires the collected full evaluation namespace')
+    plan_path = exported / 'plan.json'
+    plan, plan_sha = load(plan_path), digest(plan_path)
+    require(evaluation.is_evaluation(plan), 'CUDA evaluation plan schema differs')
+    run = state.parent
+    authenticate(run / 'plan.json', pin(plan_path, root))
+    registration_path, approval_path = run / 'registration.json', run / 'approval.json'
+    registration, approval = load(registration_path), load(approval_path)
+    registration_sha = digest(registration_path)
+    source_archive = candidate.bound(root, dict(path=plan['bundle']['local_path'],
+        bytes=plan['bundle']['bytes'], sha256=plan['bundle']['sha256']))
+    with tempfile.TemporaryDirectory(prefix='trid-evaluation-evidence-') as temporary:
+        sources = Path(temporary) / 'bundle'
+        lifecycle.authenticate_archive(source_archive, plan['bundle'], sources)
+        launch.validate_registration(registration, sources, active=False)
+        launch.validate_final(registration, registration_sha, sources, state,
+                              plan, approval, plan_sha, active=False)
+        source_manifest = load(exported / 'source-manifest.json')
+        expected_sources = {entry['path']: entry for entry in plan['bundle']['files']
+                            if entry['path'] in plan['sources']}
+        require(set(expected_sources) == set(plan['sources']) == set(evaluation.REQUIRED_SOURCES),
+                'CUDA executable source closure differs')
+        for entry in expected_sources.values():
+            candidate.bound(sources, entry)
+        require(manifest.get('code') == loaded.get('code') == expected_sources,
+                'CUDA actual executed source pins differ')
+        require(source_manifest == load(candidate.bound(sources, plan['workload']['source_manifest'])),
+                'CUDA exported source manifest differs from staged executable closure')
+        staged_lineage = load(candidate.bound(sources, plan['workload']['lineage_binding']))
+        require(load(exported / 'lineage-binding.json') == staged_lineage,
+                'CUDA exported lineage differs from staged lineage')
+    lineage = candidate.cuda_evaluation_lineage(root,
+        candidate.bound(root, contract['registration']), contract['registration']['sha256'])
+    require(staged_lineage == lineage and manifest.get('evaluation_contract') == lineage['provenance']
+            and lineage['adapter_sha256'] == contract['adapter_sha256'],
+            'CUDA evaluation original candidate lineage differs')
+    evaluation.validate_completion(exported, plan)
+    supervision = evaluation.validate_supervision(exported, plan)
+
+    completion = load(state / 'completion.json')
+    controller = load(state / 'controller-result.json')
+    instance = completion.get('instance_id')
+    require(completion.get('run_id') == plan['identity']['run_id']
+            and completion.get('plan_sha256') == plan_sha
+            and isinstance(instance, str) and instance.startswith('i-')
+            and 'training_success' not in completion and 'inference_success' not in completion
+            and not completion.get('error') and not completion.get('export_error')
+            and completion.get('runtime') == load(exported / 'runtime.json'),
+            'CUDA terminal runtime/identity differs')
+    lifecycle.validate_evaluation_terminal(plan, plan_sha, instance, completion)
+    require(supervision['unit'] == completion['stages'][0],
+            'CUDA exported supervision differs from independently collected phase')
+    export_manifest = load(exported / 'export-manifest.json')
+    require(export_manifest.get('run_id') == plan['identity']['run_id']
+            and export_manifest.get('plan_sha256') == plan_sha
+            and export_manifest.get('status') == {k: v for k, v in completion.items() if k != 'export'},
+            'CUDA export terminal identity differs')
+    members = export_manifest['files']
+    names = [entry['path'] for entry in members]
+    require(len(names) == len(set(names)) and set(names) <= set(plan['output_allowlist'])
+            and export_manifest.get('total_bytes') == sum(entry['bytes'] for entry in members),
+            'CUDA export membership/bytes differ')
+    actual = {path.relative_to(exported).as_posix() for path in exported.rglob('*') if path.is_file()}
+    require(actual == set(names) | {'export-manifest.json'}, 'CUDA collected export membership differs')
+    for entry in members:
+        candidate.bound(exported, entry)
+    archive = state / 'export.tar'
+    archive_pin = completion['export']
+    authenticate(archive, archive_pin)
+    lifecycle.authenticate_archive(archive, dict(archive_pin,
+        unpacked_bytes=lifecycle.output_limit(plan),
+        files=members + [dict(candidate.file_pin(exported / 'export-manifest.json'),
+                              path='export-manifest.json')]))
+    evidence = controller.get('evidence', {})
+    require(controller.get('state') == 'complete' and controller.get('evaluation_success') is True
+            and controller.get('instance_id') == instance
+            and not any(controller.get(key) for key in ('error', 'evidence_error', 'schedule_cleanup_error'))
+            and evidence.get('native_pipeline_success') is True
+            and evidence.get('evidence_kind') == 'authenticated_archive'
+            and evidence.get('export_state') == 'authenticated_terminal'
+            and evidence.get('completion') == completion
+            and evidence.get('export_sha256') == archive_pin['sha256'],
+            'CUDA independently collected terminal success missing')
+    volume = lifecycle.load_volume_identity(state, plan, plan_sha)
+    cleanup = controller.get('cleanup', {})
+    require(volume['instance_id'] == instance and len(volume['root_volume_ids']) == 1
+            and cleanup.get('cleanup_state') == 'complete' and cleanup.get('instance_terminated') is True
+            and cleanup.get('instance_id') == instance and cleanup.get('remaining_volumes') == []
+            and set(cleanup.get('root_volume_ids', [])) == set(volume['root_volume_ids'])
+            and set(cleanup.get('recorded_volume_ids', [])) == set(volume['volumes'])
+            and set(cleanup.get('absent_volume_ids', [])) == set(volume['volumes']),
+            'CUDA owned compute/root-volume cleanup incomplete')
+    require(load(state / 'approval-consumed.json') ==
+            dict(run_id=plan['identity']['run_id'], plan_sha256=plan_sha),
+            'CUDA single consumed approval differs')
+    release = load(state / 'release.json')
+    require(all(release.get(key) == value for key, value in
+                dict(run_id=plan['identity']['run_id'], plan_sha256=plan_sha, instance_id=instance).items()),
+            'CUDA runtime release ownership differs')
+    require(manifest['runtime']['gpu_uuid'] == loaded['gpu_uuid'] == release['gpu']['uuid']
+            and manifest['runtime']['instance_id'] == instance,
+            'CUDA observed inference device differs from released instance/GPU')
+    for stage in [completion['runtime_unit'], *completion['stages']]:
+        lifecycle.verify_gpu_observation(stage['gpu'], plan, release['gpu'])
+    prerequisite_cleanup = load(state / 'owned-cleanup-complete.json')
+    require(prerequisite_cleanup == dict(registration_sha256=registration_sha,
+            cleanup_state='complete', retained_prefix_lifecycle_rules=True, s3_mutations=0),
+            'CUDA owned prerequisite cleanup incomplete')
+    owned = load(state / 'owned-prerequisites.json')
+    require(load(state / 'owned-cleanup-started.json') ==
+            dict(registration_sha256=registration_sha, resources=owned['resources']),
+            'CUDA prerequisite cleanup authority differs')
+    require(load(state / 'registration-consumed.json') ==
+            dict(registration_sha256=registration_sha, identity=registration['identity']),
+            'CUDA prerequisite registration consumption differs')
+    identity = registration['identity']
+    deletions = {
+        'schedule-group': ('scheduler', 'delete-schedule-group', ['--name', identity['schedule_group']],
+                           'ResourceNotFoundException'),
+        'profile': ('iam', 'delete-instance-profile', ['--instance-profile-name', identity['instance_profile']],
+                    'NoSuchEntity'),
+        'security-group': ('ec2', 'delete-security-group',
+                           ['--group-id', owned['resources']['security_group']['GroupId']], 'InvalidGroup.NotFound'),
+        **{key: ('iam', 'delete-role', ['--role-name', identity[key]], 'NoSuchEntity') for key in launch.ROLE_KEYS}}
+    cleanup_paths = []
+    for name, (service, operation, arguments, absence_code) in deletions.items():
+        paths = [state / ('cleanup-' + name + '-' + suffix + '.json')
+                 for suffix in ('intent', 'response', 'readback')]
+        intent, response, readback = map(load, paths)
+        require(intent == dict(registration_sha256=registration_sha, service=service,
+                               operation=operation, args=arguments)
+                and response.get('request') == readback.get('request') == intent
+                and readback.get('observation') == dict(absent=True, error_code=absence_code),
+                'CUDA prerequisite deletion readback missing: ' + name)
+        cleanup_paths.extend(paths)
+    # Keep immutable cloud/source evidence in the blind mapping commitment. The
+    # aggregator reauthenticates this same admission before joining identities.
+    evidence_paths = [registration_path, approval_path, source_archive, archive, plan_path, *cleanup_paths,
+        exported / 'lineage-binding.json', exported / 'source-manifest.json',
+        *[state / name for name in ('completion.json', 'controller-result.json',
+            'volume-identity.json', 'release.json', 'approval-consumed.json', 'registration-consumed.json',
+            'owned-prerequisites.json', 'owned-cleanup-started.json', 'owned-cleanup-complete.json')]]
+    return dict(pins={'cuda-evidence-' + str(i): pin(path, root)
+                      for i, path in enumerate(evidence_paths)},
+                public_input=candidate.bound(root, manifest['input']))
+
+
 def completed_run(root, directory, cases, design, profile, input_pin=None, contract=None):
     """Authenticate the evaluator's actual file/row contract, never model weights."""
     directory = Path(directory)
@@ -227,12 +385,19 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     preflight = load(directory / 'prompt-preflight.json')
     loaded = load(directory / 'loaded-runtime.json')
     manifest_sha = pins['run-manifest.json']['sha256']
-    expected_schema = 'trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1'
+    cuda_evaluation = manifest.get('schema') == 'trid-cuda-eight-paired-v1'
+    if cuda_evaluation:
+        require(contract is not None and cuda_trained and profile == 'unconstrained'
+                and len(cases) == 200, 'CUDA evaluation requires final150 primary200')
+        cuda_admission = authenticate_cuda_evaluation(root, directory, contract, manifest, loaded)
+        pins.update(cuda_admission['pins'])
+    expected_schema = ('trid-cuda-eight-paired-v1' if cuda_evaluation else
+                       'trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1')
     require(manifest.get('schema') == expected_schema
             and manifest.get('mode') == 'evaluation' and manifest.get('arm_order') == list(arms)
             and manifest.get('grading_access') is False and manifest.get('retries') is False
             and manifest.get('resume') is False, 'local run identity/mode differs')
-    if contract:
+    if contract and not cuda_evaluation:
         require(manifest.get('evaluation_contract') == public_contract(contract)
                 and manifest.get('adapter') == contract['adapter'] and profile == 'unconstrained',
                 'registered evaluation contract differs')
@@ -249,7 +414,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
             require(isinstance(manifest.get('local_registration'), dict), 'Local guarded registration missing')
             supervisor = accepted_local_supervision(manifest['local_registration'], directory)
             pins['local-supervision'] = pin(supervisor, root)
-    else:
+    elif not contract:
         require('evaluation_contract' not in manifest, 'historical replay cannot carry a candidate contract')
     ids = manifest.get('selected_ids', [])
     require(len(ids) == len(set(ids)) == len(cases) and set(ids) == set(cases), 'selected case denominator')
@@ -258,8 +423,11 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
             and completion.get('run_manifest_sha256') == manifest_sha
             and set(completion.get('outputs', {})) == set(arms)
             and finite_seconds(completion.get('elapsed_seconds')), 'completion identity/denominator')
-    public_path = Path(manifest['input']['path'])
-    public_path = public_path if public_path.is_absolute() else Path(root) / public_path
+    if cuda_evaluation:
+        public_path = cuda_admission['public_input']
+    else:
+        public_path = Path(manifest['input']['path'])
+        public_path = public_path if public_path.is_absolute() else Path(root) / public_path
     authenticate(public_path, manifest['input'])
     require(indexed(load(public_path), 'run inputs') == cases, 'run input messages differ')
     if input_pin is not None:
@@ -268,7 +436,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     generation = manifest['generation']
     expected_generation = dict(enable_thinking=False, do_sample=False, num_beams=1, seed=14,
         max_new_tokens=768, context_tokens=4096, dtype='bfloat16',
-        backend='transformers-mps')
+        backend='transformers-cuda' if cuda_evaluation else 'transformers-mps')
     require(generation == expected_generation
             and all(generation[k] == design['generation'][k] for k in
                     ('enable_thinking', 'do_sample', 'max_new_tokens', 'context_tokens')),
@@ -284,19 +452,21 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
             and adapter['files']['adapter_model.safetensors']['sha256'] == adapter_sha,
             'model/adapter binding differs')
     runtime = manifest['runtime']
-    require(runtime.get('device') == 'mps' and runtime.get('dtype') == 'torch.bfloat16'
+    require(runtime.get('device') == ('cuda' if cuda_evaluation else 'mps')
+            and runtime.get('dtype') == 'torch.bfloat16'
             and runtime.get('cpu_fallback') is False and runtime.get('cuda_equivalence_claim') is False
             and loaded.get('parameter_dtypes') == (['torch.bfloat16', 'torch.float32'] if cuda_trained
                                                    else ['torch.bfloat16']), 'runtime/device/dtype differs')
     if cuda_trained:
         inventory = loaded.get('parameter_inventory', {})
-        require(set(inventory) == {'base', 'adapter'}, 'MPS inference parameter inventory missing')
+        require(set(inventory) == {'base', 'adapter'}, 'inference parameter inventory missing')
         for group, dtype in (('base', 'torch.bfloat16'), ('adapter', 'torch.float32')):
             values = inventory[group]
-            require(values and all(key in (dtype + '@mps', dtype + '@mps:0')
+            device = 'cuda' if cuda_evaluation else 'mps'
+            require(values and all(key in (dtype + '@' + device, dtype + '@' + device + ':0')
                     and all(type(entry.get(field)) is int and entry[field] > 0
                             for field in ('tensors', 'elements', 'bytes'))
-                    for key, entry in values.items()), 'MPS inference parameter inventory differs')
+                    for key, entry in values.items()), 'inference parameter inventory differs')
     require(manifest.get('decoder_profile') == decoder and decoder.get('profile') == profile
             and decoder.get('semantic_truth_guarantee') is False, 'decoder profile binding differs')
     if profile == 'unconstrained':
@@ -339,6 +509,10 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
         path = directory / (arm + '-outputs.jsonl')
         authenticate(path, completion['outputs'][arm])
         recorded_output = Path(completion['outputs'][arm]['path'])
+        if cuda_evaluation:
+            require(not recorded_output.is_absolute() and recorded_output.as_posix() == arm + '-outputs.jsonl',
+                    'CUDA completion output must be portable within its mode')
+            recorded_output = directory / recorded_output
         require(recorded_output.resolve() == path.resolve(),
                 'completion output path differs')
         # Parse each line strictly, including duplicate keys and nonfinite values.

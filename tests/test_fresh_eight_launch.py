@@ -88,6 +88,86 @@ def missing(service, operation, code):
     return fresh.lifecycle.AWSCallError(service, operation, f'An error occurred ({code}) when calling operation')
 
 
+def evaluation_registration(root):
+    reg = registration(root)
+    old_run = reg['identity']['run_id']
+    run = 'mois-eight-cuda-eval-20261116-134815'
+    reg = json.loads(json.dumps(reg).replace(old_run, run))
+    reg['schema'] = fresh.EVALUATION_SCHEMA
+    del reg['aggregate_ledger']
+    auth_name = 'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
+    reg['authorization'] = pin(root, auth_name, (Path(__file__).resolve().parents[1] / auth_name).read_bytes())
+    envelope = json.loads((root / reg['resource_envelope']['path']).read_bytes())
+    for key in ('aggregate_ledger', 'prior_conditional_all_in_bound_usd', 'current_run_cap_usd'):
+        del envelope[key]
+    envelope.update(schema='trid-cuda-evaluation-resource-envelope-v1', identity=reg['identity'],
+        authorization=reg['authorization'], budget_usd='20', gpu_execution_lease_seconds_max=18900,
+        total_billable_lifetime_seconds_max=19800, combined_retained_s3_bytes_max=2 * 1024**3,
+        bundle_bytes_max=128 * 1024**2)
+    reg['resource_envelope'] = pin(root, 'evaluation-envelope.json', envelope)
+    reg['lineage_binding'] = pin(root, 'lineage-binding.json', {'synthetic_lineage': True})
+    reg['bundle']['files'] += [reg[key] for key in ('authorization', 'resource_envelope', 'lineage_binding')]
+    return reg
+
+
+class CudaEvaluationPreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.state = self.root / 'state'
+        self.state.mkdir()
+        self.reg = evaluation_registration(self.root)
+
+    def test_new_registration_reauthenticates_parent_lineage(self):
+        with patch.object(fresh, 'validate_lineage') as authenticate:
+            self.assertIs(fresh.validate_registration(self.reg, self.root), self.reg)
+            authenticate.assert_called_once_with(self.root, self.reg['lineage_binding'])
+        with patch.object(fresh, 'validate_lineage', side_effect=RuntimeError('original lineage changed')):
+            with self.assertRaisesRegex(RuntimeError, 'original lineage changed'):
+                fresh.validate_registration(self.reg, self.root)
+
+    def test_inactive_registration_still_authenticates_archived_bytes(self):
+        with patch.object(fresh, 'validate_lineage', side_effect=AssertionError('remote provenance is controller-only')):
+            fresh.validate_registration(self.reg, self.root, active=False)
+            (self.root / self.reg['authorization']['path']).write_text('{}')
+            with self.assertRaises(RuntimeError):
+                fresh.validate_registration(self.reg, self.root, active=False)
+
+    def test_new_registration_rejects_old_grant_and_history_upload(self):
+        with patch.object(fresh, 'validate_lineage'):
+            self.reg['aggregate_ledger'] = {'sha256': SHA}
+            with self.assertRaisesRegex(RuntimeError, 'Exact parent prerequisite'):
+                fresh.validate_registration(self.reg, self.root)
+            del self.reg['aggregate_ledger']
+            self.reg['bundle']['files'].append(pin(self.root, 'recovered-export.tar', b'old archive'))
+            with self.assertRaisesRegex(RuntimeError, 'Historical recovery archives'):
+                fresh.validate_registration(self.reg, self.root)
+
+    def test_new_registration_requires_sealed_lineage_and_keeps_shared_rules(self):
+        before = copy.deepcopy(self.reg['bucket_lifecycle_before'])
+        after = fresh.lifecycle_merge(self.reg)
+        self.assertEqual(after['Rules'][:-2], before['Rules'])
+        self.assertEqual(self.reg['bucket_lifecycle_before'], before)
+        self.reg['bundle']['files'] = [p for p in self.reg['bundle']['files']
+                                      if p != self.reg['lineage_binding']]
+        with patch.object(fresh, 'validate_lineage'):
+            with self.assertRaisesRegex(RuntimeError, 'bundle must bind'):
+                fresh.validate_registration(self.reg, self.root)
+
+    def test_evaluation_bundle_accepts_generic_cap_without_training_cap(self):
+        bundle = fresh.prepare_bundle(self.reg, self.root, self.state)
+        self.assertLess(bundle['bytes'], 128 * 1024**2)
+        with tarfile.open(self.root / bundle['local_path']) as archive:
+            self.assertEqual(set(archive.getnames()), {p['path'] for p in self.reg['bundle']['files']})
+        envelope = json.loads((self.root / self.reg['resource_envelope']['path']).read_bytes())
+        envelope['bundle_bytes_max'] = 256 * 1024**2
+        self.reg['resource_envelope'] = pin(self.root, 'oversized-envelope.json', envelope)
+        self.reg['bundle']['local_path'] = 'oversized.tar'
+        with self.assertRaisesRegex(RuntimeError, 'Bundle too large'):
+            fresh.prepare_bundle(self.reg, self.root, self.state)
+
+
 class FreshPreparationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

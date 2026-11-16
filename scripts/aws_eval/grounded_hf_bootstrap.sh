@@ -1,5 +1,5 @@
 #!/bin/bash
-# All profiles, including fresh600: fail-safe before any network or ticket.
+# All explicitly registered profiles: fail-safe before any network or ticket.
 /sbin/shutdown -h +5 || exit 1
 set -euo pipefail
 umask 077
@@ -38,6 +38,9 @@ python3 -I -B - "$BUNDLE_BYTES" <<'PY'
 import hashlib, json, pathlib, sys, tarfile
 p = json.loads(pathlib.Path('plan.json').read_text())
 b = p['bundle']
+assert p.get('schema') in ('trid-grounded-hf-v1', 'trid-ordered-hf-inference-v1',
+    'trid-hf14-followup-v1', 'trid-eight-sft-experiment-v1',
+    'trid-fresh-eight-training-experiment-v2', 'trid-fresh-eight-cuda-evaluation-v1')
 assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= 128 * 1024**2
 if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
@@ -51,6 +54,16 @@ if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     assert 0 < cost['export_bytes'] <= limits['output_bytes']
     assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
     assert p['network']['egress_byte_cap'] <= 2 * 1024**3
+if p.get('schema') == 'trid-fresh-eight-cuda-evaluation-v1':
+    lease, limits, cost = p['lifetime'], p['limits'], p['cost']
+    assert lease == dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False)
+    assert limits['lifetime_seconds'] == 18900 and limits['reserve_seconds'] == 300
+    assert cost['termination_grace_seconds'] == 900 and cost['cap_usd'] == 20
+    assert limits['output_bytes'] == 512 * 1024**2
+    assert 0 < cost['export_bytes'] <= limits['output_bytes']
+    assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
+    assert p['network']['egress_byte_cap'] <= 2 * 1024**3
+    assert not {'recipe', 'data', 'aggregate_ledger', 'evaluation'} & set(p)
 assert len(b['files']) <= 4096
 files = {r['path']: r for r in b['files']}
 assert len(files) == len(b['files']) and sum(r['bytes'] for r in files.values()) <= b['unpacked_bytes'] <= 256 * 1024**2

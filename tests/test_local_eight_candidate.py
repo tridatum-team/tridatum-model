@@ -1157,6 +1157,75 @@ class TrainingOnlyConsumerBoundaryTests(unittest.TestCase):
         self.assertEqual(contract['training_runtime'], 'cuda')
         self.assertEqual(contract['inference_runtime'], 'mps')
 
+    def seal_finalization_sources(self, state):
+        import tarfile
+        archive = state / 'collection-finalization-executed-source.tar'
+        with tarfile.open(archive, 'w', format=tarfile.USTAR_FORMAT) as stream:
+            for name in self.R.SOURCES:
+                stream.add(self.root / name, arcname=name, recursive=False)
+        return dump(state / 'collection-finalization-source-archive.json',
+            dict(schema='trid-finalization-source-archive-v1',
+                 finalization_registration=self.R.pin(self.root, state / 'collection-finalization-registration.json'),
+                 source_archive=self.R.pin(self.root, archive)))
+
+    def test_finalization_archive_preserves_candidate_after_lifecycle_and_recovery_checkout_changes(self):
+        state = self.enable_collection_finalization()
+        custody_path = self.seal_finalization_sources(state)
+        before = self.resolve()
+        originals = {path: path.read_bytes() for path in
+            (state / 'collection-finalization-registration.json', self.finalization_path,
+             state / 'controller-result.json', self.root / 'collection-finalization-permission.json')}
+        for name in self.R.SOURCES[:2]:
+            (self.root / name).write_text('# later checkout, not historical execution\n')
+        after = self.resolve()
+        self.assertEqual(C.public_contract(before), C.public_contract(after))
+        self.assertEqual(after['inference_runtime'], 'mps')
+        lineage = C.cuda_evaluation_lineage(self.root, C.bound(self.root, after['registration']),
+                                            after['registration']['sha256'])
+        self.assertEqual(lineage['finalization_source_custody'], self.R.pin(self.root, custody_path))
+        self.assertEqual(lineage['adapter_sha256'], after['adapter_sha256'])
+        self.assertFalse(Path(lineage['candidate']['path']).is_absolute())
+        self.assertEqual(lineage['provenance']['inference_runtime'], 'mps')
+        for path, raw in originals.items():
+            self.assertEqual(path.read_bytes(), raw)
+        with patch.object(self.R.time, 'time', return_value=2005.), \
+                self.assertRaisesRegex((ValueError, RuntimeError), 'registration or predecessor'):
+            self.R.validate_finalization_registration(self.root,
+                state / 'collection-finalization-registration.json', active=True)
+
+    def test_finalization_source_custody_and_archive_tampering_are_rejected(self):
+        state = self.enable_collection_finalization()
+        custody_path = self.seal_finalization_sources(state)
+        original = load(custody_path)
+        for mutate in (
+            lambda row: row.update(schema='unregistered'),
+            lambda row: row['finalization_registration'].update(sha256='0' * 64),
+            lambda row: row['source_archive'].update(sha256='0' * 64),
+        ):
+            changed = copy.deepcopy(original)
+            mutate(changed)
+            dump(custody_path, changed)
+            with self.subTest(custody=changed), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+        dump(custody_path, original)
+        archive = C.bound(self.root, original['source_archive'])
+        archive.write_bytes(archive.read_bytes() + b'tampered')
+        with self.assertRaises((ValueError, RuntimeError)):
+            self.resolve()
+
+    def test_resealed_later_sources_do_not_replace_original_finalization_source_pins(self):
+        state = self.enable_collection_finalization()
+        (self.root / self.R.SOURCES[1]).write_text('# later lifecycle, not the registered source\n')
+        self.seal_finalization_sources(state)
+        with self.assertRaisesRegex((ValueError, RuntimeError), 'historical recovery source|source bytes differ'):
+            self.resolve()
+
+    def test_finalization_without_custody_cannot_relabel_later_checkout_as_history(self):
+        self.enable_collection_finalization()
+        (self.root / self.R.SOURCES[1]).write_text('# later lifecycle\n')
+        with self.assertRaises((ValueError, RuntimeError)):
+            self.resolve()
+
     def test_finalization_rejects_foreign_incomplete_error_and_post_acceptance_observations(self):
         state = self.enable_collection_finalization()
         original = load(self.finalization_path)
@@ -1304,7 +1373,7 @@ class CudaTrainingMpsAssessmentIntegrationTests(unittest.TestCase):
                     changed = copy.deepcopy(loaded)
                     changed['parameter_inventory'][group] = {wrong: dict(tensors=1, elements=1, bytes=4)}
                     dump(directory / 'loaded-runtime.json', changed)
-                    with self.subTest(inventory=wrong), self.assertRaisesRegex(ValueError, 'MPS inference'):
+                    with self.subTest(inventory=wrong), self.assertRaises(ValueError):
                         A.completed_run(root, directory, {r['id']: r for r in fixture.inputs},
                             fixture.design, 'unconstrained', contract=contract)
                 dump(directory / 'loaded-runtime.json', loaded)

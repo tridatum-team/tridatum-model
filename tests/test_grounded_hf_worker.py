@@ -19,6 +19,90 @@ import grounded_hf_worker as W
 import grounded_hf_lifecycle as L
 
 
+class CudaEvaluationDispatchTests(unittest.TestCase):
+    def plan(self):
+        return dict(schema=L.EVALUATION_SCHEMA, identity={'run_id': 'cuda-evaluation-fixture'},
+            limits=dict(L.LIMITS, lifetime_seconds=18900, reserve_seconds=300, output_bytes=512 * 1024**2))
+
+    def test_evaluation_network_handoff_reserves_full_bootstrap_consumption(self):
+        plan = self.plan()
+        plan['network'] = {'egress_byte_cap': 2 * L.GIB}
+        allowance = W.replacement_egress_allowance(plan)
+        self.assertEqual(allowance, 2 * L.GIB - 16 * 1024**2)
+        self.assertEqual(allowance + 16 * 1024**2, plan['network']['egress_byte_cap'])
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'plan.json').write_text(json.dumps(plan))
+            owner = base / 'bootstrap-network-owner'
+            owner.write_text(plan['identity']['run_id'] + '\n' + W.digest(base / 'plan.json') + '\n')
+            owner.chmod(0o600)
+            with patch.object(W, 'command') as command:
+                W.install_network_cap(plan, 2000, base)
+            calls = [call.args[0] for call in command.call_args_list]
+            quota = next(argv for argv in calls if '--quota' in argv)
+            self.assertEqual(quota[quota.index('--quota') + 1], str(allowance))
+            self.assertEqual(calls[-1], ['nft', 'delete', 'table', 'inet', 'trid_bootstrap'])
+            self.assertLess(calls.index(quota), len(calls) - 1)
+        for cap in (16 * 1024**2, 0, float(2 * L.GIB)):
+            plan['network']['egress_byte_cap'] = cap
+            with self.assertRaisesRegex(RuntimeError, 'post-bootstrap allowance'):
+                W.replacement_egress_allowance(plan)
+
+    def test_only_runtime_and_evaluation_use_the_offline_sandbox(self):
+        plan = self.plan()
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'plan.json').write_text(json.dumps(plan))
+            for phase in ('runtime', 'evaluation'):
+                argv = W.stage_argv(plan, base, phase, 60, {'uuid': 'GPU-owned', 'minor': 0}, 1001, 1001)
+                self.assertIn('PrivateNetwork=yes', argv)
+                self.assertIn('RestrictAddressFamilies=AF_UNIX', argv)
+                self.assertIn('LimitFSIZE=536870912', argv)
+                self.assertIn('ReadWritePaths=' + str(base / 'scratch'), argv)
+                self.assertIn('CUDA_VISIBLE_DEVICES=GPU-owned', argv)
+            for phase in ('capacity', 'train', 'adapter', 'baseline', 'unknown'):
+                with self.assertRaises((RuntimeError, ValueError)):
+                    W.stage_argv(plan, base, phase, 60, {}, 1001, 1001)
+
+    def test_unknown_profile_never_defaults_to_training(self):
+        plan = self.plan()
+        plan['schema'] = 'unregistered-cuda-profile'
+        with self.assertRaisesRegex(RuntimeError, 'training fallback forbidden'):
+            W.stage_argv(plan, '.', 'train', 60, {}, 1001, 1001)
+        with self.assertRaisesRegex(RuntimeError, 'training fallback forbidden'):
+            W.bootstrap(plan, 'a' * 64, '.')
+
+    def test_evaluation_supervision_binds_cleanup_and_never_replays(self):
+        plan = self.plan()
+        gpu = {'uuid': 'GPU-owned', 'minor': 0}
+        exited = dict(LoadState='loaded', ActiveState='inactive', SubState='exited', Result='success',
+            ExecMainStatus='0', Environment='TRID_OWNED_RUN=cuda-evaluation-fixture',
+            InvocationID='evaluation-invocation', MemoryMax=str(L.LIMITS['rss_bytes']),
+            MemorySwapMax='0', DevicePolicy='closed', User='1001', Group='1001')
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'plan.json').write_text(json.dumps(plan))
+            (base / 'release.json').write_text(json.dumps({'instance_id': 'i-evaluation'}))
+            units = []
+            with patch.object(W.time, 'time', return_value=1000), \
+                    patch.object(W, 'unit_state', side_effect=[{'LoadState': 'not-found'}, exited, {'LoadState': 'not-found'}]), \
+                    patch.object(W, 'gpu_observation', side_effect=lambda deadline, **kw: (gpu, 0) if kw else gpu), \
+                    patch.object(W, 'verify_gpu_observation'), patch.object(W, 'cgroup_empty', return_value=True), \
+                    patch.object(W, 'command') as command, \
+                    patch.object(W, 'stop_unit', return_value={'ActiveState': 'inactive'}) as stop:
+                receipt = W.supervise_phase(plan, base, 'evaluation', gpu, 1001, 1001, 2000, units)
+                self.assertTrue(receipt['cleanup_verified'])
+                self.assertEqual(receipt['instance_id'], 'i-evaluation')
+                self.assertEqual(receipt['plan_sha256'], W.digest(base / 'plan.json'))
+                self.assertEqual(receipt['stopped_state'], {'ActiveState': 'inactive'})
+                self.assertEqual(units, [])
+                with self.assertRaises(FileExistsError):
+                    W.supervise_phase(plan, base, 'evaluation', gpu, 1001, 1001, 2000, units, seconds=600)
+                command.assert_called_once()
+                self.assertIn('RuntimeMaxSec=985', command.call_args.args[0])
+                stop.assert_called_once()
+
+
 class RuntimeBoundaryTests(unittest.TestCase):
     def test_unapproved_transitive_distribution_cannot_produce_runtime_receipt(self):
         distribution = lambda name, version: SimpleNamespace(metadata={'Name': name}, version=version)

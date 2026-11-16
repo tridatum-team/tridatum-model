@@ -51,6 +51,7 @@ INFERENCE_SCHEMA = 'trid-ordered-hf-inference-v1'
 FOLLOWUP_SCHEMA = 'trid-hf14-followup-v1'
 EIGHT_SCHEMA = 'trid-eight-sft-experiment-v1'
 FRESH_SCHEMA = 'trid-fresh-eight-training-experiment-v2'
+EVALUATION_SCHEMA = 'trid-fresh-eight-cuda-evaluation-v1'
 FOLLOWUP_PHASES = dict(acquire14=900, dev14=2400, val14=2400)
 CHECKPOINT_MAX = 32 * 1024**2
 CHECKPOINT_CHANNEL_BYTES = CHECKPOINT_MAX + 3 * 1024**2
@@ -59,6 +60,19 @@ ORDERED_PHASES = dict(acquire8=900, dev8=2400, val8=2400, parent_decision=300,
 ORDERED_MODELS = {
     'qwen8': ('Qwen/Qwen3-8B', 'b968826d9c46dd6066d109eabc6255188de91218'),
     'qwen14': ('Qwen/Qwen3-14B', '40c069824f4251a91eefaf281ebe4c544efd3e18')}
+
+def evaluation_mode(plan):
+    return plan.get('schema') == EVALUATION_SCHEMA
+
+
+def evaluation_module(plan):
+    require(evaluation_mode(plan), 'Evaluation helpers require the distinct CUDA evaluation schema')
+    if __package__:
+        from . import fresh_eight_evaluation
+    else:
+        import fresh_eight_evaluation
+    return fresh_eight_evaluation
+
 
 def fresh_mode(plan):
     return plan.get('schema') == FRESH_SCHEMA
@@ -74,24 +88,24 @@ def fresh_module(plan):
 
 
 def bounded_mode(plan):
-    return inference_mode(plan) or eight_mode(plan) or fresh_mode(plan)
+    return inference_mode(plan) or eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan)
 
 
 def lifetime_seconds(plan):
     """Scheduled compute lease; fresh total also includes the cleanup grace."""
-    return plan['limits']['lifetime_seconds'] if fresh_mode(plan) else LIMITS['lifetime_seconds']
+    return plan['limits']['lifetime_seconds'] if fresh_mode(plan) or evaluation_mode(plan) else LIMITS['lifetime_seconds']
 
 
 def reserve_seconds(plan):
-    return plan['limits']['reserve_seconds'] if fresh_mode(plan) else LIMITS['reserve_seconds']
+    return plan['limits']['reserve_seconds'] if fresh_mode(plan) or evaluation_mode(plan) else LIMITS['reserve_seconds']
 
 
 def export_limit(plan):
-    return plan['cost']['export_bytes'] if fresh_mode(plan) else MAX_EXPORT
+    return plan['cost']['export_bytes'] if fresh_mode(plan) or evaluation_mode(plan) else MAX_EXPORT
 
 
 def output_limit(plan):
-    return plan['limits']['output_bytes'] if fresh_mode(plan) else LIMITS['output_bytes']
+    return plan['limits']['output_bytes'] if fresh_mode(plan) or evaluation_mode(plan) else LIMITS['output_bytes']
 
 
 def schedule_name(identity):
@@ -138,6 +152,8 @@ def inference_mode(plan):
 
 
 def success_field(plan):
+    if evaluation_mode(plan):
+        return 'evaluation_success'
     if eight_mode(plan):
         return 'experimental_success'
     return 'inference_success' if inference_mode(plan) else 'training_success'
@@ -473,6 +489,45 @@ def fresh_cost_bound(plan):
                 invoice=False, spending_hard_cap=False)
 
 
+def evaluation_cost_bound(plan):
+    """Independent new USD20 grant; historical training spend is never reused."""
+    evaluation_module(plan).validate_limits(plan)
+    cost, network = plan['cost'], plan['network']
+    # At most120 readiness GETs plus one completion GET reserve121MiB even
+    # when every attempted range is charged in full; export ranges add512MiB.
+    require(cost['termination_grace_seconds'] == 900
+            and type(cost['export_bytes']) is int and 0 < cost['export_bytes'] <= 512 * 1024**2
+            and type(cost['controller_retrieval_bytes']) is int
+            and cost['export_bytes'] + 121 * 1024**2 <= cost['controller_retrieval_bytes'] <= GIB
+            and type(network['egress_byte_cap']) is int
+            and cost['export_bytes'] + 16 * 1024**2 <= network['egress_byte_cap'] <= 2 * GIB
+            and cost['network_egress_bytes'] == 3 * GIB
+            and plan['bundle']['bytes'] <= 128 * 1024**2
+            and plan['bundle']['bytes'] + cost['export_bytes'] + 8 * 1024**2
+                <= cost['retained_bytes'] <= 2 * GIB
+            and cost['retention_days'] == 30
+            and all(4608 <= cost[key] <= 10000 for key in ('get_requests', 'put_requests', 'control_requests'))
+            and type(cost['scheduler_invocations']) is int and cost['scheduler_invocations'] == 10000
+            and type(cost['tax_rate']) in (int, float) and cost['tax_rate'] == 0.10
+            and type(cost['contingency_usd']) in (int, float)
+            and math.isfinite(cost['contingency_usd']) and cost['contingency_usd'] >= 1,
+            'CUDA evaluation sealed storage/egress/request/tax envelope differs')
+    rates = {key: Decimal(str(value)) for key, value in cost['rates'].items()}
+    hours = Decimal(19800) / Decimal(3600)
+    usage = hours * (rates['ec2_hour'] + rates['ipv4_hour'])
+    usage += Decimal(120) * rates['ebs_gb_month'] * hours / Decimal(28 * 24)
+    usage += Decimal(cost['retained_bytes']) / Decimal(10**9) * rates['s3_gb_month'] * Decimal(31) / Decimal(28)
+    usage += Decimal(cost['network_egress_bytes']) / Decimal(10**9) * rates['egress_gb']
+    usage += cost['get_requests'] * rates['s3_get'] + cost['put_requests'] * rates['s3_put']
+    usage += cost['scheduler_invocations'] * rates['scheduler_invocation'] + Decimal(str(cost['ancillary_bound_usd']))
+    pretax = usage + Decimal(str(cost['contingency_usd']))
+    total = (pretax * (1 + Decimal(str(cost['tax_rate'])))).quantize(Decimal('0.01'), rounding=ROUND_CEILING)
+    require(total.is_finite() and total <= Decimal(20), 'CUDA evaluation all-in bound exceeds new USD20 grant')
+    return dict(additional_pretax_bound_usd=float(pretax), all_in_bound_usd=str(total),
+                current_run_cap_usd='20', tax_rate=cost['tax_rate'],
+                contingency_usd=cost['contingency_usd'], invoice=False, spending_hard_cap=False)
+
+
 def cost_bound(plan):
     """Conservative bill model, not a claim that AWS exposes a spending hard cap."""
     cost = plan['cost']
@@ -482,7 +537,7 @@ def cost_bound(plan):
             'Missing GET/PUT/storage/egress/scheduler price closure')
     require(all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in prices.values()),
             'Prices require finite observed paid rates; no free-tier assumption')
-    cap = 4.11 if fresh_mode(plan) else (20 if inference_mode(plan) or eight_mode(plan) else 50)
+    cap = 4.11 if fresh_mode(plan) else (20 if inference_mode(plan) or eight_mode(plan) or evaluation_mode(plan) else 50)
     require(cost['cap_usd'] == cap and 0 < cost['retention_days'] <= 30
             and type(cost['retention_days']) is int
             and cost['ancillary_bound_usd'] >= 0
@@ -495,6 +550,8 @@ def cost_bound(plan):
             'Request/termination reserve does not cover bounded controller')
     if fresh_mode(plan):
         return fresh_cost_bound(plan)
+    if evaluation_mode(plan):
+        return evaluation_cost_bound(plan)
     extra = eight_module(plan).CHANNEL_BYTES if eight_mode(plan) else (CHECKPOINT_CHANNEL_BYTES if ordered_mode(plan) else 0)
     if inference_mode(plan):
         require(cost['ancillary_bound_usd'] >= 5, 'Inference requires full USD5 ancillary reserve')
@@ -591,7 +648,7 @@ def validate_worker_policy(plan):
         f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
         dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
         f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])]
-    if fresh_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan):
         expected[0]['Resource'] = [f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}{name}"
             for name in ('plan.json', 'bundle.tar', 'approval-consumed.json', 'termination.json', 'release.json')]
         expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
@@ -617,7 +674,7 @@ def validate_worker_policy(plan):
 
 
 def validate_plan(plan, approval, plan_sha, *, now=None):
-    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA, FRESH_SCHEMA), 'Unknown plan schema')
+    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA, FRESH_SCHEMA, EVALUATION_SCHEMA), 'Unknown plan schema')
     ordered = inference_mode(plan)
     ident = plan['identity']
     run = ident['run_id']
@@ -635,7 +692,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
     require(ident['code_prefix'] != ident['output_prefix'], 'Separate code/output prefixes required')
     if fresh_mode(plan):
         validate_fresh_lifetime(plan)
-    require((fresh_mode(plan) or plan['limits'] == LIMITS) and plan['instance_type'] == 'g6e.2xlarge'
+    if evaluation_mode(plan):
+        evaluation_module(plan).validate_limits(plan)
+    require((fresh_mode(plan) or evaluation_mode(plan) or plan['limits'] == LIMITS) and plan['instance_type'] == 'g6e.2xlarge'
             and plan['vcpus'] == 8 and plan['host_mib'] == 65536
             and plan['architecture'] == 'x86_64', 'Fixed resource envelope differs')
     if ordered:
@@ -649,6 +708,11 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                     workload_sha256=object_sha(plan['workload']), limits=LIMITS,
                     ebs_kms_key_arn=key_arn, automatic_retry=False, approved=True),
                 'Exact USD20 inference-only approval is missing or mismatched')
+    elif evaluation_mode(plan):
+        key_arn = ebs_key_arn(plan)
+        require(not ({'recipe', 'data', 'evaluation', 'aggregate_ledger'} & set(plan)),
+                'CUDA evaluation cannot admit training or prior-budget fields')
+        evaluation_module(plan).validate_approval(plan, approval, plan_sha, key_arn)
     elif fresh_mode(plan):
         key_arn = ebs_key_arn(plan)
         require(plan['recipe'] == fresh_module(plan).RECIPE, 'Frozen fresh600 recipe differs')
@@ -697,7 +761,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         else:
             require('model' not in plan or plan['model'] == models['qwen8'], 'Initial model must be immutable 8B')
     else:
-        models = {'qwen8' if eight_mode(plan) or fresh_mode(plan) else 'qwen14': plan['model']}
+        models = {'qwen8' if eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) else 'qwen14': plan['model']}
     file_count = 0
     for model_key, model in models.items():
         model_id, revision = ORDERED_MODELS[model_key]
@@ -734,6 +798,10 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                 and all(bundled.get(plan[key]['path']) == plan[key]
                         for key in ('resource_envelope', 'aggregate_ledger', 'authorization')),
                 'Fresh resource authorization and aggregate ledger must be sealed into the bounded bundle')
+    if evaluation_mode(plan):
+        require(all(bundled.get(plan[key]['path']) == plan[key]
+                    for key in ('resource_envelope', 'authorization')),
+                'CUDA evaluation resource envelope and fresh authorization must be bundled')
     bootstrap = runtime['bootstrap']
     require(set(bootstrap) == {'admission', 'nvidia_modprobe'},
             'Only verified same-AMI venv plus the pinned historical modprobe package is supported')
@@ -752,6 +820,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
     required_sources = (SOURCES | eight_module(plan).SOURCE_NAMES) if eight_mode(plan) else (ordered_sources() if ordered else SOURCES)
     if fresh_mode(plan):
         required_sources = SOURCES | fresh_module(plan).SOURCE_NAMES | {'scripts/aws_eval/fresh_eight_launch.py'}
+    if evaluation_mode(plan):
+        required_sources = evaluation_module(plan).REQUIRED_SOURCES
     require(required_sources <= set(bundled) and set(plan['sources']) >= required_sources
             and {n for n in bundled if n.endswith(('.py', '.sh'))} <= set(plan['sources'])
             and all(bundled[k]['sha256'] == v for k, v in plan['sources'].items()),
@@ -766,6 +836,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         validate_worker_policy(plan)
     elif fresh_mode(plan):
         fresh_module(plan).validate_workload(plan, bundled)
+        validate_worker_policy(plan)
+    elif evaluation_mode(plan):
+        evaluation_module(plan).validate_workload(plan, bundled)
         validate_worker_policy(plan)
     else:
         data = plan['data']
@@ -817,6 +890,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         required_outputs = eight_module(plan).output_members(plan)
     if fresh_mode(plan):
         required_outputs = fresh_module(plan).output_members(plan)
+    if evaluation_mode(plan):
+        required_outputs = evaluation_module(plan).output_members(plan)
     require(len(plan['output_allowlist']) == len(required_outputs)
             and set(plan['output_allowlist']) == required_outputs,
             'Exact registered export allowlist required')
@@ -1031,7 +1106,66 @@ def validate_fresh_resources(root, plan):
     return envelope
 
 
+def validate_evaluation_resources(root, plan):
+    """Authenticate the exact newly approved grant, never a training authorization."""
+    def bound(pin):
+        require(set(pin) == {'path', 'bytes', 'sha256'}, 'Exact evaluation evidence pin required')
+        relative(pin['path'])
+        path = Path(root) / pin['path']
+        require(path.is_file() and not path.is_symlink() and path.stat().st_size == pin['bytes'],
+                'Evaluation resource evidence size/type differs')
+        return read_bound(path, pin['sha256'])
+
+    authorization = bound(plan['authorization'])
+    require(plan['authorization']['path'] ==
+            'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
+            and plan['authorization']['sha256'] == '4967ea79e40e1f5df25004460642d80f8832c190d8d785323250cf2428fafd98'
+            and authorization['schema'] == 'trid-cuda-evaluation-authorization-v1'
+            and authorization['run_id'] == plan['identity']['run_id']
+            and authorization['cap_usd'] == '20'
+            and authorization['additional_to_prior_spending'] is True
+            and authorization['maximum_instance_executions'] == 1
+            and authorization['maximum_total_lifetime_seconds_including_shutdown_grace'] == 19800
+            and authorization['work_lease_seconds'] == 18900
+            and authorization['shutdown_grace_seconds'] == 900
+            and authorization['evaluation_only'] is True
+            and authorization['retraining_allowed'] is False
+            and authorization['automatic_instance_retry_allowed'] is False
+            and authorization['prior_training_authorization_reused'] is False,
+            'Exact new CUDA evaluation authorization required')
+    envelope = bound(plan['resource_envelope'])
+    require(envelope['schema'] == 'trid-cuda-evaluation-resource-envelope-v1'
+            and envelope['identity'] == plan['identity']
+            and envelope['authorization'] == plan['authorization']
+            and 'aggregate_ledger' not in envelope
+            and envelope['instance_type'] == plan['instance_type'] == 'g6e.2xlarge'
+            and envelope['root_gib'] == 120 and envelope['root_encrypted'] is True
+            and envelope['root_delete_on_termination'] is True
+            and envelope['gpu_execution_lease_seconds_max'] == 18900
+            and envelope['export_reserve_seconds'] == 300
+            and envelope['termination_grace_seconds_max'] == 900
+            and envelope['total_billable_lifetime_seconds_max'] == 19800
+            and envelope['whole_host_egress_bytes_max'] == 2 * GIB
+            and envelope['controller_retrieval_bytes_max'] == GIB
+            and envelope['priced_egress_bytes'] == 3 * GIB
+            and envelope['combined_retained_s3_bytes_max'] == 2 * GIB
+            and envelope['output_archive_bytes_max'] == 512 * 1024**2
+            and envelope['bundle_bytes_max'] == 128 * 1024**2
+            and envelope['s3_expiration_days'] == 30 and envelope['multipart_abort_days'] == 1
+            and envelope['scheduler_invocations_max'] == 10000
+            and Decimal(envelope['budget_usd']) == Decimal(20)
+            and Decimal(envelope['tax_assumption']) == Decimal('0.10')
+            and Decimal(envelope['contingency_before_tax_usd']) == Decimal(1)
+            and envelope['billing_hard_cap'] is False,
+            'Parent-authorized CUDA evaluation resource envelope differs')
+    bound(envelope['cost_evidence'])
+    return envelope
+
+
 def validate_data(root, plan):
+    if evaluation_mode(plan):
+        validate_evaluation_resources(root, plan)
+        return evaluation_module(plan).validate_data(root, plan)
     if fresh_mode(plan):
         validate_fresh_resources(root, plan)
         return fresh_module(plan).validate_data(root, plan)
@@ -1372,7 +1506,7 @@ def validate_lifecycle_configuration(plan, observed):
                 exact.append(rule)
         require(len(exact) == 1 and exact[0].get('Expiration') == {'Days': plan['cost']['retention_days']},
                 'Existing exact-prefix expiration closure missing; do not overwrite bucket rules')
-        if fresh_mode(plan):
+        if fresh_mode(plan) or evaluation_mode(plan):
             require(exact[0].get('AbortIncompleteMultipartUpload') == {'DaysAfterInitiation': 1},
                     'Fresh owned prefixes require one-day incomplete multipart cleanup')
     return observed
@@ -1989,6 +2123,22 @@ def download_export_ranges(client, identity, pin, path, *, chunk_bytes=8 * 1024*
     return {key: head[key] for key in ('ETag', 'VersionId', 'ContentLength') if key in head}
 
 
+def validate_evaluation_terminal(plan, plan_sha, instance_id, completion):
+    require(completion['evaluation_success'] is True and completion['stop_errors'] == []
+            and completion['completion_scope'] == evaluation_module(plan).COMPLETION_SCOPE
+            and completion['quality_accepted'] is False
+            and [stage['phase'] for stage in completion['stages']] == ['evaluation'],
+            'CUDA evaluation execution/quality scope differs')
+    for phase, stage in [('runtime', completion['runtime_unit']), ('evaluation', completion['stages'][0])]:
+        require(stage['phase'] == phase and stage['state'] == 'complete'
+                and stage['run_id'] == plan['identity']['run_id'] and stage['plan_sha256'] == plan_sha
+                and stage['instance_id'] == instance_id
+                and stage['unit'] == plan['identity']['run_id'] + '-' + phase
+                and stage['invocation'] and stage['cleanup_verified'] is True
+                and stage['stopped_state']['ActiveState'] in ('inactive', 'failed')
+                and stage['gpu'], 'CUDA evaluation owned phase cleanup differs')
+
+
 def collect_export(client, plan, plan_sha, state, instance_id):
     """Authenticate evidence; explicit terminal failure may have metadata only.
 
@@ -1998,7 +2148,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
     """
     state = Path(state)
     identity = plan['identity']
-    if fresh_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan):
         client.retrieval_byte_limit = plan['cost']['controller_retrieval_bytes']
         exclusive_intent(state / 'export-retrieval-intent.json',
             dict(run_id=identity['run_id'], plan_sha256=plan_sha, instance_id=instance_id,
@@ -2072,6 +2222,17 @@ def collect_export(client, plan, plan_sha, state, instance_id):
                 'Eight independently retrieved dev/parent provenance differs')
             eight_module(plan).validate_dev_export(plan, plan_sha, receipt, destination)
             eight_module(plan).validate_completion(plan, plan_sha, completion, destination)
+    elif evaluation_mode(plan):
+        require('training_success' not in completion and 'inference_success' not in completion
+                and manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
+                'CUDA evaluation terminal manifest status differs')
+        if native:
+            validate_evaluation_terminal(plan, plan_sha, instance_id, completion)
+            destination = state / 'cuda-evaluation-export'
+            authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
+                unpacked_bytes=output_limit(plan), files=rows), destination)
+            evaluation_module(plan).validate_completion(destination, plan)
+            evaluation_module(plan).validate_supervision(destination, plan)
     elif fresh_mode(plan):
         status = manifest['status']
         require(isinstance(status, dict)
@@ -2131,7 +2292,7 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
                 and created.get('ScheduleArn') == snapshot['Arn'],
                 'Ordered schedule successful creation provenance differs')
     deletion = None
-    if plan is not None and (eight_mode(plan) or fresh_mode(plan)):
+    if plan is not None and (eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan)):
         deletion = dict(run_id=identity['run_id'], plan_sha256=plan_sha,
             name=schedule_name(identity), group_name=identity['schedule_group'],
             schedule_readback_sha256=object_sha(snapshot),
@@ -2183,7 +2344,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     state = Path(state)
     state.mkdir(parents=True, exist_ok=True)
     identity = plan['identity']
-    if fresh_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan):
         client.retrieval_byte_limit = plan['cost']['controller_retrieval_bytes']
     ordered = bounded_mode(plan)
     dispatch_root = Path(dispatch_state) if dispatch_state is not None else state
@@ -2207,6 +2368,8 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     if fresh_mode(plan):
         result.update(completion_scope='cuda_capacity_train_export_only',
                       quality_accepted=False, cloud_evaluation=False)
+    if evaluation_mode(plan):
+        result.update(completion_scope=evaluation_module(plan).COMPLETION_SCOPE, quality_accepted=False)
     evidence_path = state / 'volume-identity.json'
     evidence = volume_identity(identity, plan_sha, plan['ami']['RootDeviceName'])
     try:
