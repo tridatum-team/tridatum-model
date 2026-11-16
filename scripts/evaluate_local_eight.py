@@ -12,12 +12,22 @@ prospectively fixed final step150 and accepted parent supervision. Candidate
 mode uses base/candidate arms, forbids export overrides and secondary decoder
 search, and only hashes the opaque review-protocol bytes (never parses them).
 
-The local CLI is MPS-only. The supervised fresh CUDA worker calls
-evaluate_cloud(plan, base), authenticating its separate CUDA training/cleanup
-receipts, loading a fresh official base, and producing all400 primary answers.
-CUDA receipts are explicitly attributed, portable on export, and cannot be
-accepted by impersonating local MPS provenance. Export and controller cleanup
-must complete before the resulting candidate can enter blind assessment.
+The local CLI is MPS-only. Fresh CUDA training-only candidates are accepted only
+after full capacity/training/export and independent instance/root-volume cleanup.
+Their training runtime/source seal stays distinct from local inference receipts.
+Local evaluation loads the same authenticated official BF16 base and FP32 LoRA,
+then produces all400 primary answers; training success is never quality acceptance.
+Legacy local candidates and historical step24 keep their existing BF16 inference.
+
+CUDA-trained candidate execution also requires --local-registration FILE and
+--local-registration-sha256 SHA, issued after cloud cleanup. The immutable local
+registration binds the complete evaluator command (without these registration
+flags), candidate/input/model pins, exact generation, executable source closure,
+worker environment, distinct fresh output/supervision directories, and fixed
+LOCAL_LIMITS. The supervisor reuses local_mps_training's host probes, allocator
+cap, per-user exclusion lock and owned-process-group gate/cleanup conventions.
+Its 43200-second deadline is independent of the CUDA lease; no retry or fallback.
+Only accepted parent cleanup plus complete paired receipts can enter grading.
 
 Each attempt is fsynced before generation and each completed answer immediately
 afterwards. An interruption leaves the immutable run identity, preflight, attempt
@@ -46,6 +56,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts/aws_eval'))
 from grounded_hf_worker import decode_generation
 
@@ -441,12 +453,6 @@ def mps_memory(torch):
                 peak_scope='runtime lifetime; only max_* APIs, when available, are peaks')
 
 
-def runtime_memory(torch, device):
-    if device == 'mps':
-        return mps_memory(torch)
-    return dict(bytes={name: int(getattr(torch.cuda, name)()) for name in
-        ('memory_allocated', 'memory_reserved', 'max_memory_allocated', 'max_memory_reserved')},
-        unsupported=[], peak_scope='CUDA runtime lifetime')
 
 
 def generation_target(model):
@@ -512,22 +518,38 @@ def observe_generation_policy(model, expected_config):
             target._prepare_generation_config = previous
 
 
+def inference_parameter_inventory(model, torch, fp32_adapter):
+    """Observe actual MPS parameters; CUDA training provenance is not a device hint."""
+    inventory = {'base': {}, 'adapter': {}}
+    for name, parameter in model.named_parameters():
+        group = 'adapter' if '.lora_A.' in name or '.lora_B.' in name else 'base'
+        expected = torch.float32 if group == 'adapter' and fp32_adapter else torch.bfloat16
+        require(parameter.device.type == 'mps' and parameter.dtype == expected,
+                'Loaded parameter device/dtype differs; no casting fallback')
+        key = str(parameter.dtype) + '@' + str(parameter.device)
+        entry = inventory[group].setdefault(key, dict(tensors=0, elements=0, bytes=0))
+        entry['tensors'] += 1
+        entry['elements'] += parameter.numel()
+        entry['bytes'] += parameter.numel() * parameter.element_size()
+    require(all(inventory.values()), 'Loaded base/adapter inventory missing')
+    return inventory
+
+
 def answer_record(case, arm, binding, config, tokens, tokenizer, elapsed, memory, contract=None):
     decoded = decode_generation(tokenizer, tokens, config['eos_token_id'], GENERATION['max_new_tokens'])
-    generation = contract['policy_document']['evaluation']['generation'] if contract and contract.get('runtime') == 'cuda' else GENERATION
-    return dict(**case, arm=arm, **binding, generation=dict(generation),
+    return dict(**case, arm=arm, **binding, generation=dict(GENERATION),
                 adapter_weights_sha256=None if arm == 'base' else (contract['adapter_sha256'] if contract else ADAPTER_SHA),
                 generation_config=config, output_token_ids=tokens, **decoded,
                 exception=None, context_truncated=False, skipped_context=False,
                 truncated_output=decoded['termination_reason'] == 'length',
-                elapsed_seconds=elapsed, **{'cuda_memory' if contract and contract.get('runtime') == 'cuda' else 'mps_memory': memory})
+                elapsed_seconds=elapsed, mps_memory=memory)
 
 
 def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=None, contract=None):
     arms = contract['arms'] if contract else ARMS
-    device = 'cuda' if contract and contract.get('runtime') == 'cuda' else 'mps'
-    backend = torch.cuda if device == 'cuda' else torch.mps
-    generation = contract['policy_document']['evaluation']['generation'] if device == 'cuda' else GENERATION
+    device = 'mps'
+    backend = torch.mps
+    generation = GENERATION
     with contextlib.ExitStack() as stack:
         streams = {arm: stack.enter_context((out / f'{arm}-outputs.jsonl').open('x', encoding='utf-8'))
                    for arm in arms}
@@ -556,7 +578,7 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                     tokens = result.sequences[0, len(case['prompt_token_ids']):].tolist()
                     elapsed = time.perf_counter() - started
                     row = answer_record(case, arm, binding, config.to_dict(), tokens,
-                                        tokenizer, elapsed, runtime_memory(torch, device), contract=contract)
+                                        tokenizer, elapsed, mps_memory(torch), contract=contract)
                     row['effective_generation_mode'] = observed['generation_mode']
                     append_row(streams[arm], row)
                     print(json.dumps(dict(event='answer_complete', id=case['id'], arm=arm,
@@ -578,6 +600,297 @@ def run_pairs(torch, model, tokenizer, prepared, config, binding, out, decoder=N
                     raise
 
 
+LOCAL_LIMITS = dict(evaluation_deadline_seconds=43200, pressure_required=1,
+    minimum_pressure_free_percent=10, require_ac_power=False, swap_growth_limit_bytes=1024 ** 3,
+    process_group_rss_limit_bytes=24 * 1024 ** 3, process_group_footprint_limit_bytes=24 * 1024 ** 3,
+    mps_allocator_limit_bytes=20 * 1024 ** 3, mps_driver_limit_bytes=22 * 1024 ** 3,
+    sample_seconds=1, term_grace_seconds=3, kill_cleanup_seconds=10)
+LOCAL_SOURCES = {
+    'scripts/evaluate_local_eight.py', 'scripts/local_eight_candidate.py', 'scripts/local_mps_training.py',
+    'scripts/train_open_weight_lora.py', 'scripts/aws_eval/grounded_hf_worker.py',
+    'scripts/aws_eval/grounded_hf_lifecycle.py', 'scripts/aws_eval/qwen_cuda_smoke.py',
+    'scripts/aws_eval/qwen_cpu_smoke.py', 'scripts/aws_eval/fresh_eight_experiment.py',
+    'trid/prompts.py', 'trid/text.py', 'trid/case_prompts.py',
+}
+
+
+def evaluation_command(args):
+    return [sys.executable, '-u', '-B', str(Path(__file__).resolve()),
+        '--model-directory', str(args.model_directory.resolve()),
+        '--model-metadata', str(args.model_metadata.resolve()),
+        '--inputs', str(args.inputs.resolve()), '--inputs-sha256', args.inputs_sha256,
+        '--candidate-manifest', str(args.candidate_manifest.resolve()),
+        '--candidate-sha256', args.candidate_sha256, '--mode', args.mode,
+        '--decoder-profile', args.decoder_profile, '--out', str(args.out.resolve())]
+
+
+def local_registration(path, expected_sha, args=None):
+    """Authenticate local execution authorization without importing model code."""
+    import local_mps_training as guard
+    from local_eight_candidate import bound, file_pin, load, resolve_candidate
+    registration_pin = file_pin(path)
+    require(registration_pin['sha256'] == expected_sha, 'Local registration hash differs')
+    registration = load(path)
+    require(set(registration) == {'schema', 'candidate', 'inputs', 'model_metadata', 'model_directory',
+            'generation', 'sources', 'supervision', 'output', 'supervision_output', 'command', 'environment'}
+            and registration['schema'] == 'trid-local-eight-evaluation-registration-v1',
+            'Local evaluation registration differs')
+    require(canonical(registration['supervision']) == canonical(LOCAL_LIMITS)
+            and registration['generation'] == GENERATION and registration['environment'] == guard.WORKER_ENV,
+            'Local registered supervision/generation/environment differs')
+    for field in ('output', 'supervision_output', 'model_directory'):
+        value = Path(registration[field])
+        require(value.is_absolute() and str(value.resolve()) == str(value), 'Local registered path differs')
+    output, supervision = Path(registration['output']), Path(registration['supervision_output'])
+    require(output != supervision and not output.is_relative_to(supervision)
+            and not supervision.is_relative_to(output), 'Local output/supervision directories overlap')
+    candidate = bound(ROOT, registration['candidate'])
+    inputs = bound(ROOT, registration['inputs'])
+    metadata = bound(ROOT, registration['model_metadata'])
+    contract = resolve_candidate(ROOT, candidate, registration['candidate']['sha256'])
+    require(contract.get('training_runtime') == 'cuda' and contract.get('inference_runtime') == 'mps',
+            'Local supervision requires accepted CUDA training-only candidate')
+    policy = contract['policy_document']
+    require(registration['inputs']['sha256'] == policy['data']['evaluation_inputs']['sha256']
+            and registration['model_metadata']['sha256'] == policy['model']['acquisition_manifest']['sha256']
+            and registration['model_directory'] == str((ROOT / policy['model']['directory']).resolve())
+            and registration['generation'] == policy['evaluation']['generation'],
+            'Local registered candidate/input/model policy differs')
+    sources = registration['sources']
+    require(isinstance(sources, dict) and LOCAL_SOURCES <= sources.keys(), 'Local source closure incomplete')
+    for name, entry in sources.items():
+        relative = Path(name)
+        require(not relative.is_absolute() and '..' not in relative.parts
+                and relative.parts[0] in ('scripts', 'trid') and relative.suffix == '.py'
+                and name == relative.as_posix() and bound(ROOT, entry) == (ROOT / relative).resolve(),
+                'Local source path substitution')
+    if args is not None:
+        require(args.mode == 'evaluation' and not args.smoke_id and args.export is None
+                and args.decoder_profile == 'unconstrained' and args.candidate_manifest is not None,
+                'Guarded candidate requires exactly primary200 paired evaluation')
+        require(registration['command'] == evaluation_command(args)
+                and candidate == args.candidate_manifest.resolve()
+                and registration['candidate']['sha256'] == args.candidate_sha256
+                and inputs == args.inputs.resolve() and registration['inputs']['sha256'] == args.inputs_sha256
+                and metadata == args.model_metadata.resolve()
+                and registration['model_directory'] == str(args.model_directory.resolve())
+                and output == args.out.resolve(), 'Local registered command differs')
+    return registration, registration_pin
+
+
+def authenticate_local_sources(registration, sources):
+    require(sources and all(name in registration['sources']
+            and all(entry[field] == registration['sources'][name][field] for field in ('bytes', 'sha256'))
+            for name, entry in sources.items()), 'Unregistered local inference source')
+
+
+def supervised_evaluation(args, registration, registration_pin):
+    """Use the training guard's Darwin probes, gate, lock, and owned-PGID rules."""
+    import fcntl
+    import signal
+    import subprocess
+    import local_mps_training as guard
+    out = Path(registration['supervision_output'])
+    out.mkdir(parents=True, exist_ok=False)
+    require(not args.out.exists(), 'Local evaluation output already exists')
+    result = dict(schema='trid-local-eight-evaluation-supervision-v1', status='failed',
+        registration=registration_pin, startup_released=False, signals=[], samples=[],
+        cleanup=dict(accepted=False, leader_reaped=False, remaining_members=None))
+    guard.save(out / 'result.json', result)
+    child = lock = log = None
+    gate_read = gate_write = None
+    handlers = {}
+    limits = registration['supervision']
+    started = time.monotonic()
+
+    def interrupt(signum, frame):
+        raise TimeoutError('Local evaluation deadline' if signum == signal.SIGALRM else 'Local evaluation interrupted')
+
+    def send(sig):
+        attempt = dict(signal=signal.Signals(sig).name, pgid=child.pid)
+        result['signals'].append(attempt)
+        try:
+            os.killpg(child.pid, sig)
+            attempt['result'] = 'sent'
+        except ProcessLookupError:
+            attempt['result'] = 'absent'
+        except PermissionError:
+            rows = guard.group_members(child.pid, footprint=False)
+            require(len(rows) == 1 and rows[0]['pid'] == child.pid and rows[0]['status'].startswith('Z'),
+                    'Cannot signal living owned process group')
+            attempt['result'] = 'sole_unreaped_zombie'
+
+    try:
+        require(sys.platform == 'darwin', 'MPS supervision requires Darwin')
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM):
+            handlers[sig] = signal.signal(sig, interrupt)
+        deadline = started + limits['evaluation_deadline_seconds']
+        signal.setitimer(signal.ITIMER_REAL, max(.001, deadline - time.monotonic()))
+        lock_path = Path.home() / '.trid-local-mps-training.lock'
+        lock = lock_path.open('a+')
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result['device_lock'] = str(lock_path)
+        host = guard.host_probe()
+        baseline = host['swap_bytes']
+        result['swap_baseline_bytes'] = baseline
+        require(guard.stop_reason(limits, host, [], baseline) is None, 'Host startup guard refused')
+        gate_read, gate_write = os.pipe()
+        env = guard.worker_environment()
+        env.update(TRID_MPS_GATE_FD=str(gate_read), TRID_MPS_PARENT=str(os.getpid()))
+        command = registration['command'] + ['--local-registration', str(args.local_registration.resolve()),
+            '--local-registration-sha256', args.local_registration_sha256, '--supervised-worker']
+        log = (out / 'worker.log').open('xb')
+        child = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL, stdout=log,
+            stderr=subprocess.STDOUT, pass_fds=(gate_read,), start_new_session=True, cwd=ROOT)
+        os.close(gate_read); gate_read = None
+        require(os.getpgid(child.pid) == child.pid, 'Worker process group ownership')
+        result['worker_pid'] = child.pid
+        require(guard.stop_reason(limits, guard.host_probe(), guard.group_members(child.pid), baseline) is None,
+                'Host startup gate refused')
+        os.write(gate_write, b'G'); os.close(gate_write); gate_write = None
+        result['startup_released'] = True
+        guard.save(out / 'result.json', result)
+        while True:
+            host = guard.host_probe()
+            rows = guard.group_members(child.pid)
+            result['samples'].append(dict(elapsed_seconds=time.monotonic() - started, host=host, members=rows,
+                mps=guard.telemetry_check(out / 'telemetry.json', limits)))
+            require(guard.stop_reason(limits, host, rows, baseline) is None, 'External host/memory guard refused')
+            require(time.monotonic() < deadline, 'Local evaluation deadline exceeded')
+            leader = next((row for row in rows if row['pid'] == child.pid), None)
+            if leader is None or leader['status'].startswith('Z'):
+                result['stop_reason'] = 'worker_exit'
+                break
+            time.sleep(limits['sample_seconds'])
+    except BaseException as error:
+        result['error'] = repr(error)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        errors = []
+        if child is not None:
+            try:
+                send(signal.SIGTERM)
+                until = time.monotonic() + limits['term_grace_seconds']
+                while time.monotonic() < until:
+                    if not any(not row['status'].startswith('Z') for row in guard.group_members(child.pid, footprint=False)):
+                        break
+                    time.sleep(.05)
+            except BaseException as error:
+                errors.append(repr(error))
+            try:
+                send(signal.SIGKILL)
+            except BaseException as error:
+                errors.append(repr(error))
+            try:
+                until = time.monotonic() + limits['kill_cleanup_seconds']
+                while True:
+                    rows = guard.group_members(child.pid, footprint=False)
+                    if all(row['pid'] == child.pid and row['status'].startswith('Z') for row in rows):
+                        break
+                    require(time.monotonic() < until, 'Owned evaluation descendants did not exit')
+                    time.sleep(.05)
+                result['cleanup']['members_before_reap'] = rows
+                result['exit_code'] = child.wait(timeout=max(.01, until - time.monotonic()))
+                result['cleanup']['leader_reaped'] = True
+                result['cleanup']['remaining_members'] = guard.group_members(child.pid, footprint=False)
+            except BaseException as error:
+                errors.append(repr(error))
+        else:
+            result['cleanup']['remaining_members'] = []
+        for fd in (gate_read, gate_write):
+            if fd is not None:
+                os.close(fd)
+        if log:
+            log.close()
+        result['cleanup']['errors'] = errors
+        result['cleanup']['accepted'] = bool(child is not None and not errors
+            and result['cleanup']['leader_reaped'] and result['cleanup']['remaining_members'] == [])
+        try:
+            require('error' not in result and result.get('stop_reason') == 'worker_exit'
+                    and result.get('exit_code') == 0 and result['cleanup']['accepted'],
+                    'Local evaluation or owned-process cleanup failed')
+            require(guard.telemetry_check(out / 'telemetry.json', limits) is not None, 'Missing MPS telemetry')
+            completion = load_json(args.out / 'completion.json')
+            require(completion.get('status') == 'complete' and completion.get('rows_per_arm') == 200
+                    and set(completion.get('outputs', {})) == {'base', 'candidate'},
+                    'Local paired completion is incomplete')
+            for name in ('run-manifest.json', 'loaded-runtime.json'):
+                receipt = load_json(args.out / name)
+                authenticate_local_sources(registration, receipt['code'])
+            manifest = load_json(args.out / 'run-manifest.json')
+            require(manifest.get('local_registration') == registration_pin
+                    and completion.get('run_manifest_sha256') == digest(args.out / 'run-manifest.json'),
+                    'Local worker registration/completion binding differs')
+            for arm, entry in completion['outputs'].items():
+                require(entry == pin(args.out / (arm + '-outputs.jsonl')), 'Local completed output pin differs')
+            result['completion'] = pin(args.out / 'completion.json')
+            result['status'] = 'accepted'
+        except BaseException as error:
+            result['acceptance_error'] = repr(error)
+        result['elapsed_seconds'] = time.monotonic() - started
+        guard.save(out / 'result.json', result)
+        if lock:
+            lock.close()
+        for sig, handler in handlers.items():
+            signal.signal(sig, handler)
+    return result
+
+
+def start_mps_telemetry(torch, registration):
+    import threading
+    import local_mps_training as guard
+    stop = threading.Event()
+    path = Path(registration['supervision_output']) / 'telemetry.json'
+
+    def sample():
+        value = dict(monotonic=time.monotonic(), allocator_bytes=int(torch.mps.current_allocated_memory()),
+                     driver_bytes=int(torch.mps.driver_allocated_memory()))
+        guard.save(path, value)
+        guard.telemetry_check(path, registration['supervision'])
+
+    def monitor():
+        while not stop.wait(registration['supervision']['sample_seconds']):
+            try:
+                sample()
+            except BaseException as error:
+                guard.save(path, dict(allocator_bytes=0, driver_bytes=0, failure=repr(error)))
+                return
+
+    sample()
+    thread = threading.Thread(target=monitor, name='mps-evaluation-telemetry', daemon=True)
+    thread.start()
+    return stop, thread
+
+
+def accepted_local_supervision(registration_pin, directory):
+    from local_eight_candidate import bound, load
+    registration, _ = local_registration(bound(ROOT, registration_pin), registration_pin['sha256'])
+    require(Path(registration['output']) == Path(directory).resolve(), 'Local supervised output differs')
+    path = Path(registration['supervision_output']) / 'result.json'
+    result = load(path)
+    cleanup = result.get('cleanup', {})
+    require(result.get('schema') == 'trid-local-eight-evaluation-supervision-v1'
+            and result.get('registration') == registration_pin and result.get('status') == 'accepted'
+            and result.get('startup_released') is True and result.get('exit_code') == 0
+            and result.get('stop_reason') == 'worker_exit'
+            and not any(key in result for key in ('error', 'acceptance_error'))
+            and cleanup.get('accepted') is True and cleanup.get('leader_reaped') is True
+            and cleanup.get('remaining_members') == [] and cleanup.get('errors') == [],
+            'Local parent evaluation/cleanup was not accepted')
+    require(bound(ROOT, result['completion']) == Path(directory).resolve() / 'completion.json',
+            'Local accepted completion differs')
+    manifest = load(Path(directory) / 'run-manifest.json')
+    require(manifest.get('local_registration') == registration_pin
+            and manifest['evaluation_contract']['registration']['sha256'] == registration['candidate']['sha256']
+            and manifest['input']['sha256'] == registration['inputs']['sha256']
+            and manifest['generation'] == registration['generation']
+            and manifest['model']['directory'] == registration['model_directory'],
+            'Accepted local registration/worker binding differs')
+    for name in ('run-manifest.json', 'loaded-runtime.json'):
+        authenticate_local_sources(registration, load(Path(directory) / name)['code'])
+    return path
+
+
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--model-directory', required=True, type=Path)
@@ -592,14 +905,36 @@ def parser():
     p.add_argument('--decoder-profile', choices=('unconstrained', 'json-schema'),
                    default='unconstrained')
     p.add_argument('--out', required=True, type=Path)
+    p.add_argument('--local-registration', type=Path)
+    p.add_argument('--local-registration-sha256')
+    p.add_argument('--supervised-worker', action='store_true', help=argparse.SUPPRESS)
     return p
 
 
 def main(argv=None):
     args = parser().parse_args(argv)
+    require(bool(args.local_registration) == bool(args.local_registration_sha256),
+            'Local registration and SHA must be paired')
+    require(not args.supervised_worker or args.local_registration, 'Worker requires local registration')
+    registration = registration_pin = None
+    if args.local_registration:
+        registration, registration_pin = local_registration(
+            args.local_registration, args.local_registration_sha256, args)
+        if not args.supervised_worker:
+            result = supervised_evaluation(args, registration, registration_pin)
+            require(result['status'] == 'accepted', 'Local evaluation supervision rejected: '
+                    + result.get('error', result.get('acceptance_error', 'unaccepted completion')))
+            return
+        fd = int(os.environ['TRID_MPS_GATE_FD'])
+        require(os.getppid() == int(os.environ['TRID_MPS_PARENT']), 'Local worker parent differs')
+        try:
+            require(os.read(fd, 1) == b'G', 'Parent did not release evaluation startup gate')
+        finally:
+            os.close(fd)
     # A path is claimed once, before any expensive work. Existing paths are refused.
     args.out.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
+    telemetry = None
     try:
         require(os.environ.get('PYTORCH_ENABLE_MPS_FALLBACK', '0') == '0',
                 'MPS CPU fallback is forbidden')
@@ -616,8 +951,10 @@ def main(argv=None):
             require(args.export is None and args.decoder_profile == 'unconstrained',
                     'candidate registration forbids export overrides and secondary profile search')
             contract = resolve_candidate(ROOT, args.candidate_manifest, args.candidate_sha256)
-            require(contract.get('runtime', 'mps') == 'mps',
-                    'CUDA candidates require the supervised CUDA producer, never the local MPS entry point')
+            require(contract.get('inference_runtime', 'mps') == 'mps',
+                    'Candidate inference must use native local MPS')
+            require(contract.get('training_runtime') != 'cuda' or (registration and args.supervised_worker),
+                    'CUDA-trained candidate requires guarded local evaluation entry')
             policy = contract['policy_document']
             require(input_pin['sha256'] == policy['data']['evaluation_inputs']['sha256']
                     and model_pin['acquisition_manifest']['sha256'] == policy['model']['acquisition_manifest']['sha256']
@@ -635,6 +972,11 @@ def main(argv=None):
         from train_open_weight_lora import load_qwen3_pread
         require(torch.backends.mps.is_available(), 'MPS is required; no backend fallback')
         require(platform.system() == 'Darwin', 'This diagnostic requires native macOS MPS')
+        allocator = None
+        if registration:
+            import local_mps_training as guard
+            allocator = guard.configure_allocator(torch, registration['supervision'])
+            telemetry = start_mps_telemetry(torch, registration)
         tokenizer = AutoTokenizer.from_pretrained(args.model_directory, local_files_only=True,
                                                   trust_remote_code=False)
         prepared = preflight_prompts(tokenizer, selected)
@@ -651,6 +993,8 @@ def main(argv=None):
             torch_threads=torch.get_num_threads(), cpu_fallback=False,
             mps_environment={k: v for k, v in sorted(os.environ.items()) if k.startswith('PYTORCH_MPS_')},
             cuda_equivalence_claim=False)
+        if registration:
+            runtime['allocator_policy'] = allocator
         identity = dict(schema='trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1', mode=args.mode,
             model=model_pin, adapter=adapter_pin, input=input_pin,
             selected_ids=[r['id'] for r in selected], generation=GENERATION,
@@ -659,6 +1003,9 @@ def main(argv=None):
             paired_order='each input: base with adapter disabled, then registered adapter enabled' if contract
                         else 'each input: base with adapter disabled, then step24 enabled',
             grading_access=False, retries=False, resume=False)
+        if registration:
+            authenticate_local_sources(registration, identity['code'])
+            identity['local_registration'] = registration_pin
         if contract:
             identity['evaluation_contract'] = public_contract(contract)
         save_new(args.out / 'run-manifest.json', identity)
@@ -668,11 +1015,11 @@ def main(argv=None):
                               mode=args.mode, decoder_profile=args.decoder_profile)), flush=True)
         load_started = time.perf_counter()
         base, loader_report = load_qwen3_pread(args.model_directory, torch.bfloat16, 'mps')
+        fp32_adapter = bool(contract and contract.get('training_runtime') == 'cuda')
         model = PeftModel.from_pretrained(base, adapter, is_trainable=False,
-                                         local_files_only=True, autocast_adapter_dtype=False)
+                                         local_files_only=True, autocast_adapter_dtype=fp32_adapter)
         model.eval()
-        require(all(p.device.type == 'mps' and p.dtype == torch.bfloat16 for p in model.parameters()),
-                'Loaded parameter device/dtype differs; no casting fallback')
+        parameter_inventory = inference_parameter_inventory(model, torch, fp32_adapter)
         require(not any(p.requires_grad for p in model.parameters()), 'Inference parameters must be frozen')
         config = GenerationConfig(do_sample=False, num_beams=1, max_new_tokens=768,
             use_cache=True, eos_token_id=model.generation_config.eos_token_id,
@@ -686,8 +1033,11 @@ def main(argv=None):
             generation_config=config.to_dict(), mps_memory=mps_memory(torch),
             requested_generation_config=requested_config, generation_policy=policy,
             parameter_dtypes=sorted({str(p.dtype) for p in model.parameters()}),
+            parameter_inventory=parameter_inventory,
             buffer_dtypes=sorted({str(b.dtype) for b in model.buffers()}),
             code=code_identity())
+        if registration:
+            authenticate_local_sources(registration, loaded['code'])
         save_new(args.out / 'loaded-runtime.json', loaded)
         print(json.dumps(dict(event='weights_loaded', elapsed_seconds=loaded['elapsed_seconds'],
                               mps_memory=loaded['mps_memory'])), flush=True)
@@ -713,108 +1063,12 @@ def main(argv=None):
             completed_rows_retained=True, automatic_retry=False))
         print(json.dumps(dict(event='failed', type=type(error).__name__, message=str(error))), flush=True)
         raise
+    finally:
+        if telemetry:
+            telemetry[0].set()
+            telemetry[1].join(timeout=2)
 
 
-def evaluate_cloud(plan, base):
-    """Supervised CUDA generation only: fresh base plus final150, all200 pairs.
-
-    Inputs are public prompts and authenticated training/source receipts. Private
-    grading references and protocol text are neither opened nor interpreted.
-    Receipts use output-relative artifact pins and repository-relative source pins.
-    """
-    from scripts.aws_eval import fresh_eight_experiment as profile
-    from scripts.local_eight_candidate import resolve_cuda_candidate, public_contract
-    import torch
-    from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
-    from peft import PeftModel
-    base = Path(base)
-    code = base / 'code'
-    output = base / 'output'
-    out = output / 'evaluation'
-    out.mkdir(parents=True, exist_ok=False)
-    started = time.perf_counter()
-    try:
-        require(torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
-                'Native CUDA BF16 required; no CPU/MPS fallback')
-        for key in ('HF_HUB_OFFLINE', 'TRANSFORMERS_OFFLINE', 'HF_DATASETS_OFFLINE'):
-            os.environ[key] = '1'
-        candidate = output / 'candidate.json'
-        contract = resolve_cuda_candidate(code, candidate, digest(candidate), require_completion=False)
-        require(contract['policy_document']['evaluation']['generation'] == profile.GENERATION,
-                'CUDA requested generation differs')
-        input_path = profile.bound(code, plan['workload']['evaluation_inputs'])
-        rows, _ = public_inputs(input_path, plan['workload']['evaluation_inputs']['sha256'])
-        rows = select_rows(rows, 'evaluation', [])
-        policy = contract['policy_document']
-        model_pin = model_identity(base / 'model', profile.bound(code, policy['model']['acquisition_manifest']))
-        model_pin['directory'] = 'model'
-        model_pin['acquisition_manifest'] = policy['model']['acquisition_manifest']
-        for name, entry in model_pin['files'].items():
-            entry['path'] = 'model/' + name
-        tokenizer = AutoTokenizer.from_pretrained(base / 'model', local_files_only=True, trust_remote_code=False)
-        prepared = preflight_prompts(tokenizer, rows)
-        decoder = dict(profile='unconstrained', semantic_truth_guarantee=False)
-        save_new(out / 'decoder-profile.json', decoder)
-
-        def sources():
-            actual = code_identity()
-            result = {}
-            for name, entry in actual.items():
-                require(plan['sources'].get(name) == entry['sha256'], 'Unsealed CUDA producer source: ' + name)
-                result[name] = dict(entry, path=name)
-            return result
-
-        identity = dict(schema=contract['producer'], mode='evaluation', model=model_pin,
-            adapter=contract['adapter'], input=plan['workload']['evaluation_inputs'],
-            selected_ids=[r['id'] for r in rows], generation=dict(profile.GENERATION), decoder_profile=decoder,
-            runtime=dict(python=sys.version, executable=sys.executable, platform=platform.platform(),
-                machine=platform.machine(), device='cuda', dtype='torch.bfloat16', cpu_fallback=False,
-                cuda_equivalence_claim=False, cuda_version=torch.version.cuda,
-                device_name=torch.cuda.get_device_name(), packages={name: importlib.metadata.version(name)
-                    for name in ('torch', 'transformers', 'peft', 'accelerate', 'safetensors', 'tokenizers', 'numpy')}),
-            code=sources(), arm_order=contract['arms'],
-            paired_order='each input: base with adapter disabled, then registered adapter enabled',
-            grading_access=False, retries=False, resume=False, evaluation_contract=public_contract(contract))
-        save_new(out / 'run-manifest.json', identity)
-        save_new(out / 'prompt-preflight.json', dict(status='passed', prompts=prepared,
-            all_selected_preflighted_before_weights=True, truncation=False))
-        loaded_at = time.perf_counter()
-        fresh = AutoModelForCausalLM.from_pretrained(base / 'model', torch_dtype=torch.bfloat16,
-            device_map={'': 'cuda:0'}, local_files_only=True, trust_remote_code=False, attn_implementation='sdpa')
-        model = PeftModel.from_pretrained(fresh, contract['adapter_directory'], is_trainable=False,
-            local_files_only=True, autocast_adapter_dtype=False)
-        model.eval()
-        require(all(p.device.type == 'cuda' and p.dtype == torch.bfloat16 for p in model.parameters()),
-                'CUDA inference device/dtype differs')
-        require(not any(p.requires_grad for p in model.parameters()), 'Inference parameters must be frozen')
-        config = GenerationConfig(do_sample=False, num_beams=1, max_new_tokens=768, use_cache=True,
-            eos_token_id=model.generation_config.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
-            bos_token_id=tokenizer.bos_token_id, return_dict_in_generate=True)
-        requested = config.to_dict()
-        config, generation_policy = resolve_generation_policy(model, config)
-        torch.cuda.synchronize()
-        save_new(out / 'loaded-runtime.json', dict(loader='fresh official HF safetensors; no training model reuse',
-            elapsed_seconds=time.perf_counter() - loaded_at, attention_implementation=model.config._attn_implementation,
-            generation_config=config.to_dict(), requested_generation_config=requested,
-            generation_policy=generation_policy, parameter_dtypes=sorted({str(p.dtype) for p in model.parameters()}),
-            buffer_dtypes=sorted({str(b.dtype) for b in model.buffers()}), cuda_memory=runtime_memory(torch, 'cuda'),
-            code=sources()))
-        binding = dict(run_manifest_sha256=digest(out / 'run-manifest.json'),
-            loaded_runtime_sha256=digest(out / 'loaded-runtime.json'), model_id=MODEL_ID, model_revision=REVISION,
-            input_sha256=plan['workload']['evaluation_inputs']['sha256'],
-            nominated_adapter_weights_sha256=contract['adapter_sha256'], mode='evaluation',
-            decoder_profile='unconstrained', decoder_profile_sha256=digest(out / 'decoder-profile.json'),
-            generation_policy_sha256=object_sha(generation_policy), candidate_manifest_sha256=digest(candidate))
-        run_pairs(torch, model, tokenizer, prepared, config, binding, out, contract=contract)
-        save_new(out / 'completion.json', dict(status='complete', mode='evaluation',
-            elapsed_seconds=time.perf_counter() - started, rows_per_arm=len(prepared),
-            outputs={arm: profile.pin(out / f'{arm}-outputs.jsonl', output) for arm in contract['arms']},
-            cuda_memory=runtime_memory(torch, 'cuda'), run_manifest_sha256=binding['run_manifest_sha256']))
-    except BaseException as error:
-        save_new(out / 'failure.json', dict(status='failed', type=type(error).__name__, message=str(error),
-            elapsed_seconds=time.perf_counter() - started, completed_rows_retained=True, automatic_retry=False))
-        raise
 
 
 if __name__ == '__main__':

@@ -88,6 +88,17 @@ class CapacityAcceptanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Scheduler'):
             self.validate(lambda r: r['history'][0].update(applied_lr=r['history'][0]['next_lr']))
 
+    def test_cuda_training_provenance_cannot_be_relabelled_or_resealed(self):
+        for change in (
+            lambda r: r['runtime'].update(device='mps'),
+            lambda r: r['runtime'].update(backend='transformers-mps'),
+            lambda r: r['runtime'].update(run_id='historical-run'),
+            lambda r: r.update(actual_source_files=[]),
+            lambda r: r.update(actual_source_files=[dict(path='other.py', bytes=1, sha256='source-sha')]),
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.validate(change)
+
 
 class FreshBoundaryTests(unittest.TestCase):
     def test_portable_endpoint_paths_preserve_physical_row_identity(self):
@@ -116,12 +127,12 @@ class FreshBoundaryTests(unittest.TestCase):
 
     def test_forbidden_phases_cannot_reach_native_sandbox(self):
         plan = dict(schema=E.SCHEMA, identity={'run_id': E.RUN_ID}, limits=dict(L.LIMITS,
-            lifetime_seconds=7200, reserve_seconds=300, output_bytes=512 * 1024**2))
+            lifetime_seconds=1800, reserve_seconds=300, output_bytes=512 * 1024**2))
         gpu = dict(uuid='GPU-fixture', minor=0)
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             (base / 'plan.json').write_text(json.dumps(plan))
-            for phase in ('final_base', 'parent_selection', 'checkpoint-step-000050-dev', 'schema'):
+            for phase in ('evaluate', 'final_base', 'parent_selection', 'checkpoint-step-000050-dev', 'schema'):
                 with self.subTest(phase=phase), self.assertRaises(RuntimeError):
                     W.stage_argv(plan, base, phase, 60, gpu, 1001, 1001)
 
@@ -177,14 +188,14 @@ class FreshBoundaryTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'owned child remains'):
                     W.supervise_phase(plan, base, 'capacity', {}, 1001, 1001, 9999999999, [])
 
-    def test_failed_evaluation_records_exact_phase_and_global_deadlines_without_extending_them(self):
+    def test_failed_training_records_exact_phase_and_global_deadlines_without_extending_them(self):
         plan = dict(schema=E.SCHEMA, identity={'run_id': E.RUN_ID}, phase_seconds=E.PHASE_SECONDS)
         for available in (10000, 100):
             with self.subTest(available=available), tempfile.TemporaryDirectory() as temp:
                 base = Path(temp)
                 W.save(base / 'plan.json', plan)
-                attempt, units = {'phase': 'train', 'phase_deadline': 1}, []
-                expected_seconds = min(E.PHASE_SECONDS['evaluate'], available - 15)
+                attempt, units = {'phase': 'capacity', 'phase_deadline': 1}, []
+                expected_seconds = min(E.PHASE_SECONDS['train'], available - 15)
                 with patch.object(W.time, 'time', return_value=1000), \
                      patch.object(W, 'unit_state', return_value={'LoadState': 'not-found'}), \
                      patch.object(W, 'remaining', side_effect=[available, RuntimeError('Absolute deadline exhausted')]), \
@@ -192,11 +203,11 @@ class FreshBoundaryTests(unittest.TestCase):
                      patch.object(W, 'stage_argv', return_value=['registered']), patch.object(W, 'command'), \
                      patch.object(W, 'stop_unit'):
                     with self.assertRaisesRegex(RuntimeError, 'Absolute deadline exhausted'):
-                        W.supervise_phase(plan, base, 'evaluate', {}, 1001, 1001, 1000 + available, units,
+                        W.supervise_phase(plan, base, 'train', {}, 1001, 1001, 1000 + available, units,
                                           attempt=attempt)
                 self.assertEqual(units, [])
-                self.assertEqual(attempt, dict(phase='evaluate', unit=E.RUN_ID + '-evaluate',
-                    work_deadline=1000 + available, started_at=1000, registered_seconds=3600,
+                self.assertEqual(attempt, dict(phase='train', unit=E.RUN_ID + '-train',
+                    work_deadline=1000 + available, started_at=1000, registered_seconds=1500,
                     effective_seconds=expected_seconds, phase_deadline=1000 + expected_seconds))
 
     def test_export_archive_overhead_is_inside_fresh_cap(self):
@@ -224,33 +235,59 @@ class FreshBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'different worker artifact'):
                 E.validate_supervision(root, 'capacity', plan)
 
-    def test_requested_greedy_cannot_hide_effective_sampling(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            out = root / 'evaluation'
-            out.mkdir()
-            (out / 'completion.json').write_text(json.dumps(dict(status='complete', rows_per_arm=200)))
-            (out / 'run-manifest.json').write_text(json.dumps(dict(generation=E.GENERATION,
-                grading_access=False, retries=False, resume=False, arm_order=['base', 'candidate'],
-                selected_ids=[str(i) for i in range(200)])))
-            (out / 'loaded-runtime.json').write_text(json.dumps(dict(
-                generation_config=dict(do_sample=True, num_beams=1, max_new_tokens=768),
-                generation_policy={})))
-            with self.assertRaisesRegex(ValueError, 'Effective greedy decoder'):
-                E.validate_evaluation(root, {})
+    def test_gpu_evaluation_dispatch_is_rejected_before_loading_any_runtime(self):
+        with patch.object(W, 'native_runtime') as native, patch.object(E, 'validate_data') as data:
+            with self.assertRaisesRegex(ValueError, 'GPU evaluation'):
+                F.child_stage(W, {}, '/not-used', 'evaluate')
+            native.assert_not_called()
+            data.assert_not_called()
+        self.assertIsNone(F.phase_kind('evaluate'))
+        with self.assertRaisesRegex(ValueError, 'GPU evaluation'):
+            E.validate_supervision('/not-used', 'evaluate', {})
 
     def test_partial_outputs_never_pass_completion(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(ValueError, 'mandatory artifacts'):
-                E.validate_completion(temp, {})
+                E.validate_completion(temp, dict(schema=E.SCHEMA, identity={'run_id': E.RUN_ID},
+                    workflow=E.WORKFLOW, cloud_evaluation=False))
         self.assertFalse(any('final-input' in name or 'checkpoint-selection' in name for name in E.output_members()))
-        self.assertIn('evaluation/failure.json', E.output_members())
+        self.assertFalse(any(name.startswith('evaluation/') or name == 'evaluate.log' for name in E.output_members()))
+
+    def test_workload_binds_training_only_mode_sources_and_local_generation(self):
+        def record(name, sha='a' * 64):
+            return dict(path=name, bytes=1, sha256=sha)
+        data = {k: record(k) for k in ('policy', 'implementation_contract', 'manifest', 'frozen_dataset', 'train')}
+        data['implementation_contract']['sha256'] = E.CONTRACT_SHA
+        workload = {k: record(k) for k in ('evaluation_inputs', 'review_protocol', 'source_manifest')}
+        workload['generation'] = dict(E.GENERATION)
+        auth = record('authorization', E.AUTHORIZATION_SHA)
+        plan = dict(schema=E.SCHEMA, identity={'run_id': E.RUN_ID}, workflow=E.WORKFLOW,
+            cloud_evaluation=False, recipe=E.RECIPE, phase_seconds=E.PHASE_SECONDS,
+            model=dict(id=E.MODEL_ID, revision=E.MODEL_REVISION), data=data, workload=workload,
+            authorization=auth, sources={name: 'a' * 64 for name in E.SOURCE_NAMES},
+            output_allowlist=sorted(E.output_members()))
+        bundled = {p['path']: p for p in [*data.values(), auth,
+            *(workload[k] for k in ('evaluation_inputs', 'review_protocol', 'source_manifest'))]}
+        E.validate_workload(plan, bundled)
+        for change in (
+            lambda p: p.update(schema='trid-fresh-eight-gpu-experiment-v1'),
+            lambda p: p.update(workflow='cuda_train_and_evaluate'),
+            lambda p: p.update(cloud_evaluation=True),
+            lambda p: p['workload']['generation'].update(backend='transformers-cuda'),
+            lambda p: p.update(sources={}),
+            lambda p: p['phase_seconds'].update(evaluate=3600),
+            lambda p: p['output_allowlist'].append('evaluation/base-outputs.jsonl'),
+        ):
+            altered = copy.deepcopy(plan)
+            change(altered)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                E.validate_workload(altered, bundled)
 
 
 class FreshRecoveryTests(unittest.TestCase):
     def prepare(self, base):
         plan, capacity = CapacityAcceptanceTests().fixture()
-        plan.update(schema=E.SCHEMA, model={'files': []},
+        plan.update(schema=E.SCHEMA, model={'files': []}, workflow=E.WORKFLOW, cloud_evaluation=False,
                     limits={'output_bytes': 512 * 1024**2}, cost={'export_bytes': 512 * 1024**2},
                     output_allowlist=sorted(E.output_members()))
         plan['identity'].update(bucket='fixture', output_prefix='run/output/')
@@ -261,8 +298,9 @@ class FreshRecoveryTests(unittest.TestCase):
         (base / 'scratch/cache').mkdir()
         W.save(base / 'plan.json', plan)
         capacity['runtime']['plan_sha256'] = W.digest(base / 'plan.json')
-        report = dict(experimental_success=False, stages=[], run_id=E.RUN_ID,
-                      plan_sha256=W.digest(base / 'plan.json'), instance_id='i-fixture')
+        report = dict(training_success=False, stages=[], run_id=E.RUN_ID,
+                      plan_sha256=W.digest(base / 'plan.json'), instance_id='i-fixture',
+                      completion_scope=E.COMPLETION_SCOPE, quality_accepted=False, cloud_evaluation=False)
         return plan, capacity, report
 
     def training(self, root, plan, capacity):
@@ -289,6 +327,7 @@ class FreshRecoveryTests(unittest.TestCase):
                 last = dict(row, equals_last_checkpoint=True)
             else:
                 checkpoints.append(row)
+                W.save(folder.parent / 'training.json', dict(checkpoint=row))
         ledger = dict(run_status='complete', checkpoints=checkpoints, last_step=last,
                       selection={'candidate_step': 150})
         training = dict(status='complete', steps=150, train_rows=600, valid_rows=0,
@@ -304,6 +343,33 @@ class FreshRecoveryTests(unittest.TestCase):
         W.save(root / 'train/training-worker.json', dict(schema='trid-fresh-eight-cuda-training-v1',
             status='complete', coverage_complete=True, policy=plan['data']['policy'],
             source_manifest=plan['workload']['source_manifest'], report=E.pin(root / 'train/training.json', root)))
+
+    def test_partial_or_relabelled_training_never_passes_acceptance(self):
+        for change in (
+            lambda r: r.update(status='interrupted'),
+            lambda r: r.update(steps=100),
+            lambda r: r.update(coverage_complete=False),
+            lambda r: r.update(coverage=r['coverage'][:-1]),
+            lambda r: r.update(history=r['history'][:-1]),
+            lambda r: r['runtime'].update(backend='transformers-mps'),
+            lambda r: r.update(actual_source_files=[]),
+        ):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                base = Path(temp)
+                plan, capacity, _ = self.prepare(base)
+                root = base / 'output'
+                W.save(root / 'plan.json', plan)
+                self.training(root, plan, capacity)
+                report_path = root / 'train/training.json'
+                report = json.loads(report_path.read_bytes())
+                change(report)
+                W.save(report_path, report)
+                worker_path = root / 'train/training-worker.json'
+                worker = json.loads(worker_path.read_bytes())
+                worker['report'] = E.pin(report_path, root)
+                W.save(worker_path, worker)
+                with self.assertRaises(ValueError):
+                    E.validate_training(root, plan)
 
     def client(self, objects):
         def put(*args):
@@ -353,15 +419,12 @@ class FreshRecoveryTests(unittest.TestCase):
                 W.export_outputs(base, plan, report, 9999999999)
             self.assertFalse((base / 'export.tar').exists())
 
-    def test_evaluation_failure_retains_acknowledged_accepted_training_snapshot(self):
+    def test_training_only_completion_publishes_once_and_exports_no_gpu_answers(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             plan, capacity, report = self.prepare(base)
             objects = {}
             def phase(plan, base, phase, *args, **kwargs):
-                if phase == 'evaluate':
-                    self.assertIn('export', report)
-                    raise RuntimeError('evaluation interrupted')
                 folder = base / 'output' / phase
                 folder.mkdir(exist_ok=True)
                 if phase == 'capacity':
@@ -374,57 +437,93 @@ class FreshRecoveryTests(unittest.TestCase):
             try:
                 with patch.object(W, 'validate_model'), patch.object(W, 'supervise_phase', side_effect=phase), \
                      patch.object(os, 'chown'):
-                    with self.assertRaisesRegex(RuntimeError, 'evaluation interrupted'):
-                        F.run_experiment(W, plan, base, report, self.client(objects), {},
-                            SimpleNamespace(pw_uid=1001, pw_gid=1001), 9999999999, 9999999999, [], set(), [])
-                payload = objects[plan['identity']['output_prefix'] + 'export.tar']
-                self.assertEqual(report['export']['sha256'], W.hashlib.sha256(payload).hexdigest())
-                with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
-                    manifest = json.load(archive.extractfile('export-manifest.json'))
-                    self.assertFalse(manifest['status']['experimental_success'])
-                    self.assertIn('train/supervisor-result.json', archive.getnames())
-                    self.assertNotIn('candidate.json', archive.getnames())
+                    W.save(base / 'output/runtime.json', {'device': 'cuda'})
+                    F.run_experiment(W, plan, base, report, {},
+                        SimpleNamespace(pw_uid=1001, pw_gid=1001), 9999999999, 9999999999, [], set(), [])
+                self.assertEqual(objects, {})
+                self.assertNotIn('export', report)
+                self.assertFalse(report['training_success'])
                 E.validate_training(base / 'output', plan)
                 E.validate_supervision(base / 'output', 'train', plan)
-                with self.assertRaisesRegex(ValueError, 'mandatory artifacts'):
-                    E.validate_completion(base / 'output', plan)
-                self.assertFalse(report['experimental_success'])
+                completion = E.validate_completion(base / 'output', plan)
+                self.assertTrue(completion['training_success'])
+                self.assertFalse(completion['quality_accepted'])
+                self.assertFalse(completion['cloud_evaluation'])
+                self.assertEqual([stage['phase'] for stage in report['stages']], ['capacity', 'train'])
+                put = self.client(objects)
+                def acknowledged_put(*args):
+                    self.assertFalse(report['training_success'])
+                    self.assertNotIn('export', report)
+                    put(*args)
+                W.cleanup_fresh_scratch(base, [], 9999999999)
+                W.publish_outputs(base, plan, report, acknowledged_put, 9999999999, training_complete=True)
+                self.assertTrue(report['training_success'])
+                payload = objects[plan['identity']['output_prefix'] + 'export.tar']
+                self.assertEqual(report['export']['sha256'], W.hashlib.sha256(payload).hexdigest())
+                self.assertEqual(report['export']['bytes'], len(payload))
+                with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
+                    manifest = json.load(archive.extractfile('export-manifest.json'))
+                    self.assertTrue(manifest['status']['training_success'])
+                    self.assertFalse(manifest['status']['quality_accepted'])
+                    self.assertIn('candidate.json', archive.getnames())
+                    self.assertFalse(any(n.startswith('evaluation/') for n in archive.getnames()))
+                self.assertEqual(len(objects), 1)
+                candidate_path = base / 'output/candidate.json'
+                candidate_path.chmod(0o644)
+                candidate = json.loads(candidate_path.read_bytes())
+                for changes in ({'schema': 'trid-fresh-eight-cuda-candidate-v1'}, {'step': 100},
+                                {'quality_accepted': True}, {'cloud_evaluation': True}):
+                    W.save(candidate_path, dict(candidate, **changes))
+                    with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'candidate binding'):
+                        E.validate_completion(base / 'output', plan)
+                W.save(candidate_path, candidate)
+                for changes in ({'schema': 'trid-fresh-eight-gpu-experiment-v1'},
+                                {'workflow': 'cuda_train_and_evaluate'}, {'cloud_evaluation': True}):
+                    with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'source/mode'):
+                        E.validate_completion(base / 'output', dict(plan, **changes))
             finally:
                 # Native acceptance intentionally freezes directories; restore only this fixture.
                 for path in (base / 'output').rglob('*'):
                     if path.is_dir():
                         path.chmod(0o755)
 
-    def test_failed_final_export_preserves_pin_and_successful_replacement_uses_one_key(self):
+    def test_failed_publication_never_claims_training_success_or_acknowledged_export(self):
         for failure in ('inventory', 'upload'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
                 base = Path(temp)
                 plan, _, report = self.prepare(base)
                 (base / 'output/runtime.json').write_text('{"known":"artifact"}')
                 objects = {}
-                put = self.client(objects)
-                W.publish_outputs(base, plan, report, put, 9999999999)
-                prior = copy.deepcopy(report['export'])
-                original = dict(objects)
-                report['error'] = 'evaluation interrupted'
                 if failure == 'inventory':
                     (base / 'output/unknown').write_text('not registered')
-                    failing = put
+                    failing = self.client(objects)
                 else:
                     def failing(*args):
+                        self.assertFalse(report['training_success'])
                         raise RuntimeError('upload not acknowledged')
                 with self.assertRaises(RuntimeError):
-                    W.publish_outputs(base, plan, report, failing, 9999999999)
-                self.assertEqual(report['export'], prior)
-                self.assertEqual(objects, original)
-                (base / 'output/unknown').unlink(missing_ok=True)
-                W.publish_outputs(base, plan, report, put, 9999999999)
-                self.assertEqual(len(objects), 1)
-                self.assertNotEqual(report['export'], prior)
-                self.assertEqual(sum(len(blob) for blob in objects.values()), report['export']['bytes'])
-                self.assertLessEqual(report['export']['bytes'], plan['cost']['export_bytes'])
-                with tarfile.open(base / 'export.tar') as archive:
-                    self.assertNotIn('export', json.load(archive.extractfile('export-manifest.json'))['status'])
+                    W.publish_outputs(base, plan, report, failing, 9999999999, training_complete=True)
+                self.assertFalse(report['training_success'])
+                self.assertNotIn('export', report)
+                self.assertEqual(objects, {})
+
+    def test_failed_run_exports_only_diagnostic_evidence_without_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            plan, _, report = self.prepare(base)
+            (base / 'output/runtime.json').write_text('{"known":"artifact"}')
+            report['error'] = 'training interrupted before final150'
+            objects = {}
+            W.cleanup_fresh_scratch(base, [], 9999999999)
+            W.publish_outputs(base, plan, report, self.client(objects), 9999999999)
+            self.assertFalse(report['training_success'])
+            self.assertEqual(len(objects), 1)
+            with tarfile.open(base / 'export.tar') as archive:
+                manifest = json.load(archive.extractfile('export-manifest.json'))
+                self.assertFalse(manifest['status']['training_success'])
+                self.assertEqual(manifest['status']['error'], report['error'])
+                self.assertNotIn('export', manifest['status'])
+                self.assertEqual(set(archive.getnames()), {'runtime.json', 'export-manifest.json'})
 
 
 if __name__ == '__main__':

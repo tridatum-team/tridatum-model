@@ -461,11 +461,24 @@ JSON 제약은 이 표본의 구조 실패를 없앴지만 내용 정확성이�
 - **비용 조건:** Seoul `g6e.2xlarge` 한 대, 암호화된 120GiB gp3 root 한 개, 작업 120분과 종료 여유 30분을 합친 최대 150분을 가격 계산에 포함합니다. 시작·설치·다운로드·검증·학습·추론·회수 시간이 모두 같은 한도를 소비합니다. 전송·요청·보존량·KMS 요청을 포함한 독립 조건부 검토 결과는 세금 10% 가정과 예비비 $1을 포함해 **$9.29**입니다. 실제 청구서나 AWS 결제 hard cap은 아니며, 자동 재실행·시간 연장·추가 인스턴스는 승인하지 않습니다.
 - **회수 실패 원인:** 라이브러리 임시 파일 `tmp/.../_remote_module_non_scriptable.py`가 결과 디렉터리에 남아 엄격한 archive 목록 검사에서 거부됐습니다. archive 생성·업로드 이전에 실패했습니다. 실제 원격 output prefix에는 `ready.json`과 `completion.json`만 있으며, 새 adapter·학습 ledger·답변 파일은 없습니다. 이어 controller가 없는 `export` 필드를 읽으면서 원래 오류까지 가렸습니다. 새 모델 성능 점수나 후보 수락 결과는 없습니다.
 - **자원 정리:** 인스턴스와 root volume의 종료·부재를 확인했습니다. Scheduler group 삭제의 비동기 완료를 즉시 부재로 가정한 정리 오류도 발생했지만, 삭제를 재전송하지 않고 별도 소유권 검증·정리 절차로 group·profile·role 2개·security group의 부재를 확인했습니다. 기존 bucket과 자료는 삭제하지 않았으며, 기존 규칙 8개와 새 prefix의 30일 만료·multipart 1일 정리 규칙은 유지합니다. 원래 실패 기록을 성공 기록으로 덮어쓰지 않았습니다.
-- **수정한 경계:** 임시 파일·HF cache·용량 검증 scratch를 export 바깥의 전용 영역으로 분리하고, output/scratch의 합계 2GiB·4096 inode 한도를 유지합니다. 소유 프로세스를 회수한 뒤에만 scratch를 정리합니다. 학습 수락 직후 평가보다 먼저 bounded snapshot을 게시하고, 후속 내보내기 실패 시 마지막 업로드 확인 pin을 보존합니다. 같은 S3 key를 갱신하며 불완전한 snapshot은 품질 수락이 아닙니다. export 없는 명시적 실패는 원래 오류를 보존하고, 성공 주장에 archive가 없으면 계속 거부합니다. 비동기 삭제에는 제한된 읽기 전용 완료 확인을 사용합니다.
+- **당시 수정한 경계:** 임시 파일·HF cache·용량 검증 scratch를 export 바깥의 전용 영역으로 분리하고, output/scratch의 합계 2GiB·4096 inode 한도를 유지했습니다. 소유 프로세스를 회수한 뒤에만 scratch를 정리합니다. 당시 v1 수정에서는 학습 수락 직후 평가보다 먼저 bounded snapshot을 게시하도록 했습니다. 아래 v2는 GPU 평가 자체를 제거하고 최종 학습 archive 한 번의 회수로 대체합니다. export 없는 명시적 실패는 원래 오류를 보존하고, 성공 주장에 archive가 없으면 계속 거부합니다. 비동기 삭제에는 제한된 읽기 전용 완료 확인을 사용합니다.
 - **수정 후 검증:** 통합 테스트 443건 중 442건 통과·1건 skip. 실제 macOS Torch 2.9.1 하위 프로세스를 중단해 임시 Python 파일이 남는 현상을 재현했고, 수정된 경로에서 등록된 자료의 실제 tar 생성·본문 일치·프로세스 회수 후 scratch 삭제를 확인했습니다. 같은 미등록 파일을 export 내부에 넣으면 여전히 거부합니다. 로컬 합성 자료 검증이며 Linux mount/cgroup이나 수정 후 실제 GPU 학습을 검증한 것은 아닙니다. 독립 코드 검토에서 추가 blocking finding은 없었습니다.
 - **다음 실행 제약:** 이번 1회 GPU 실행 권한은 소비됐습니다. 수정 코드를 과거 실행에 소급 적용하거나 자동 재실행하지 않습니다. 복구 snapshot이 있더라도 전체 학습 증거와 동일 조건의 개발 200문항·답변 400개 및 자원 정리 검증 없이 완성 후보로 승격하지 않습니다. 보호 최종 자료와 `test.tridatum.co` 배포는 변경하지 않았습니다.
 
 로컬 근거: `authorization.json`, `training-policy-final.json`, `resource-envelope-final.json`, `executed-source.tar`, `plan.json`, `cloud-state/completion.json`, `cloud-state/controller-result.json`, `post-run-output-inventory.json`, `failure-analysis.json`, `cleanup-only-continuation/continuation-result.json`, `torch-interruption-probe-02.json`, `repair-archive-smoke.json`. 수정 전 소스와 실패 증거는 그대로 보존합니다. 실행 자료는 Git 저장소에 포함되었다고 가정하지 않습니다.
+
+#### 새 8B 학습 회수 v2 · GPU 학습과 Mac 평가 분리
+
+사용자는 **기존 총 $10 안에서 GPU 실행 1회 추가**를 승인했습니다. 새 계약은 `runs/mois-eight-training-recovery-20261116T014906Z/`에 등록했으며, 추가 $10이나 자동 재시도 승인이 아닙니다.
+
+- **실행 범위:** GPU는 용량 검증·동일 600행 학습·최종 150단계 가중치 회수까지만 수행합니다. 학습 archive 업로드 확인과 인스턴스·root volume 정리를 인증한 뒤 Mac에서 원본·후보의 개발 200문항, 새 답변 400개를 생성합니다. 학습 완료와 품질 수락은 별도 판정입니다.
+- **시간·비용:** 새 작업 lease 1800초에 export 여유 300초를 포함하고, 종료 여유 900초를 합쳐 최대 2700초를 계산합니다. 독립 검토의 조건부 상한은 이전 실행 $5.89와 새 실행 $3.94를 합친 **$9.83**입니다. 이전 비용은 제어기 경과 시간과 실제 자원 정리 증거에 기초한 5000초 가정이며 청구서가 아닙니다. 새 실행 cap은 $4.11입니다. 실제 가격·소유 자원·전체 보존 규칙 readback과 독립 종료 장치가 통과해야 실행합니다.
+- **인증 분리:** 학습 원본 bundle의 전체 해시와 각 파일을 인증해 당시 코드·데이터를 검증합니다. 이후 Mac 평가 코드의 변경은 별도 소스 등록으로 관리하며, GPU 학습 증거를 현재 checkout으로 덮어쓰지 않습니다. BF16 원본과 FP32 LoRA를 유지합니다.
+- **Mac 감독:** 평가 한도는 별도 12시간이며, 메모리 압력·가용 메모리·swap 증가·RSS·footprint·MPS allocator/driver 한도와 소유 프로세스 그룹 정리를 강제합니다. **사용자 요청으로 이 평가만 배터리 전원을 허용**합니다. 기존 로컬 학습의 전원 조건은 바꾸지 않았으며, 배터리 소진·잠자기는 평가를 중단시킬 수 있습니다.
+- **검증:** 통합 468건 중 467건 통과·1건 skip. 실제 Torch 2.9.1 중단 후 임시 파일을 격리한 v2 archive 생성·내용 일치·scratch 정리를 확인했습니다. 실제 배터리 상태에서 모델 없는 하위 프로세스의 startup gate·짧은 시험 deadline·TERM/KILL·자손 회수를 확인했습니다. 이는 실제 8B 평가나 CUDA 학습 성공 증거가 아닙니다.
+- **현재 결과:** v2 실행 준비와 소스 검증을 완료했습니다. 아직 새 가중치 회수·품질 점수·배포 성공을 주장하지 않습니다. 보호 최종 자료와 `test.tridatum.co`는 변경하지 않았습니다.
+
+로컬 근거: `authorization.json`, `aggregate-budget.json`, `resource-envelope.json`, `training-policy.json`, `execution-sources.json`, `executed-source.tar`, `source-verification.json`, `conditional-cost-admission.json`, `archive-smoke.json`, `battery-evaluation-authorization.json`, `battery-guard-verification.json`. 원본 학습 bundle은 `cloud-state/source-bundle.tar`에 보존하며 실제 모델 회수는 별도 검증 대상입니다. 실행 자료는 별도 보존 대상입니다.
 
 ### Packed-head 학습 엔진
 

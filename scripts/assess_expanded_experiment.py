@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Offline expanded diagnostic assessment; never selection or deployment qualification.
 
-Final150 candidates may use authenticated local MPS or the separately registered
-fresh CUDA producer. CUDA export/controller cleanup and source-seal evidence are
-mandatory; historical scores and the immutable paired review/gate protocol are
-not reinterpreted. CUDA keeps only the primary200 development cases, never a
-secondary decoder competition or deployment qualification.
+Final150 candidates use native local MPS inference. CUDA training candidates
+require authenticated capacity/training/export and independent cleanup first;
+their training provenance never stands in for MPS inference receipts. Historical
+scores and the immutable paired review/gate protocol are not reinterpreted.
+Only primary200 development cases qualify, never secondary or deployment.
 
 Commands (all paths belong to --root):
   packet --frozen FILE --frozen-sha256 SHA --primary DIR [--secondary DIR] --out DIR
@@ -87,15 +87,12 @@ CANDIDATE_PRODUCER_SOURCES = frozenset({
     'scripts/aws_eval/grounded_hf_lifecycle.py', 'scripts/aws_eval/qwen_cuda_smoke.py',
     'scripts/aws_eval/qwen_cpu_smoke.py', 'trid/prompts.py', 'trid/text.py', 'trid/case_prompts.py',
 })
-# The isolated CUDA evaluation process uses HF directly, not the local trainer
-# or numerical observer. Their full source seal remains mandatory in the
-# accepted training lineage; evaluation receipts attest only executed imports.
-CUDA_PRODUCER_SOURCES = frozenset({
-    'scripts/evaluate_local_eight.py', 'scripts/local_eight_candidate.py',
-    'scripts/aws_eval/grounded_hf_worker.py', 'scripts/aws_eval/grounded_hf_lifecycle.py',
-    'scripts/aws_eval/qwen_cuda_smoke.py', 'scripts/aws_eval/qwen_cpu_smoke.py',
-    'scripts/aws_eval/fresh_eight_experiment.py', 'scripts/aws_eval/fresh_eight_worker.py',
-})
+# Authenticating a CUDA-trained candidate imports its training contract in the
+# local evaluator. These imports do not turn MPS inference into CUDA execution.
+CUDA_TRAINED_MPS_SOURCES = CANDIDATE_PRODUCER_SOURCES | {
+    'scripts/aws_eval/fresh_eight_experiment.py',
+    'scripts/local_mps_training.py',
+}
 
 
 def parse_json(text):
@@ -218,7 +215,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     """Authenticate the evaluator's actual file/row contract, never model weights."""
     directory = Path(directory)
     arms = contract['arms'] if contract else ARMS
-    cuda = contract is not None and contract.get('runtime') == 'cuda'
+    cuda_trained = contract is not None and contract.get('training_runtime') == 'cuda'
     adapter_sha = contract['adapter_sha256'] if contract else design['model']['adapter_sha256']
     require(not (directory / 'failure.json').exists(), 'failed local run is not complete')
     names = ['run-manifest.json', 'decoder-profile.json', 'prompt-preflight.json',
@@ -230,7 +227,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     preflight = load(directory / 'prompt-preflight.json')
     loaded = load(directory / 'loaded-runtime.json')
     manifest_sha = pins['run-manifest.json']['sha256']
-    expected_schema = contract['producer'] if cuda else ('trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1')
+    expected_schema = 'trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1'
     require(manifest.get('schema') == expected_schema
             and manifest.get('mode') == 'evaluation' and manifest.get('arm_order') == list(arms)
             and manifest.get('grading_access') is False and manifest.get('retries') is False
@@ -240,24 +237,16 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
                 and manifest.get('adapter') == contract['adapter'] and profile == 'unconstrained',
                 'registered evaluation contract differs')
         model = manifest['model']
-        if cuda:
-            from scripts.aws_eval import fresh_eight_experiment as fresh
-            plan = fresh.load(directory.parent, contract['plan'])
-            require(model['acquisition_manifest'] == contract['policy_document']['model']['acquisition_manifest'],
-                    'CUDA acquisition registration differs')
-            metadata = load(bound(root, model['acquisition_manifest']))
-            expected = {entry['path']: entry for entry in metadata['files']}
-            require(model['directory'] == 'model' and set(model['files']) == set(expected)
-                    and all(model['files'][name] == dict(path='model/' + name, bytes=entry['bytes'], sha256=entry['sha256'])
-                            for name, entry in expected.items()), 'CUDA official base file identity differs')
-            authenticate_producer_sources(root, manifest.get('code'), loaded.get('code'), CUDA_PRODUCER_SOURCES)
-            require(all(plan['sources'].get(name) == entry['sha256'] for name, entry in loaded['code'].items()),
-                    'CUDA producer differs from registered source seal')
-        else:
-            from scripts.evaluate_local_eight import model_identity
-            require(model_identity(model['directory'], model['acquisition_manifest']['path']) == model,
-                    'candidate official base authentication differs')
-            authenticate_producer_sources(root, manifest.get('code'), loaded.get('code'))
+        from scripts.evaluate_local_eight import model_identity
+        require(model_identity(model['directory'], model['acquisition_manifest']['path']) == model,
+                'candidate official base authentication differs')
+        required_sources = CUDA_TRAINED_MPS_SOURCES if cuda_trained else CANDIDATE_PRODUCER_SOURCES
+        authenticate_producer_sources(root, manifest.get('code'), loaded.get('code'), required_sources)
+        if cuda_trained:
+            from scripts.evaluate_local_eight import accepted_local_supervision
+            require(isinstance(manifest.get('local_registration'), dict), 'Local guarded registration missing')
+            supervisor = accepted_local_supervision(manifest['local_registration'], directory)
+            pins['local-supervision'] = pin(supervisor, root)
     else:
         require('evaluation_contract' not in manifest, 'historical replay cannot carry a candidate contract')
     ids = manifest.get('selected_ids', [])
@@ -277,7 +266,7 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     generation = manifest['generation']
     expected_generation = dict(enable_thinking=False, do_sample=False, num_beams=1, seed=14,
         max_new_tokens=768, context_tokens=4096, dtype='bfloat16',
-        backend='transformers-cuda' if cuda else 'transformers-mps')
+        backend='transformers-mps')
     require(generation == expected_generation
             and all(generation[k] == design['generation'][k] for k in
                     ('enable_thinking', 'do_sample', 'max_new_tokens', 'context_tokens')),
@@ -293,9 +282,19 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
             and adapter['files']['adapter_model.safetensors']['sha256'] == adapter_sha,
             'model/adapter binding differs')
     runtime = manifest['runtime']
-    require(runtime.get('device') == ('cuda' if cuda else 'mps') and runtime.get('dtype') == 'torch.bfloat16'
+    require(runtime.get('device') == 'mps' and runtime.get('dtype') == 'torch.bfloat16'
             and runtime.get('cpu_fallback') is False and runtime.get('cuda_equivalence_claim') is False
-            and loaded.get('parameter_dtypes') == ['torch.bfloat16'], 'runtime/device/dtype differs')
+            and loaded.get('parameter_dtypes') == (['torch.bfloat16', 'torch.float32'] if cuda_trained
+                                                   else ['torch.bfloat16']), 'runtime/device/dtype differs')
+    if cuda_trained:
+        inventory = loaded.get('parameter_inventory', {})
+        require(set(inventory) == {'base', 'adapter'}, 'MPS inference parameter inventory missing')
+        for group, dtype in (('base', 'torch.bfloat16'), ('adapter', 'torch.float32')):
+            values = inventory[group]
+            require(values and all(key in (dtype + '@mps', dtype + '@mps:0')
+                    and all(type(entry.get(field)) is int and entry[field] > 0
+                            for field in ('tensors', 'elements', 'bytes'))
+                    for key, entry in values.items()), 'MPS inference parameter inventory differs')
     require(manifest.get('decoder_profile') == decoder and decoder.get('profile') == profile
             and decoder.get('semantic_truth_guarantee') is False, 'decoder profile binding differs')
     if profile == 'unconstrained':
@@ -338,8 +337,6 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
         path = directory / (arm + '-outputs.jsonl')
         authenticate(path, completion['outputs'][arm])
         recorded_output = Path(completion['outputs'][arm]['path'])
-        if cuda:
-            recorded_output = directory.parent / recorded_output
         require(recorded_output.resolve() == path.resolve(),
                 'completion output path differs')
         # Parse each line strictly, including duplicate keys and nonfinite values.
@@ -791,9 +788,7 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
     contract = None
     if packet['schema'] == 'trid-expanded-blind-packet-v2':
         registered = mapping['evaluation_contract']['registration']
-        registration_root = (Path(mapping['runs']['primary']['directory']).parent
-                             if mapping['evaluation_contract'].get('runtime') == 'cuda' else root)
-        contract = resolve_candidate(root, bound(registration_root, registered), registered['sha256'])
+        contract = resolve_candidate(root, bound(root, registered), registered['sha256'])
         require(mapping['evaluation_contract'] == public_contract(contract)
                 and all(packet[key] == value for key, value in review_protocol(root, contract).items())
                 and set(mapping['runs']) == {'primary'}

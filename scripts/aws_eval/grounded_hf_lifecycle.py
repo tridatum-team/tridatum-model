@@ -49,7 +49,7 @@ SHA = re.compile('[0-9a-f]{64}')
 INFERENCE_SCHEMA = 'trid-ordered-hf-inference-v1'
 FOLLOWUP_SCHEMA = 'trid-hf14-followup-v1'
 EIGHT_SCHEMA = 'trid-eight-sft-experiment-v1'
-FRESH_SCHEMA = 'trid-fresh-eight-gpu-experiment-v1'
+FRESH_SCHEMA = 'trid-fresh-eight-training-experiment-v2'
 FOLLOWUP_PHASES = dict(acquire14=900, dev14=2400, val14=2400)
 CHECKPOINT_MAX = 32 * 1024**2
 CHECKPOINT_CHANNEL_BYTES = CHECKPOINT_MAX + 3 * 1024**2
@@ -99,18 +99,15 @@ def schedule_name(identity):
 
 def validate_fresh_lifetime(plan):
     limits, lifetime, cost = plan['limits'], plan['lifetime'], plan['cost']
-    require(set(lifetime) == {'total_seconds', 'termination_grace_seconds', 'automatic_extension'}
-            and lifetime['automatic_extension'] is False
-            and type(lifetime['total_seconds']) is int and 600 < lifetime['total_seconds'] <= 9000
+    require(lifetime == dict(total_seconds=2700, termination_grace_seconds=900,
+                             automatic_extension=False)
             and type(limits['lifetime_seconds']) is int
             and type(limits['reserve_seconds']) is int
-            and 300 <= limits['reserve_seconds'] < limits['lifetime_seconds'] <= 7200
-            and lifetime['termination_grace_seconds'] == cost['termination_grace_seconds']
-            and 300 <= cost['termination_grace_seconds'] <= 1800
-            and limits['lifetime_seconds'] + cost['termination_grace_seconds'] == lifetime['total_seconds']
-            and limits == dict(LIMITS, lifetime_seconds=limits['lifetime_seconds'],
-                               reserve_seconds=limits['reserve_seconds'], output_bytes=512 * 1024**2),
-            'Fresh sealed total lifetime must include cleanup grace within 150 minutes')
+            and type(cost['termination_grace_seconds']) is int
+            and cost['termination_grace_seconds'] == 900
+            and limits == dict(LIMITS, lifetime_seconds=1800,
+                               reserve_seconds=300, output_bytes=512 * 1024**2),
+            'Fresh training lease requires work1800/export300/grace900/total2700')
 
 
 
@@ -140,7 +137,7 @@ def inference_mode(plan):
 
 
 def success_field(plan):
-    if eight_mode(plan) or fresh_mode(plan):
+    if eight_mode(plan):
         return 'experimental_success'
     return 'inference_success' if inference_mode(plan) else 'training_success'
 
@@ -465,8 +462,12 @@ def fresh_cost_bound(plan):
     usage += cost['scheduler_invocations'] * rates['scheduler_invocation'] + Decimal(str(cost['ancillary_bound_usd']))
     pretax = usage + Decimal(str(cost['contingency_usd']))
     total = (pretax * (1 + Decimal(str(cost['tax_rate'])))).quantize(Decimal('0.01'), rounding=ROUND_CEILING)
-    require(total.is_finite() and total <= Decimal(10), 'Fresh all-in bound including tax exceeds USD10')
+    aggregate = Decimal('5.89') + total
+    require(total.is_finite() and total <= Decimal('4.11') and aggregate <= Decimal('10.00'),
+            'Fresh recovery bound exceeds remaining USD4.11 or original aggregate USD10')
     return dict(additional_pretax_bound_usd=float(pretax), all_in_bound_usd=str(total),
+                prior_conditional_all_in_bound_usd='5.89', aggregate_all_in_bound_usd=str(aggregate),
+                aggregate_budget_usd='10.00', current_run_cap_usd='4.11',
                 tax_rate=cost['tax_rate'], contingency_usd=cost['contingency_usd'],
                 invoice=False, spending_hard_cap=False)
 
@@ -480,7 +481,7 @@ def cost_bound(plan):
             'Missing GET/PUT/storage/egress/scheduler price closure')
     require(all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in prices.values()),
             'Prices require finite observed paid rates; no free-tier assumption')
-    cap = 10 if fresh_mode(plan) else (20 if inference_mode(plan) or eight_mode(plan) else 50)
+    cap = 4.11 if fresh_mode(plan) else (20 if inference_mode(plan) or eight_mode(plan) else 50)
     require(cost['cap_usd'] == cap and 0 < cost['retention_days'] <= 30
             and type(cost['retention_days']) is int
             and cost['ancillary_bound_usd'] >= 0
@@ -651,11 +652,13 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         key_arn = ebs_key_arn(plan)
         require(plan['recipe'] == fresh_module(plan).RECIPE, 'Frozen fresh600 recipe differs')
         require(approval == dict(schema=fresh_module(plan).APPROVAL_SCHEMA, run_id=run,
-            plan_sha256=plan_sha, instance_limit=1, additional_all_in_usd=10,
+            plan_sha256=plan_sha, instance_limit=1, aggregate_budget_usd='10.00',
+            prior_conditional_all_in_bound_usd='5.89', current_run_cap_usd='4.11',
+            aggregate_ledger_sha256=plan['aggregate_ledger']['sha256'],
             recipe=plan['recipe'], workload_sha256=object_sha(plan['workload']),
             authorization_sha256=plan['authorization']['sha256'], limits=plan['limits'],
             ebs_kms_key_arn=key_arn, automatic_retry=False, automatic_extension=False,
-            deployment=False, approved=True), 'Exact new USD10 fresh600 approval required')
+            deployment=False, approved=True), 'Exact remaining aggregate-budget training approval required')
     elif eight_mode(plan):
         key_arn = ebs_key_arn(plan)
         require(plan['recipe'] == eight_module(plan).RECIPE, 'Frozen eight training recipe differs')
@@ -726,10 +729,10 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
             and plan['bundle']['unpacked_bytes'] <= 256 * 1024**2, 'Code/data bundle too large')
     bundled = pins(plan['bundle']['files'], plan['bundle']['unpacked_bytes'])
     if fresh_mode(plan):
-        envelope = plan['resource_envelope']
         require(plan['bundle']['bytes'] <= 32 * 1024**2
-                and envelope['path'] in bundled and bundled[envelope['path']] == envelope,
-                'Fresh resource authorization must be sealed into the bounded bundle')
+                and all(bundled.get(plan[key]['path']) == plan[key]
+                        for key in ('resource_envelope', 'aggregate_ledger', 'authorization')),
+                'Fresh resource authorization and aggregate ledger must be sealed into the bounded bundle')
     bootstrap = runtime['bootstrap']
     require(set(bootstrap) == {'admission', 'nvidia_modprobe'},
             'Only verified same-AMI venv plus the pinned historical modprobe package is supported')
@@ -957,20 +960,54 @@ def blind_messages(case):
     return messages
 
 
+def validate_fresh_budget(root, plan):
+    """Authenticate the new one-shot grant and its original aggregate ledger."""
+    def bound(pin):
+        require(set(pin) == {'path', 'bytes', 'sha256'}, 'Exact budget evidence pin required')
+        relative(pin['path'])
+        path = Path(root) / pin['path']
+        value = read_bound(path, pin['sha256'])
+        require(path.stat().st_size == pin['bytes'], 'Budget evidence size differs')
+        return value
+
+    authorization = bound(plan['authorization'])
+    require(authorization['schema'] == 'trid-eight-training-recovery-authorization-v2'
+            and plan['authorization']['sha256'] == 'a305a416c12f4038a78078cb5201d567c6e3d1d34b5dd44839e086b049e90967'
+            and authorization['aggregate_budget_usd'] == '10.00'
+            and authorization['additional_gpu_executions'] == 1
+            and authorization['previous_authorization_consumed'] is True
+            and authorization['execution_started'] is False
+            and authorization['automatic_retry'] is False
+            and authorization['automatic_extension'] is False,
+            'Only the new additional execution within the original aggregate grant is authorized')
+    ledger = bound(plan['aggregate_ledger'])
+    require(ledger == dict(schema='trid-fresh-eight-aggregate-budget-v2',
+            run_id=plan['identity']['run_id'], authorization=plan['authorization'],
+            previous_run_id=authorization['previous_run_id'], previous_authorization_consumed=True,
+            prior_conditional_all_in_bound_usd='5.89', current_run_cap_usd='4.11',
+            aggregate_budget_usd='10.00', additional_gpu_executions=1,
+            automatic_retry=False, automatic_extension=False),
+            'Parent aggregate ledger must debit the consumed prior execution')
+    return ledger
+
+
 def validate_fresh_resources(root, plan):
+    validate_fresh_budget(root, plan)
     pin = plan['resource_envelope']
     path = Path(root) / pin['path']
     envelope = read_bound(path, pin['sha256'])
     require(path.stat().st_size == pin['bytes']
-            and envelope['schema'] == 'trid-fresh-eight-gpu-resource-envelope-v1'
+            and envelope['schema'] == 'trid-fresh-eight-training-resource-envelope-v2'
             and envelope['identity'] == plan['identity']
             and envelope['authorization'] == plan['authorization']
+            and envelope['aggregate_ledger'] == plan['aggregate_ledger']
             and envelope['instance_type'] == plan['instance_type'] == 'g6e.2xlarge'
             and envelope['root_gib'] == 120 and envelope['root_encrypted'] is True
             and envelope['root_delete_on_termination'] is True
-            and envelope['gpu_execution_lease_seconds_max'] == 7200
-            and envelope['termination_grace_seconds_max'] == 1800
-            and envelope['total_billable_lifetime_seconds_max'] == 9000
+            and envelope['gpu_execution_lease_seconds_max'] == 1800
+            and envelope['export_reserve_seconds'] == 300
+            and envelope['termination_grace_seconds_max'] == 900
+            and envelope['total_billable_lifetime_seconds_max'] == 2700
             and envelope['whole_host_egress_bytes_max'] == 2 * GIB
             and envelope['controller_retrieval_bytes_max'] == GIB
             and envelope['priced_egress_bytes'] == 3 * GIB
@@ -981,6 +1018,8 @@ def validate_fresh_resources(root, plan):
             and envelope['multipart_abort_days'] == 1
             and envelope['scheduler_invocations_max'] == 10000
             and Decimal(envelope['budget_usd']) == Decimal(10)
+            and envelope['prior_conditional_all_in_bound_usd'] == '5.89'
+            and envelope['current_run_cap_usd'] == '4.11'
             and Decimal(envelope['tax_assumption']) == Decimal('0.10')
             and Decimal(envelope['contingency_before_tax_usd']) == Decimal(1),
             'Parent-authorized fresh resource envelope differs')
@@ -1900,10 +1939,12 @@ def validate_followup_completion(completion, plan, plan_sha, instance_id, archiv
 
 
 def validate_fresh_terminal(plan, plan_sha, instance_id, completion):
-    require(completion['experimental_success'] is True and completion['stop_errors'] == []
+    require(completion['training_success'] is True and completion['stop_errors'] == []
+            and completion.get('completion_scope') == 'cuda_capacity_train_export_only'
+            and completion.get('quality_accepted') is False and completion.get('cloud_evaluation') is False
             and not completion.get('error') and not completion.get('export_error')
-            and [stage['phase'] for stage in completion['stages']] == ['capacity', 'train', 'evaluate'],
-            'Fresh success requires complete capacity/training/paired inference without errors')
+            and [stage['phase'] for stage in completion['stages']] == ['capacity', 'train'],
+            'Fresh success requires capacity/training only; local quality remains unevaluated')
     for stage in completion['stages']:
         require(stage['state'] == 'complete' and stage['cleanup_verified'] is True
                 and stage['run_id'] == plan['identity']['run_id'] and stage['plan_sha256'] == plan_sha
@@ -2002,7 +2043,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
                 and all(status.get(key) == completion[key] for key in ('run_id', 'plan_sha256', 'instance_id')),
                 'Fresh archive status ownership differs')
         require(status == {k: v for k, v in completion.items() if k != 'export'}
-                or (explicit_failure and status.get('experimental_success') is False),
+                or (explicit_failure and status.get('training_success') is False),
                 'Fresh terminal manifest status differs')
         if native:
             validate_fresh_terminal(plan, plan_sha, instance_id, completion)
@@ -2128,6 +2169,9 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     schedule_created = False
     result = {success_field(plan): False, 'state': 'admission', 'phase': 'readonly_admission',
               'dispatch_attempted': False, 'remote_intent_attempted': False}
+    if fresh_mode(plan):
+        result.update(completion_scope='cuda_capacity_train_export_only',
+                      quality_accepted=False, cloud_evaluation=False)
     evidence_path = state / 'volume-identity.json'
     evidence = volume_identity(identity, plan_sha, plan['ami']['RootDeviceName'])
     try:

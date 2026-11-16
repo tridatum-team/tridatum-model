@@ -49,17 +49,33 @@ def registration(root):
                      inline={'ExactRunOnly': {'Version': '2012-10-17', 'Statement': policy}})
            for key, trust, policy in (('instance_role', instance_trust, statements),
                                       ('scheduler_role', scheduler_trust, termination))}
-    auth = pin(root, 'authorization.json', {'approved': True})
+    authorization = Path(__file__).resolve().parents[1] / 'runs/mois-eight-training-recovery-20261116T014906Z/authorization.json'
+    auth = pin(root, 'authorization.json', authorization.read_bytes())
+    ledger = pin(root, 'aggregate-ledger.json', dict(schema='trid-fresh-eight-aggregate-budget-v2',
+        run_id=run, authorization=auth, previous_run_id='mois-fresh-eight-gpu-20261115-094150',
+        previous_authorization_consumed=True, prior_conditional_all_in_bound_usd='5.89',
+        current_run_cap_usd='4.11', aggregate_budget_usd='10.00', additional_gpu_executions=1,
+        automatic_retry=False, automatic_extension=False))
     prices = pin(root, 'cost-evidence.json', {'offline_fixture': True})
-    envelope = pin(root, 'resource-envelope.json', dict(schema='trid-fresh-eight-gpu-resource-envelope-v1',
-        identity=ident, authorization=auth, budget_usd='10.00', billing_hard_cap=False, cost_evidence=prices,
+    envelope = pin(root, 'resource-envelope.json', dict(schema='trid-fresh-eight-training-resource-envelope-v2',
+        identity=ident, authorization=auth, aggregate_ledger=ledger,
+        budget_usd='10.00', prior_conditional_all_in_bound_usd='5.89', current_run_cap_usd='4.11',
+        billing_hard_cap=False, cost_evidence=prices, instance_type='g6e.2xlarge',
+        root_gib=120, root_encrypted=True, root_delete_on_termination=True,
+        gpu_execution_lease_seconds_max=1800, export_reserve_seconds=300,
+        termination_grace_seconds_max=900, total_billable_lifetime_seconds_max=2700,
+        whole_host_egress_bytes_max=2 * 1024**3, controller_retrieval_bytes_max=1024**3,
+        priced_egress_bytes=3 * 1024**3, combined_retained_s3_bytes_max=1024**3,
+        output_archive_bytes_max=512 * 1024**2, scheduler_invocations_max=10000,
+        tax_assumption='0.10', contingency_before_tax_usd='1.00',
         s3_expiration_days=30, multipart_abort_days=1, bundle_bytes_max=32 * 1024**2))
     sources = [pin(root, name, Path(module.__file__).read_bytes()) for name, module in (
         ('scripts/aws_eval/fresh_eight_launch.py', fresh),
         ('scripts/aws_eval/grounded_hf_lifecycle.py', fresh.lifecycle))]
     data = pin(root, 'inputs/data.json', {'input': 'sealed'})
     return dict(schema=fresh.SCHEMA, approved=True, automatic_retry=False, identity=ident,
-        controller_arn='arn:aws:iam::148761639313:user/parent', authorization=auth, resource_envelope=envelope,
+        controller_arn='arn:aws:iam::148761639313:user/parent', authorization=auth,
+        aggregate_ledger=ledger, resource_envelope=envelope,
         sources=sources, iam=iam, network=dict(vpc_id='vpc-123', subnet_id='subnet-123',
             availability_zone='ap-northeast-2a', security_group_name=run + '-sg', security_group_description='Fresh owned SG'),
         bucket_lifecycle_before={'Rules': [dict(ID='historical', Status='Enabled', Filter={'Prefix': 'old/'},
@@ -85,6 +101,41 @@ class FreshPreparationTests(unittest.TestCase):
         self.assertIs(fresh.validate_registration(self.reg, self.root), self.reg)
         (self.root / 'authorization.json').write_text('{}')
         with self.assertRaises(RuntimeError):
+            fresh.validate_registration(self.reg, self.root)
+
+    def test_registration_rejects_consumed_or_repriced_aggregate_ledger(self):
+        original = copy.deepcopy(self.reg)
+        for key, value in (('previous_authorization_consumed', False),
+                           ('prior_conditional_all_in_bound_usd', '0.00'),
+                           ('current_run_cap_usd', '10.00'), ('additional_gpu_executions', 2)):
+            with self.subTest(key=key):
+                self.reg = copy.deepcopy(original)
+                ledger = json.loads((self.root / self.reg['aggregate_ledger']['path']).read_text())
+                ledger.update({key: value})
+                self.reg['aggregate_ledger'] = pin(self.root, 'mutated-ledger.json', ledger)
+                with self.assertRaisesRegex(RuntimeError, 'Parent aggregate ledger'):
+                    fresh.validate_registration(self.reg, self.root)
+
+    def test_registration_rejects_historical_schema_and_resource_extensions(self):
+        historical = copy.deepcopy(self.reg)
+        historical['schema'] = 'trid-fresh-eight-prerequisites-v1'
+        with self.assertRaisesRegex(RuntimeError, 'Exact parent prerequisite'):
+            fresh.validate_registration(historical, self.root)
+        original = json.loads((self.root / self.reg['resource_envelope']['path']).read_text())
+        for key, value in (('gpu_execution_lease_seconds_max', 7200),
+                           ('export_reserve_seconds', 600), ('root_encrypted', False),
+                           ('termination_grace_seconds_max', 1800),
+                           ('total_billable_lifetime_seconds_max', 9000)):
+            with self.subTest(key=key):
+                envelope = dict(original, **{key: value})
+                self.reg['resource_envelope'] = pin(self.root, 'mutated-envelope.json', envelope)
+                with self.assertRaisesRegex(RuntimeError, 'resource envelope differs'):
+                    fresh.validate_registration(self.reg, self.root)
+
+    def test_registration_never_reuses_old_one_shot_grant(self):
+        self.reg['authorization'] = pin(self.root, 'old-authorization.json', dict(
+            schema='trid-fresh-eight-gpu-authorization-v1', additional_budget_usd='10.00'))
+        with self.assertRaisesRegex(RuntimeError, 'original aggregate grant'):
             fresh.validate_registration(self.reg, self.root)
 
     def test_registration_rejects_expanded_worker_policy(self):

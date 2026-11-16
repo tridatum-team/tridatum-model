@@ -12,6 +12,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -596,6 +597,246 @@ class EffectiveGreedyPolicyContracts(unittest.TestCase):
             self.assertEqual(result.sequences[0, ids.shape[1]:].tolist(), [0])
             self.assertEqual(observed['effective_config_sha256'], policy['effective_config_sha256'])
             self.assertNotIn('_prepare_generation_config', base.__dict__)
+
+
+class InferencePrecisionContracts(unittest.TestCase):
+    def inventory(self, *, adapter_dtype='torch.float32', base_device='mps', adapter_device='mps',
+                  fp32=True):
+        from types import SimpleNamespace
+
+        class Device:
+            def __init__(self, name):
+                self.type = name
+            def __str__(self):
+                return self.type + ':0'
+
+        def parameter(dtype, device):
+            return SimpleNamespace(dtype=dtype, device=Device(device), numel=lambda: 8,
+                                   element_size=lambda: 4 if dtype == 'torch.float32' else 2)
+
+        parameters = [('model.layers.0.q_proj.base_layer.weight', parameter('torch.bfloat16', base_device)),
+                      ('model.layers.0.q_proj.lora_A.default.weight', parameter(adapter_dtype, adapter_device)),
+                      ('model.layers.0.q_proj.lora_B.default.weight', parameter(adapter_dtype, adapter_device))]
+        model = SimpleNamespace(named_parameters=lambda: iter(parameters))
+        torch = SimpleNamespace(float32='torch.float32', bfloat16='torch.bfloat16')
+        return E.inference_parameter_inventory(model, torch, fp32)
+
+    def test_cuda_trained_adapter_is_fp32_on_native_mps_not_relabelled_cuda(self):
+        inventory = self.inventory()
+        self.assertEqual(inventory['adapter'], {'torch.float32@mps:0': dict(tensors=2, elements=16, bytes=64)})
+        self.assertEqual(inventory['base'], {'torch.bfloat16@mps:0': dict(tensors=1, elements=8, bytes=16)})
+
+    def test_cast_adapter_and_backend_fallback_are_rejected(self):
+        for mutation in (dict(adapter_dtype='torch.bfloat16'), dict(base_device='cpu'),
+                         dict(adapter_device='cuda')):
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, 'device/dtype'):
+                self.inventory(**mutation)
+
+    def test_legacy_bf16_inference_is_unchanged(self):
+        inventory = self.inventory(adapter_dtype='torch.bfloat16', fp32=False)
+        self.assertEqual(set(inventory['adapter']), {'torch.bfloat16@mps:0'})
+
+
+class LocalEvaluationGuardContracts(unittest.TestCase):
+    """Synthetic receipts exercise admission/cleanup; never model execution."""
+    def setUp(self):
+        import local_eight_candidate as candidate
+        import local_mps_training as guard
+        self.candidate, self.guard = candidate, guard
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.registration_path = self.root / 'local-registration.json'
+        for name in ('candidate.json', 'inputs.json', 'metadata.json'):
+            (self.root / name).write_text('{}')
+        self.args = E.parser().parse_args([
+            '--model-directory', str(self.root / 'model'), '--model-metadata', str(self.root / 'metadata.json'),
+            '--inputs', str(self.root / 'inputs.json'), '--inputs-sha256', E.digest(self.root / 'inputs.json'),
+            '--candidate-manifest', str(self.root / 'candidate.json'),
+            '--candidate-sha256', E.digest(self.root / 'candidate.json'),
+            '--mode', 'evaluation', '--out', str(self.root / 'evaluation'),
+            '--local-registration', str(self.registration_path), '--local-registration-sha256', 'pending'])
+        sources = {}
+        for name in E.LOCAL_SOURCES:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('# synthetic source identity only\n')
+            sources[name] = E.pin(path)
+        self.registration = dict(schema='trid-local-eight-evaluation-registration-v1',
+            candidate=E.pin(self.args.candidate_manifest), inputs=E.pin(self.args.inputs),
+            model_metadata=E.pin(self.args.model_metadata), model_directory=str(self.args.model_directory),
+            generation=E.GENERATION, sources=sources, supervision=E.LOCAL_LIMITS,
+            output=str(self.args.out), supervision_output=str(self.root / 'supervision'),
+            command=E.evaluation_command(self.args), environment=guard.WORKER_ENV)
+        self.contract = dict(training_runtime='cuda', inference_runtime='mps', policy_document=dict(
+            data=dict(evaluation_inputs=self.registration['inputs']),
+            model=dict(acquisition_manifest=self.registration['model_metadata'], directory=str(self.args.model_directory)),
+            evaluation=dict(generation=E.GENERATION)))
+        self.publish()
+
+    def publish(self):
+        self.registration_path.write_text(json.dumps(self.registration))
+        self.args.local_registration_sha256 = E.digest(self.registration_path)
+        return E.pin(self.registration_path)
+
+    def resolve(self):
+        with patch.object(E, 'ROOT', self.root), \
+             patch.object(self.candidate, 'resolve_candidate', return_value=self.contract):
+            return E.local_registration(self.registration_path, self.args.local_registration_sha256, self.args)
+
+    def test_exact_local_policy_accepts_only_primary200_and_twelve_hours(self):
+        registration, _ = self.resolve()
+        self.assertEqual(registration['supervision']['evaluation_deadline_seconds'], 43200)
+        for field, value in [('mode', 'smoke'), ('decoder_profile', 'json-schema'),
+                             ('export', self.root / 'other')]:
+            original = getattr(self.args, field)
+            setattr(self.args, field, value)
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'primary200'):
+                self.resolve()
+            setattr(self.args, field, original)
+
+    def test_resealed_deadline_memory_command_and_source_substitutions_fail(self):
+        original = copy.deepcopy(self.registration)
+        for mutate in [
+            lambda r: r['supervision'].update(evaluation_deadline_seconds=1800),
+            lambda r: r['supervision'].update(process_group_rss_limit_bytes=48 * 1024 ** 3),
+            lambda r: r['command'].append('--export'),
+            lambda r: r['sources'].pop('scripts/local_mps_training.py'),
+            lambda r: r.update(output=r['supervision_output']),
+        ]:
+            self.registration = copy.deepcopy(original)
+            mutate(self.registration)
+            self.publish()
+            with self.assertRaises(ValueError):
+                self.resolve()
+
+    def test_cloud_cleanup_failure_blocks_local_admission(self):
+        with patch.object(E, 'ROOT', self.root), \
+             patch.object(self.candidate, 'resolve_candidate', side_effect=ValueError('cloud cleanup missing')):
+            with self.assertRaisesRegex(ValueError, 'cloud cleanup missing'):
+                E.local_registration(self.registration_path, self.args.local_registration_sha256, self.args)
+
+    def test_unguarded_cuda_candidate_stops_before_torch_import(self):
+        argv = E.evaluation_command(self.args)[4:]
+        model = dict(acquisition_manifest=self.registration['model_metadata'], directory=str(self.args.model_directory))
+        with patch.object(E, 'public_inputs', return_value=([], self.registration['inputs'])), \
+             patch.object(E, 'select_rows', return_value=[]), patch.object(E, 'model_identity', return_value=model), \
+             patch.object(self.candidate, 'resolve_candidate', return_value=self.contract):
+            with self.assertRaisesRegex(ValueError, 'guarded local evaluation'):
+                E.main(argv)
+        self.assertFalse((self.args.out / 'run-manifest.json').exists())
+
+    def test_host_refusal_never_spawns_worker_or_releases_gate(self):
+        import subprocess
+        host = dict(pressure=2, swap_bytes=0, pressure_free_percent=50, ac_power=False)
+        with patch.object(E.sys, 'platform', 'darwin'), patch.object(Path, 'home', return_value=self.root), \
+             patch.object(self.guard, 'host_probe', return_value=host), patch.object(subprocess, 'Popen') as spawn:
+            result = E.supervised_evaluation(self.args, self.registration, self.publish())
+        spawn.assert_not_called()
+        self.assertEqual(result['status'], 'failed')
+        self.assertFalse(result['startup_released'])
+        self.assertFalse(result['cleanup']['accepted'])
+
+    def test_battery_child_waits_for_gate_and_is_reaped_before_acceptance(self):
+        # Battery authorization changes only power admission, not owned cleanup.
+        registration_pin = self.publish()
+        script = r"""
+import hashlib, json, os, sys
+from pathlib import Path
+r = json.loads(sys.argv[1])
+registered = json.loads(sys.argv[2])
+fd = int(os.environ['TRID_MPS_GATE_FD'])
+assert os.getppid() == int(os.environ['TRID_MPS_PARENT'])
+assert os.read(fd, 1) == b'G'
+os.close(fd)
+out = Path(r['output'])
+out.mkdir()
+def save(path, value):
+    path.write_text(json.dumps(value))
+def pin(path):
+    return dict(path=str(path), bytes=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+save(out / 'run-manifest.json', dict(local_registration=registered, code=r['sources']))
+save(out / 'loaded-runtime.json', dict(code=r['sources']))
+for arm in ('base', 'candidate'):
+    (out / (arm + '-outputs.jsonl')).write_text('')
+save(out / 'completion.json', dict(status='complete', rows_per_arm=200,
+    run_manifest_sha256=pin(out / 'run-manifest.json')['sha256'],
+    outputs={arm: pin(out / (arm + '-outputs.jsonl')) for arm in ('base', 'candidate')}))
+save(Path(r['supervision_output']) / 'telemetry.json', dict(allocator_bytes=0, driver_bytes=0))
+"""
+        command = [sys.executable, '-c', script, json.dumps(self.registration), json.dumps(registration_pin)]
+        registration = dict(self.registration, command=command)
+        original_members = self.guard.group_members
+
+        def members(pgid, footprint=True):
+            return original_members(pgid, footprint=False)
+
+        host = dict(pressure=1, swap_bytes=0, pressure_free_percent=50, ac_power=False)
+        with patch.object(E.sys, 'platform', 'darwin'), patch.object(Path, 'home', return_value=self.root), \
+             patch.object(self.guard, 'host_probe', return_value=host), \
+             patch.object(self.guard, 'group_members', side_effect=members):
+            result = E.supervised_evaluation(self.args, registration, registration_pin)
+        self.assertEqual(result['status'], 'accepted', result)
+        self.assertTrue(result['startup_released'])
+        self.assertTrue(result['cleanup']['leader_reaped'])
+        self.assertEqual(result['cleanup']['remaining_members'], [])
+        self.assertTrue(result['signals'])
+
+    def test_battery_authorization_preserves_host_and_memory_rejections(self):
+        limits = E.LOCAL_LIMITS
+        host = dict(pressure=1, swap_bytes=0, pressure_free_percent=10, ac_power=False)
+        rows = [dict(rss_bytes=limits['process_group_rss_limit_bytes'],
+                     footprint_bytes=limits['process_group_footprint_limit_bytes'])]
+        self.assertIsNone(self.guard.stop_reason(limits, host, rows, 0))
+        for changed, expected in [
+            (dict(host, pressure=2), 'host_pressure'),
+            (dict(host, pressure_free_percent=9), 'pressure_free_percent_floor'),
+            (dict(host, swap_bytes=limits['swap_growth_limit_bytes'] + 1), 'swap_growth'),
+        ]:
+            with self.subTest(guard=expected):
+                self.assertEqual(self.guard.stop_reason(limits, changed, rows, 0), expected)
+        for field, expected in [('rss_bytes', 'process_group_rss_limit_bytes'),
+                                ('footprint_bytes', 'process_group_footprint_limit_bytes')]:
+            with self.subTest(guard=expected):
+                changed = [dict(rows[0], **{field: rows[0][field] + 1})]
+                self.assertEqual(self.guard.stop_reason(limits, host, changed, 0), expected)
+        telemetry = self.root / 'battery-telemetry.json'
+        for field, bound in [('allocator_bytes', 'mps_allocator_limit_bytes'),
+                             ('driver_bytes', 'mps_driver_limit_bytes')]:
+            with self.subTest(guard=bound):
+                sample = dict(allocator_bytes=0, driver_bytes=0)
+                sample[field] = limits[bound] + 1
+                telemetry.write_text(json.dumps(sample))
+                with self.assertRaisesRegex(ValueError, bound):
+                    self.guard.telemetry_check(telemetry, limits)
+
+    def test_assessment_requires_parent_completion_and_positive_owned_cleanup(self):
+        registration_pin = self.publish()
+        self.args.out.mkdir()
+        completion = self.args.out / 'completion.json'
+        completion.write_text('{}')
+        manifest = dict(local_registration=registration_pin,
+            evaluation_contract=dict(registration=self.registration['candidate']),
+            input=self.registration['inputs'], generation=E.GENERATION,
+            model=dict(directory=self.registration['model_directory']), code=self.registration['sources'])
+        (self.args.out / 'run-manifest.json').write_text(json.dumps(manifest))
+        (self.args.out / 'loaded-runtime.json').write_text(json.dumps(dict(code=self.registration['sources'])))
+        supervisor = Path(self.registration['supervision_output'])
+        supervisor.mkdir()
+        receipt = dict(schema='trid-local-eight-evaluation-supervision-v1', registration=registration_pin,
+            status='accepted', startup_released=True, exit_code=0, stop_reason='worker_exit',
+            cleanup=dict(accepted=True, leader_reaped=True, remaining_members=[], errors=[]),
+            completion=E.pin(completion))
+        path = supervisor / 'result.json'
+        with patch.object(E, 'local_registration', return_value=(self.registration, registration_pin)):
+            path.write_text(json.dumps(receipt))
+            self.assertEqual(E.accepted_local_supervision(registration_pin, self.args.out), path)
+            for changed in [dict(receipt, status='failed'), dict(receipt, exit_code=1),
+                            dict(receipt, cleanup=dict(receipt['cleanup'], leader_reaped=False)),
+                            dict(receipt, cleanup=dict(receipt['cleanup'], remaining_members=[123]))]:
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, 'not accepted'):
+                    E.accepted_local_supervision(registration_pin, self.args.out)
 
 
 if __name__ == '__main__':

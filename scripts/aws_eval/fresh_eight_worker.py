@@ -15,7 +15,7 @@ import fresh_eight_experiment as E
 
 
 def phase_kind(phase):
-    return phase if phase in ('runtime', 'capacity', 'train', 'evaluate') else None
+    return phase if phase in ('runtime', 'capacity', 'train') else None
 
 
 def runtime_record(core, plan, base):
@@ -183,24 +183,17 @@ def train_stage(core, plan, base, admitted):
 
 
 def child_stage(core, plan, base, phase):
-    E.require(phase in ('capacity', 'train', 'evaluate'), 'Unknown fresh CUDA phase')
+    E.require(phase in ('capacity', 'train'), 'GPU evaluation and unknown fresh CUDA phases are forbidden')
     admitted = E.validate_data(Path(base) / 'code', plan)
     core.validate_model(Path(base) / 'model', plan)
     torch = core.native_runtime(plan, base)
     if phase == 'capacity':
         capacity_stage(core, plan, base, torch, admitted)
-    elif phase == 'train':
-        train_stage(core, plan, base, admitted)
     else:
-        root = Path(base) / 'output'
-        sys.path.insert(0, str(Path(base) / 'code'))
-        E.validate_training(root, plan); E.validate_supervision(root, 'train', plan)
-        sys.path.insert(0, str(Path(base) / 'code/scripts'))
-        from evaluate_local_eight import evaluate_cloud
-        evaluate_cloud(plan, Path(base))
+        train_stage(core, plan, base, admitted)
 
 
-def run_experiment(core, plan, base, report, client, gpu, account, work_deadline,
+def run_experiment(core, plan, base, report, gpu, account, work_deadline,
                    acquisition_deadline, budget, hosts, units):
     base = Path(base)
     root = base / 'output'
@@ -215,12 +208,7 @@ def run_experiment(core, plan, base, report, client, gpu, account, work_deadline
     shutil.copyfile(base / 'plan.json', root / 'plan.json')
     (root / 'plan.json').chmod(0o444)
     for phase, result_name in [('capacity', 'capacity/capacity-worker.json'),
-                               ('train', 'train/training-worker.json'), ('evaluate', 'evaluation/completion.json')]:
-        if phase == 'evaluate':
-            core.save(root / 'candidate.json', dict(schema='trid-fresh-eight-cuda-candidate-v1',
-                plan=E.pin(root / 'plan.json', root), candidate_id=E.RUN_ID,
-                arm='candidate', step=150))
-            (root / 'candidate.json').chmod(0o444)
+                               ('train', 'train/training-worker.json')]:
         unit = core.supervise_phase(plan, base, phase, gpu, account.pw_uid, account.pw_gid, work_deadline, units,
                                     attempt=report.setdefault('phase_attempt', {}))
         E.require(unit['cleanup_verified'] is True, 'Fresh phase has no owned-process cleanup proof')
@@ -230,11 +218,9 @@ def run_experiment(core, plan, base, report, client, gpu, account, work_deadline
             scratch = base / 'scratch/tmp/fresh-capacity'
             E.require(scratch.is_dir() and not scratch.is_symlink(), 'Scratch capacity ownership differs')
             shutil.rmtree(scratch)
-        elif phase == 'train':
-            E.validate_training(root, plan)
         else:
-            E.validate_evaluation(root, plan)
-        folder = root / ('evaluation' if phase == 'evaluate' else phase)
+            E.validate_training(root, plan)
+        folder = root / phase
         core.save(folder / 'supervisor-result.json', dict(schema='trid-fresh-eight-cuda-supervision-v1',
             phase=phase, status='accepted', cleanup_verified=True, run_id=plan['identity']['run_id'],
             plan_sha256=core.digest(base / 'plan.json'), policy=plan['data']['policy'],
@@ -245,9 +231,9 @@ def run_experiment(core, plan, base, report, client, gpu, account, work_deadline
             import os
             os.chown(path, 0, 0)
             path.chmod(0o555 if path.is_dir() else 0o444)
-        if phase == 'train':
-            # Persist only accepted, reaped, root-frozen training artifacts.
-            # This incomplete snapshot is recovery evidence, never quality success.
-            E.require(not units, 'Training snapshot requires all owned units reaped')
-            core.publish_outputs(base, plan, report, client, work_deadline)
+    E.require(not units, 'Training completion requires all owned units reaped')
+    core.save(root / 'candidate.json', dict(schema=E.CANDIDATE_SCHEMA,
+        plan=E.pin(root / 'plan.json', root), candidate_id=E.RUN_ID, arm='candidate', step=150,
+        completion_scope=E.COMPLETION_SCOPE, quality_accepted=False, cloud_evaluation=False))
+    (root / 'candidate.json').chmod(0o444)
     E.validate_completion(root, plan)

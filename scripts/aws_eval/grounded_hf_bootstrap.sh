@@ -39,14 +39,14 @@ import hashlib, json, pathlib, sys, tarfile
 p = json.loads(pathlib.Path('plan.json').read_text())
 b = p['bundle']
 assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= 128 * 1024**2
-if p.get('schema') == 'trid-fresh-eight-gpu-experiment-v1':
+if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
-    assert lease['automatic_extension'] is False
-    assert 300 <= cost['termination_grace_seconds'] <= 1800
-    assert lease['termination_grace_seconds'] == cost['termination_grace_seconds']
-    assert limits['lifetime_seconds'] + cost['termination_grace_seconds'] == lease['total_seconds'] <= 9000
-    assert 300 <= limits['reserve_seconds'] < limits['lifetime_seconds'] <= 7200
-    assert cost['cap_usd'] == 10
+    assert lease == dict(total_seconds=2700, termination_grace_seconds=900, automatic_extension=False)
+    assert cost['termination_grace_seconds'] == 900
+    assert limits['lifetime_seconds'] == 1800 and limits['reserve_seconds'] == 300
+    assert cost['cap_usd'] == 4.11
+    assert p['cloud_evaluation'] is False
+    assert p['workflow'] == 'cuda_capacity_train_export_only_then_local_mps_evaluation'
     assert b['bytes'] <= 32 * 1024**2 and limits['output_bytes'] == 512 * 1024**2
     assert 0 < cost['export_bytes'] <= limits['output_bytes']
     assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1

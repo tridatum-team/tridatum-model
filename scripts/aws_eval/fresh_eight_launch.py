@@ -16,10 +16,10 @@ mutation is NEVER automatically retried. A durably accepted schedule-group
 deletion alone may resume bounded read-only absence reconciliation, preserving
 its original intent/response; other partial cleanup requires parent recovery.
 
-Registration JSON schema trid-fresh-eight-prerequisites-v1 requires:
+Registration JSON schema trid-fresh-eight-prerequisites-v2 requires:
   approved:true, automatic_retry:false, identity:(exact lifecycle plan identity),
-  controller_arn, authorization:{path,bytes,sha256}, resource_envelope:(same pin),
-  sources:[{path,bytes,sha256}],
+  controller_arn, authorization:{path,bytes,sha256}, aggregate_ledger:(same pin),
+  resource_envelope:(same pin), sources:[{path,bytes,sha256}],
   iam:{instance_role:{arn,trust,inline},scheduler_role:{arn,trust,inline}},
   network:{vpc_id,subnet_id,availability_zone,security_group_name,
            security_group_description}, bucket_lifecycle_before:(full GET response),
@@ -31,9 +31,28 @@ symlink components. Parent provides exact policy documents, prices, admissions,
 final plan and approval; this helper never synthesizes them. Offline prepare
 emits bundle-prepared.json; live preparation emits owned-prerequisites.json.
 Final plan must pin observations in that receipt and the prepared bundle.
-Authorization/source closure may remain external; executable bundle closure is
-additionally checked by lifecycle validators. Registration SHA is a parent trust
-anchor, NOT a claim of a cryptographic user signature.
+Authorization, aggregate ledger and resource envelope must also enter the final
+bundle. Executable bundle closure is checked by lifecycle validators.
+Registration SHA is a parent trust anchor, not a cryptographic user signature.
+
+The aggregate ledger schema is trid-fresh-eight-aggregate-budget-v2, with exactly:
+  schema, run_id, authorization:(Pin), previous_run_id,
+  previous_authorization_consumed:true, prior_conditional_all_in_bound_usd:"5.89",
+  current_run_cap_usd:"4.11", aggregate_budget_usd:"10.00",
+  additional_gpu_executions:1, automatic_retry:false, automatic_extension:false.
+The new grant is SHA-bound; the consumed historical grant cannot authorize this
+execution. Resource envelope schema is trid-fresh-eight-training-resource-envelope-v2;
+it binds authorization and aggregate_ledger Pins, work1800/export300/grace900/
+total2700, encrypted120GiB delete-on-termination root, and unchanged finite
+network/storage/request/tax allowances. cost.cap_usd is numeric 4.11.
+Approval schema is trid-fresh-eight-training-approval-v2 with exactly:
+  schema, run_id, plan_sha256, instance_limit:1, aggregate_budget_usd:"10.00",
+  prior_conditional_all_in_bound_usd:"5.89", current_run_cap_usd:"4.11",
+  aggregate_ledger_sha256, authorization_sha256, recipe, workload_sha256,
+  limits, ebs_kms_key_arn, automatic_retry:false, automatic_extension:false,
+  deployment:false, approved:true.
+Success means authenticated CUDA capacity/training/export plus positive compute
+cleanup only: training_success, never quality acceptance or CUDA evaluation.
 
 Permissions: controller needs STS GetCallerIdentity; IAM Get/List role/profile,
 CreateRole/PutRolePolicy/CreateInstanceProfile/AddRoleToInstanceProfile and exact
@@ -71,7 +90,7 @@ else:
     import grounded_hf_lifecycle as lifecycle
 
 require = lifecycle.require
-SCHEMA = 'trid-fresh-eight-prerequisites-v1'
+SCHEMA = 'trid-fresh-eight-prerequisites-v2'
 HELPERS = {'scripts/aws_eval/fresh_eight_launch.py', 'scripts/aws_eval/grounded_hf_lifecycle.py'}
 ROLE_KEYS = ('instance_role', 'scheduler_role')
 
@@ -133,7 +152,7 @@ def verify_tags(rows, identity):
 
 def validate_registration(reg, root):
     fields = {'schema', 'approved', 'automatic_retry', 'identity', 'controller_arn', 'authorization',
-              'resource_envelope', 'sources', 'iam', 'network', 'bucket_lifecycle_before',
+              'resource_envelope', 'aggregate_ledger', 'sources', 'iam', 'network', 'bucket_lifecycle_before',
               'retention_days', 'lifecycle_rule_ids', 'bundle'}
     require(set(reg) == fields and reg['schema'] == SCHEMA and reg['approved'] is True
             and reg['automatic_retry'] is False, 'Exact parent prerequisite registration required')
@@ -159,13 +178,12 @@ def validate_registration(reg, root):
     require(type(reg['retention_days']) is int and 1 <= reg['retention_days'] <= 30, 'Retention exceeds bound')
     require(set(reg['network']) == {'vpc_id', 'subnet_id', 'availability_zone', 'security_group_name',
                                     'security_group_description'}, 'Exact parent network required')
-    bound_json(root, reg['authorization'])
+    pin_bytes(root, reg['authorization'])
+    pin_bytes(root, reg['aggregate_ledger'])
     envelope = bound_json(root, reg['resource_envelope'])
-    require(envelope['schema'] == 'trid-fresh-eight-gpu-resource-envelope-v1'
-            and envelope['identity'] == ident and envelope['authorization'] == reg['authorization']
-            and envelope['budget_usd'] == '10.00' and envelope['billing_hard_cap'] is False,
-            'Exact parent resource envelope required')
     pin_bytes(root, envelope['cost_evidence'])
+    lifecycle.validate_fresh_resources(root, dict(reg, instance_type='g6e.2xlarge'))
+    require(envelope['billing_hard_cap'] is False, 'Resource budget is conditional, not a billing hard cap')
     require(reg['retention_days'] == envelope['s3_expiration_days']
             and envelope['multipart_abort_days'] == 1, 'Envelope retention differs')
     source_pins = lifecycle.pins(reg['sources'], 32 * 1024**2)
@@ -452,14 +470,15 @@ def prepare_prerequisites(reg, registration_sha, state, client):
          '--vpc-id', network['vpc_id'], '--tag-specifications', json.dumps([dict(ResourceType='security-group', Tags=tags(identity))])],
         lambda response: sg_snapshot(client, reg, response['GroupId']))
     observed['bucket_lifecycle_configuration'] = append_lifecycle_configuration(reg, registration_sha, state, client)
-    return record(Path(state) / 'owned-prerequisites.json', dict(schema='trid-fresh-eight-owned-prerequisites-v1',
+    return record(Path(state) / 'owned-prerequisites.json', dict(schema='trid-fresh-eight-owned-prerequisites-v2',
         registration_sha256=registration_sha, identity=identity, resources=observed))
 
 
 def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha):
     require(lifecycle.fresh_mode(plan) and plan['identity'] == reg['identity'] and plan['iam'] == reg['iam']
             and plan['controller_arn'] == reg['controller_arn'] and plan['authorization'] == reg['authorization']
-            and plan['resource_envelope'] == reg['resource_envelope'],
+            and plan['resource_envelope'] == reg['resource_envelope']
+            and plan['aggregate_ledger'] == reg['aggregate_ledger'],
             'Final plan not bound to parent registration')
     envelope = bound_json(root, reg['resource_envelope'])
     require(plan['bundle']['bytes'] <= envelope['bundle_bytes_max']
@@ -838,7 +857,7 @@ def main():
         else:
             result = owned_prerequisite_cleanup(reg, args.registration_sha256, args.state, client, plan, args.plan_sha256)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        if result.get('cleanup_state') == 'unresolved' or (args.action == 'launch' and not result.get('experimental_success')):
+        if result.get('cleanup_state') == 'unresolved' or (args.action == 'launch' and not result.get('training_success')):
             raise SystemExit(1)
     finally:
         os.close(descriptor)

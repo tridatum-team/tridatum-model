@@ -320,10 +320,6 @@ def export_outputs(base, plan, report, deadline):
     require(predicted <= archive_limit, 'Export archive overhead exceeds envelope')
     import io
     target = base / 'export.tar'
-    if fresh_mode(plan):
-        # One local archive at a time, including replacement after a failed PUT.
-        # The acknowledged remote pin remains untouched until upload succeeds.
-        target.unlink(missing_ok=True)
     with tarfile.open(target, 'x:', format=tarfile.USTAR_FORMAT) as archive:
         info = tarfile.TarInfo('export-manifest.json'); info.size = len(payload); info.mode = 0o444
         archive.addfile(info, io.BytesIO(payload))
@@ -338,12 +334,14 @@ def export_outputs(base, plan, report, deadline):
     return dict(path=target, bytes=target.stat().st_size, sha256=digest(target), manifest=manifest)
 
 
-def publish_outputs(base, plan, report, client, deadline):
-    """Publish one bounded artifact set; advance its pin only on acknowledgment."""
+def publish_outputs(base, plan, report, client, deadline, *, training_complete=False):
+    """Publish once; expose training success and its pin only after acknowledgment."""
     status = {k: v for k, v in report.items() if k != 'export'}
+    if training_complete:
+        require(fresh_mode(plan), 'Training-only publication requires the fresh profile')
+        status['training_success'] = True
     export = export_outputs(base, plan, status, deadline)
     ident = plan['identity']
-    condition = [] if fresh_mode(plan) and 'export' in report else ['--if-none-match', '*']
     bounded_client = fresh_mode(plan) and hasattr(client, 'deadline')
     if bounded_client:
         previous_deadline = client.deadline
@@ -351,12 +349,14 @@ def publish_outputs(base, plan, report, client, deadline):
     try:
         remaining(deadline)
         client('s3api', 'put-object', '--bucket', ident['bucket'], '--key', ident['output_prefix'] + 'export.tar',
-               '--body', str(export['path']), *condition, '--server-side-encryption', 'AES256',
+               '--body', str(export['path']), '--if-none-match', '*', '--server-side-encryption', 'AES256',
                '--metadata', json.dumps({'sha256': export['sha256'], 'run': ident['run_id']}))
     finally:
         if bounded_client:
             client.deadline = previous_deadline
     report['export'] = {k: export[k] for k in ('bytes', 'sha256')}
+    if training_complete:
+        report['training_success'] = True
     return export
 
 
@@ -542,8 +542,11 @@ def bootstrap(plan, plan_sha, base):
     shutdown_at = dt.datetime.fromtimestamp(deadline - 60).strftime('%H:%M')
     command(['/sbin/shutdown', '-c'], initial_deadline)
     command(['/sbin/shutdown', '-h', shutdown_at], initial_deadline)
-    success_key = 'experimental_success' if eight or fresh else ('inference_success' if ordered else 'training_success')
+    success_key = 'experimental_success' if eight else ('inference_success' if ordered else 'training_success')
     report = {success_key: False}
+    training_accepted = False
+    if fresh:
+        report.update(completion_scope=fresh.E.COMPLETION_SCOPE, quality_accepted=False, cloud_evaluation=False)
     report.update(stages=[], run_id=ident['run_id'],
                   instance_id=identity['instanceId'], plan_sha256=plan_sha)
     units, export, client = [], None, Client(ident, deadline=deadline - 30, request_limit=plan['cost']['get_requests'] + 8)
@@ -667,7 +670,7 @@ def bootstrap(plan, plan_sha, base):
             eight.run_experiment(sys.modules[__name__], plan, base, report, client, gpu, account,
                                  work_deadline, acquisition_deadline, budget, hosts, units)
         elif fresh:
-            fresh.run_experiment(sys.modules[__name__], plan, base, report, client, gpu, account,
+            fresh.run_experiment(sys.modules[__name__], plan, base, report, gpu, account,
                                  work_deadline, acquisition_deadline, budget, hosts, units)
         else:
             for row in plan['model']['files']:
@@ -685,7 +688,10 @@ def bootstrap(plan, plan_sha, base):
                     require(not (base / 'output/capacity').exists(), 'Synthetic capacity artifacts remain')
                     receipt['discarded'] = True
                     save(receipt_path, receipt)
-        report[success_key] = True
+        if fresh:
+            training_accepted = True
+        else:
+            report[success_key] = True
     except BaseException as exc:
         report['error'] = f'{type(exc).__name__}: {exc}'
     finally:
@@ -707,7 +713,8 @@ def bootstrap(plan, plan_sha, base):
                 cleanup_fresh_scratch(base, units, deadline - 60)
             if (base / 'output').exists():
                 # No exceptions for library scratch or unknown output files.
-                export = publish_outputs(base, plan, report, client, deadline - 60)
+                export = publish_outputs(base, plan, report, client, deadline - 60,
+                                         training_complete=training_accepted)
         except Exception as exc:
             report['export_error'] = str(exc)
             if fresh:
