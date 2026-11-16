@@ -257,7 +257,7 @@ def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded, ge
     source_archive = candidate.bound(root, dict(path=plan['bundle']['local_path'],
         bytes=plan['bundle']['bytes'], sha256=plan['bundle']['sha256']))
     with tempfile.TemporaryDirectory(prefix='trid-evaluation-evidence-') as temporary:
-        sources = Path(temporary) / 'bundle'
+        sources = Path(temporary).resolve() / 'bundle'
         lifecycle.authenticate_archive(source_archive, plan['bundle'], sources)
         launch.validate_registration(registration, sources, active=False)
         launch.validate_final(registration, registration_sha, sources, state,

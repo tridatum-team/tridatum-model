@@ -1052,6 +1052,68 @@ class CudaSamplingAssessmentTests(CudaEvaluationAssessmentTests):
             self.fixture.aggregate(frozen, mapping_path)
 
 
+class CudaArchiveTemporaryRootTests(unittest.TestCase):
+    def test_native_admission_materializes_alias_temp_root_without_relaxing_external_paths(self):
+        from scripts.aws_eval import fresh_eight_evaluation as evaluation
+        from scripts.aws_eval import fresh_eight_launch as launch
+        from test_fresh_eight_launch import evaluation_registration
+
+        class RegistrationAdmitted(Exception):
+            """Stop after real archive extraction and real registration admission."""
+
+        temporary_directory = tempfile.TemporaryDirectory
+        with temporary_directory() as temporary:
+            root = Path(temporary).resolve()
+            staged = root / 'staged'
+            staged.mkdir()
+            state = root / 'run/cloud-state'
+            directory = state / 'cuda-evaluation-export/evaluation'
+            directory.mkdir(parents=True)
+            registration = evaluation_registration(staged)
+            envelope = load(staged / registration['resource_envelope']['path'])
+            registration['bundle']['files'].append(envelope['cost_evidence'])
+            bundle = launch.prepare_bundle(registration, staged, state)
+            bundle['local_path'] = 'staged/' + bundle['local_path']
+            plan = dict(schema=evaluation.SCHEMA, bundle=bundle, workload={})
+            dump(state.parent / 'plan.json', plan)
+            dump(directory.parent / 'plan.json', plan)
+            dump(state.parent / 'registration.json', registration)
+            dump(state.parent / 'approval.json', {})
+            archive_path = root / bundle['local_path']
+            archive_sha = sha(archive_path)
+
+            # Reproduce /var -> /private/var on every platform, not just macOS.
+            storage = root / 'temporary-storage'
+            storage.mkdir()
+            alias = root / 'temporary-alias'
+            alias.symlink_to(storage, target_is_directory=True)
+            external_alias = root / 'external-staged-alias'
+            external_alias.symlink_to(staged, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, 'Symlink path rejected'):
+                launch.validate_registration(registration, external_alias, active=False)
+
+            def after_registration(reg, registration_sha, sources, *args, **kwargs):
+                self.assertEqual(reg, registration)
+                self.assertFalse(kwargs['active'])
+                # These are the actual extracted bytes, through the unchanged
+                # strict pin_bytes/safe_path boundary; no boundary is mocked.
+                for entry in registration['bundle']['files']:
+                    self.assertEqual(launch.pin_bytes(sources, entry),
+                                     (staged / entry['path']).read_bytes())
+                raise RegistrationAdmitted
+
+            def owned_temporary(*args, **kwargs):
+                return temporary_directory(*args, dir=alias, **kwargs)
+
+            with patch.object(tempfile, 'TemporaryDirectory', side_effect=owned_temporary), \
+                 patch.object(launch, 'validate_final', side_effect=after_registration) as final:
+                with self.assertRaises(RegistrationAdmitted):
+                    assessment.authenticate_cuda_evaluation(root, directory, {}, {}, {})
+                final.assert_called_once()
+            self.assertEqual(sha(archive_path), archive_sha)
+            self.assertEqual(list(storage.iterdir()), [])
+
+
 class CudaEvaluationEvidenceTests(unittest.TestCase):
     """Exercise consumer custody/collection checks with synthetic component contracts."""
 
