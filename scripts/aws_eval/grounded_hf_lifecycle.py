@@ -22,6 +22,7 @@ import re
 import shlex
 import subprocess
 import tarfile
+import tempfile
 import time
 
 if __package__:
@@ -1104,6 +1105,7 @@ class AWSCallError(RuntimeError):
     def __init__(self, service, operation, stderr):
         match = re.search(r'An error occurred \(([^)]+)\)', stderr)
         self.code = match.group(1) if match else None
+        self.stderr = stderr
         super().__init__(f'{service} {operation} failed: {stderr[:500]}')
 
 
@@ -1118,9 +1120,10 @@ class Client:
         self.requests += 1
         if self.retrieval_byte_limit is not None and (service, operation) == ('s3api', 'get-object'):
             require('--range' in args, 'Bounded controller GET requires an explicit byte range')
-            match = re.fullmatch(r'bytes=0-([0-9]+)', args[args.index('--range') + 1])
-            require(match is not None, 'Unknown controller retrieval byte range')
-            requested = int(match[1]) + 1
+            match = re.fullmatch(r'bytes=([0-9]+)-([0-9]+)', args[args.index('--range') + 1])
+            require(match is not None and int(match[2]) >= int(match[1]),
+                    'Unknown controller retrieval byte range')
+            requested = int(match[2]) - int(match[1]) + 1
             require(self.retrieval_bytes + requested <= self.retrieval_byte_limit,
                     'Controller retrieval byte envelope exhausted')
             # Charge attempted bytes even when the response is ambiguous or absent.
@@ -1952,6 +1955,40 @@ def validate_fresh_terminal(plan, plan_sha, instance_id, completion):
                 and stage['gpu'], 'Fresh successful stage ownership/cleanup is incomplete')
 
 
+def download_export_ranges(client, identity, pin, path, *, chunk_bytes=8 * 1024**2):
+    """Bound each single-attempt transfer, retaining one immutable object identity."""
+    require(type(chunk_bytes) is int and 0 < chunk_bytes <= 8 * 1024**2,
+            'Export range exceeds per-request bound')
+    bucket, key = identity['bucket'], identity['output_prefix'] + 'export.tar'
+    head = client('s3api', 'head-object', '--bucket', bucket, '--key', key)
+    require(head.get('ContentLength') == pin['bytes'] and head.get('ETag'),
+            'Export object length/identity differs')
+    version = ['--version-id', head['VersionId']] if head.get('VersionId') else []
+    path = Path(path)
+    with path.open('xb') as sink, tempfile.TemporaryDirectory(dir=path.parent) as temporary:
+        for start in range(0, pin['bytes'], chunk_bytes):
+            end = min(start + chunk_bytes, pin['bytes']) - 1
+            part = Path(temporary) / 'range'
+            response = client('s3api', 'get-object', '--bucket', bucket, '--key', key,
+                '--range', f'bytes={start}-{end}', '--if-match', head['ETag'],
+                *version, str(part))
+            require(response.get('ContentRange') == f'bytes {start}-{end}/{pin["bytes"]}'
+                    and response.get('ContentLength') == end - start + 1
+                    and response.get('ETag') == head['ETag']
+                    and response.get('VersionId') == head.get('VersionId')
+                    and part.stat().st_size == end - start + 1,
+                    'Export range or immutable object identity differs')
+            with part.open('rb') as source:
+                for block in iter(lambda: source.read(1024**2), b''):
+                    sink.write(block)
+            sink.flush()
+            os.fsync(sink.fileno())
+            part.unlink()
+    require(path.stat().st_size == pin['bytes'] and digest(path) == pin['sha256'],
+            'Export bytes differ')
+    return {key: head[key] for key in ('ETag', 'VersionId', 'ContentLength') if key in head}
+
+
 def collect_export(client, plan, plan_sha, state, instance_id):
     """Authenticate evidence; explicit terminal failure may have metadata only.
 
@@ -1986,9 +2023,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
             and type(pin['bytes']) is int and 0 < pin['bytes'] <= export_limit(plan)
             and isinstance(pin['sha256'], str) and SHA.fullmatch(pin['sha256']), 'Export envelope differs')
     path = state / 'export.tar'
-    client('s3api', 'get-object', '--bucket', identity['bucket'],
-           '--key', identity['output_prefix'] + 'export.tar', '--range', f'bytes=0-{pin["bytes"] - 1}', str(path))
-    require(path.stat().st_size == pin['bytes'] and digest(path) == pin['sha256'], 'Export bytes differ')
+    download_export_ranges(client, identity, pin, path)
     with tarfile.open(path, 'r:') as archive:
         member = archive.getmember('export-manifest.json')
         require(member.isfile() and member.size <= 8 * 1024**2, 'Export manifest is unsafe')

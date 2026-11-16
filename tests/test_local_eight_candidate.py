@@ -559,7 +559,7 @@ class CudaCandidateIdentityTests(unittest.TestCase):
                 ('capacity-worker.json' if phase == 'capacity' else 'training-worker.json')),
                 path=phase + '/' + ('capacity-worker.json' if phase == 'capacity' else 'training-worker.json')))).start()
         self.completed = patch.object(F, 'validate_completion').start()
-        self.export = patch.object(C, 'validate_cuda_export').start()
+        self.export = patch.object(C, 'validate_cuda_export', return_value={}).start()
 
     def resolve(self):
         return C.resolve_cuda_candidate(self.root, self.registration, sha(self.registration))
@@ -628,7 +628,7 @@ class TrainingOnlyConsumerBoundaryTests(unittest.TestCase):
         self.F = F
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         fixture = CandidateFixture(self.root)
         self.output = self.root / 'export'
         self.output.mkdir()
@@ -736,6 +736,9 @@ class TrainingOnlyConsumerBoundaryTests(unittest.TestCase):
         self.assertEqual(contract['training_runtime'], 'cuda')
         self.assertEqual(contract['inference_runtime'], 'mps')
         self.assertFalse(contract['quality_accepted'])
+        self.assertNotIn('collection_recovery', contract)
+        self.assertEqual(C.bound(self.root, contract['controller_result']), self.root / 'controller-result.json')
+        self.assertEqual(C.bound(self.root, contract['remote_completion']), self.root / 'completion.json')
 
     def test_later_checkout_source_change_does_not_rewrite_cuda_provenance(self):
         original = self.resolve()
@@ -776,6 +779,425 @@ class TrainingOnlyConsumerBoundaryTests(unittest.TestCase):
                     worker['report'] = dict(file_pin(path), path=name)
                     dump(worker_path, worker)
                 self.seal_export()
+
+    def enable_collection_recovery(self):
+        """Seal offline recovery receipts; no client, model, or cloud execution."""
+        import tarfile
+        from scripts.aws_eval import fresh_eight_recover as R
+        self.R = R
+        state = self.root / 'cloud-state'
+        state.mkdir()
+        self.output.rename(state / 'recovered-fresh-export')
+        self.output = state / 'recovered-fresh-export'
+        self.registration = self.output / 'candidate.json'
+        self.plan['identity'].update(bucket='synthetic-bucket', output_prefix='synthetic/output/',
+                                     account='123456789012')
+        self.plan.update(cost=dict(controller_retrieval_bytes=1024**3, get_requests=5000),
+            limits=dict(output_bytes=1024**3),
+            runtime=dict(gpu_catalog_mib=45776, gpu_nvml_min_mib=45776,
+                gpu_nvml_max_mib=49152, gpu_name='NVIDIA L40S', driver_version='synthetic'))
+        dump(self.root / 'plan.json', self.plan)
+        dump(self.output / 'plan.json', self.plan)
+        plan_pin = dict(file_pin(self.output / 'plan.json'), path='plan.json')
+        instance, volume = 'i-0123456789abcdef0', 'vol-0123456789abcdef0'
+        for name in ('capacity/capacity-worker.json', 'train/training.json'):
+            path = self.output / name
+            row = load(path)
+            row['runtime']['plan_sha256'] = plan_pin['sha256']
+            dump(path, row)
+        worker_path = self.output / 'train/training-worker.json'
+        worker = load(worker_path)
+        worker['report'] = dict(file_pin(self.output / 'train/training.json'), path='train/training.json')
+        dump(worker_path, worker)
+        for phase in ('capacity', 'train'):
+            path = self.output / phase / 'supervisor-result.json'
+            row = load(path)
+            row['plan_sha256'] = plan_pin['sha256']
+            row['unit'].update(plan_sha256=plan_pin['sha256'], instance_id=instance)
+            dump(path, row)
+        candidate = load(self.registration)
+        candidate['plan'] = plan_pin
+        dump(self.registration, candidate)
+        gpu = dict(uuid='GPU-12345678-1234-1234-1234-123456789abc', minor=0,
+                   name='NVIDIA L40S', driver='synthetic', total_mib=46068)
+        self.status.update(plan_sha256=plan_pin['sha256'], instance_id=instance,
+            runtime_unit=dict(gpu=gpu),
+            stages=[dict(phase=phase, state='complete', cleanup_verified=True,
+                         run_id=self.F.RUN_ID, plan_sha256=plan_pin['sha256'], instance_id=instance,
+                         unit='synthetic-unit', invocation='synthetic-invocation', gpu=gpu)
+                    for phase in ('capacity', 'train')])
+        self.seal_export()
+        archive = state / 'recovered-export.tar'
+        with tarfile.open(archive, 'w', format=tarfile.USTAR_FORMAT) as stream:
+            for path in sorted(self.output.rglob('*')):
+                if path.is_file():
+                    stream.add(path, arcname=path.relative_to(self.output).as_posix(), recursive=False)
+        export = {key: file_pin(archive)[key] for key in ('bytes', 'sha256')}
+        dump(state / 'completion.json', dict(self.status, export=export))
+        dump(state / 'controller-result.json', dict(state='released', training_success=False,
+            dispatch_attempted=True, remote_intent_attempted=True, instance_id=instance,
+            completion_scope=self.F.COMPLETION_SCOPE, quality_accepted=False, cloud_evaluation=False,
+            evidence_error='Command get-object timed out after 45 seconds',
+            cleanup=dict(cleanup_state='complete', instance_terminated=True, instance_id=instance,
+                root_volume_ids=[volume], recorded_volume_ids=[volume], absent_volume_ids=[volume],
+                remaining_volumes=[], errors=['transient read timeout preserved'])))
+        ownership = dict(run_id=self.F.RUN_ID, plan_sha256=plan_pin['sha256'], instance_id=instance)
+        dump(state / 'release.json', dict(ownership, gpu=gpu))
+        dump(state / 'volume-identity.json', dict(ownership, root_volume_ids=[volume]))
+        dump(state / 'export-retrieval-intent.json', dict(ownership, byte_limit=1024**3))
+        (state / 'source-bundle.tar').write_bytes((self.root / 'source-bundle.tar').read_bytes())
+        (state / 'export.tar').write_bytes(b'original incomplete download')
+        for name in R.SOURCES:
+            dump(self.root / name, dict(synthetic_recovery_source=name))
+        context = dump(self.root / 'collection-recovery-context.json',
+            dict(schema='trid-existing-training-collection-authorization-v1',
+                plan=R.pin(self.root, self.root / 'plan.json'),
+                completion=R.pin(self.root, state / 'completion.json'),
+                original_controller=R.pin(self.root, state / 'controller-result.json'),
+                original_partial_archive=R.pin(self.root, state / 'export.tar'),
+                expected_export=export, instance_id=instance, root_volume_id=volume,
+                controller_retrieval_total_bytes_max=1024**3,
+                prior_activity_conservative_debit_bytes=R.PRIOR_BYTES,
+                new_payload_bytes_max=R.PRIOR_BYTES, automatic_gpu_retry=False,
+                preserve_original_failure=True, budget_change_usd=0))
+        permission = dump(self.root / 'collection-recovery-permission.json',
+            dict(schema=R.AUTHORIZATION_SCHEMA, run_id=self.F.RUN_ID, collection_only=True,
+                 additional_gpu_executions=0, prior_retrieval_bytes=R.PRIOR_BYTES,
+                 prior_requests=R.PRIOR_REQUESTS, context=R.pin(self.root, context)))
+        # Deliberately historical: later MPS evaluation must not require a live
+        # transfer authorization after recovery has already finished.
+        with patch.object(R.time, 'time', return_value=1000.):
+            registration = R.registration_spec(self.root, state, permission, 1100.)
+        registration_path = dump(state / 'collection-recovery-registration.json', registration)
+        requests = []
+        object_identity = dict(ETag='"synthetic-etag"', ContentLength=export['bytes'])
+        prefix = ['--bucket', registration['bucket'], '--key', registration['key']]
+        operations = [('s3api', 'head-object', prefix, 1024**2)]
+        for start in range(0, export['bytes'], 8 * 1024**2):
+            size = min(8 * 1024**2, export['bytes'] - start)
+            operations.append(('s3api', 'get-object',
+                prefix + ['--range', f'bytes={start}-{start + size - 1}',
+                    '--if-match', object_identity['ETag'], str(state / f'range-{start}.part')], size))
+        operations.extend([
+            ('ec2', 'describe-instances', ['--instance-ids', instance], 1024**2),
+            ('ec2', 'describe-volumes', ['--volume-ids', volume], 1024**2)])
+        for sequence, (service, operation, arguments, size) in enumerate(operations, 1):
+            path = dump(state / 'collection-recovery-requests' / f'{sequence:04d}.json',
+                dict(sequence=sequence, service=service, operation=operation, arguments=arguments,
+                     reserved_bytes=size, reserved_at=1001.))
+            requests.append(R.pin(self.root, path))
+        cleanup = [
+            dict(operation='describe-instances', identifier=instance, started_at=1002., observed_at=1003.,
+                 response=dict(Reservations=[dict(Instances=[dict(InstanceId=instance,
+                     State=dict(Name='terminated'))])])),
+            dict(operation='describe-volumes', identifier=volume, started_at=1004., observed_at=1005.,
+                 response=dict(error_code='InvalidVolume.NotFound'))]
+        self.recovery_path = dump(state / 'collection-recovery.json',
+            dict(schema=R.SCHEMA, state='accepted', collection_only=True, additional_gpu_executions=0,
+                quality_accepted=False, cloud_evaluation=False, registration=R.pin(self.root, registration_path),
+                originals=registration['originals'], sources=registration['sources'],
+                archive=R.pin(self.root, archive), candidate=R.pin(self.root, self.registration),
+                object_identity=object_identity,
+                validation=R.validate_export(self.root, state, self.plan, registration),
+                cleanup=cleanup, requests=requests,
+                accounting=R.validate_ledger(self.root, state, registration, requests, object_identity),
+                accepted_at=1006.))
+        return state
+
+    def test_registered_recovery_preserves_failure_and_public_provenance_after_deadline(self):
+        state = self.enable_collection_recovery()
+        original = (state / 'controller-result.json').read_bytes()
+        partial = (state / 'export.tar').read_bytes()
+        contract = self.resolve()
+        public = C.public_contract(contract)
+        for key, path in [('collection_recovery', self.recovery_path),
+                          ('controller_result', state / 'controller-result.json'),
+                          ('remote_completion', state / 'completion.json'),
+                          ('recovery_registration', state / 'collection-recovery-registration.json'),
+                          ('recovered_archive', state / 'recovered-export.tar')]:
+            self.assertEqual(C.bound(self.root, public[key]), path.resolve())
+        self.assertEqual(public['training_runtime'], 'cuda')
+        self.assertEqual(public['inference_runtime'], 'mps')
+        self.assertEqual(contract['adapter']['step'], 150)
+        self.assertEqual((state / 'controller-result.json').read_bytes(), original)
+        self.assertEqual((state / 'export.tar').read_bytes(), partial)
+        self.assertFalse(load(state / 'controller-result.json')['training_success'])
+        self.assertTrue(load(state / 'controller-result.json')['cleanup']['errors'])
+
+    def test_recovery_tampered_receipt_cleanup_and_error_sidecars_rejected(self):
+        self.enable_collection_recovery()
+        original = load(self.recovery_path)
+        mutations = [
+            lambda row: row.update(state='failed'),
+            lambda row: row.update(error='download interrupted'),
+            lambda row: row.update(evidence_error='partial archive'),
+            lambda row: row['registration'].update(sha256='0' * 64),
+            lambda row: row['originals']['controller-result.json'].update(sha256='0' * 64),
+            lambda row: row.update(cleanup=[]),
+            lambda row: row['cleanup'][0].update(identifier='i-fffffffffffffffff'),
+            lambda row: row['cleanup'][0]['response']['Reservations'][0]['Instances'][0].update(
+                InstanceId='i-fffffffffffffffff'),
+            lambda row: row['cleanup'][1].update(identifier='vol-fffffffffffffffff'),
+            lambda row: row['cleanup'][1].update(response=dict(error_code='RequestTimeout')),
+            lambda row: row['cleanup'][1].update(observed_at=999.),
+            lambda row: row.update(accepted_at=1101.),
+            lambda row: row.update(requests=[]),
+            lambda row: row.update(validation={'training_success': True}),
+        ]
+        for mutate in mutations:
+            changed = copy.deepcopy(original)
+            mutate(changed)
+            dump(self.recovery_path, changed)
+            with self.subTest(receipt=changed), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+        dump(self.recovery_path, original)
+
+    def test_recovery_partial_archive_and_modified_originals_rejected(self):
+        state = self.enable_collection_recovery()
+        for path in (state / 'recovered-export.tar', state / 'export.tar',
+                     state / 'source-bundle.tar', state / 'controller-result.json',
+                     state / 'completion.json', self.root / self.R.SOURCES[0]):
+            original = path.read_bytes()
+            path.write_bytes(original[:len(original) // 2] if path.name == 'recovered-export.tar'
+                             else original + b' ')
+            with self.subTest(path=path.name), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+            path.write_bytes(original)
+        self.recovery_path.unlink()
+        with self.assertRaises((ValueError, RuntimeError, FileNotFoundError)):
+            self.resolve()
+
+    def test_recovery_registration_cannot_mask_failed_training_or_unsupported_controller(self):
+        state = self.enable_collection_recovery()
+        controller_path = state / 'controller-result.json'
+        original = load(controller_path)
+        registration_path = state / 'collection-recovery-registration.json'
+        registration = load(registration_path)
+        receipt = load(self.recovery_path)
+        for mutate in (
+            lambda row: row.update(error='training failed'),
+            lambda row: row.update(state='native_failed'),
+            lambda row: row.update(dispatch_attempted=False),
+            lambda row: row.update(evidence_error=None),
+            lambda row: row.update(instance_id='i-fffffffffffffffff'),
+        ):
+            changed = copy.deepcopy(original)
+            mutate(changed)
+            dump(controller_path, changed)
+            registration['originals']['controller-result.json'] = self.R.pin(self.root, controller_path)
+            context_path = self.root / 'collection-recovery-context.json'
+            context = load(context_path)
+            context['original_controller'] = self.R.pin(self.root, controller_path)
+            dump(context_path, context)
+            permission_path = self.root / 'collection-recovery-permission.json'
+            permission = load(permission_path)
+            permission['context'] = self.R.pin(self.root, context_path)
+            dump(permission_path, permission)
+            registration['authorization'] = self.R.pin(self.root, permission_path)
+            dump(registration_path, registration)
+            receipt['originals'] = registration['originals']
+            receipt['registration'] = self.R.pin(self.root, registration_path)
+            dump(self.recovery_path, receipt)
+            with self.subTest(controller=changed), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+
+    def test_recovery_failed_remote_completion_and_failure_sidecar_rejected(self):
+        state = self.enable_collection_recovery()
+        failure = dump(state / 'collection-recovery-failure.json', dict(state='failed', error='interrupted'))
+        with self.assertRaises((ValueError, RuntimeError)):
+            self.resolve()
+        failure.unlink()
+        completion_path = state / 'completion.json'
+        completion = load(completion_path)
+        completion['training_success'] = False
+        dump(completion_path, completion)
+        with self.assertRaisesRegex(ValueError, 'completion differs'):
+            self.resolve()
+
+    def test_recovery_context_cannot_authorize_different_originals_or_budget(self):
+        state = self.enable_collection_recovery()
+        context_path = self.root / 'collection-recovery-context.json'
+        original = load(context_path)
+        permission_path = self.root / 'collection-recovery-permission.json'
+        permission = load(permission_path)
+        registration_path = state / 'collection-recovery-registration.json'
+        registration = load(registration_path)
+        receipt = load(self.recovery_path)
+        for mutate in (
+            lambda row: row['original_controller'].update(sha256='0' * 64),
+            lambda row: row['original_partial_archive'].update(sha256='0' * 64),
+            lambda row: row['expected_export'].update(sha256='0' * 64),
+            lambda row: row.update(instance_id='i-fffffffffffffffff'),
+            lambda row: row.update(root_volume_id='vol-fffffffffffffffff'),
+            lambda row: row.update(new_payload_bytes_max=1024**3),
+            lambda row: row.update(automatic_gpu_retry=True),
+            lambda row: row.update(preserve_original_failure=False),
+        ):
+            changed = copy.deepcopy(original)
+            mutate(changed)
+            dump(context_path, changed)
+            permission['context'] = self.R.pin(self.root, context_path)
+            dump(permission_path, permission)
+            registration['authorization'] = self.R.pin(self.root, permission_path)
+            dump(registration_path, registration)
+            receipt['registration'] = self.R.pin(self.root, registration_path)
+            dump(self.recovery_path, receipt)
+            with self.subTest(context=changed), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+
+    def test_recovery_receipt_selects_versioned_registration_without_rewriting_original(self):
+        state = self.enable_collection_recovery()
+        original_path = state / 'collection-recovery-registration.json'
+        original_bytes = original_path.read_bytes()
+        versioned = dump(state / 'collection-recovery-registration-02.json', load(original_path))
+        receipt = load(self.recovery_path)
+        receipt['registration'] = self.R.pin(self.root, versioned)
+        dump(self.recovery_path, receipt)
+        contract = self.resolve()
+        self.assertEqual(C.bound(self.root, contract['recovery_registration']), versioned)
+        self.assertEqual(original_path.read_bytes(), original_bytes)
+
+    def test_recovery_receipt_rejects_registration_from_foreign_state(self):
+        state = self.enable_collection_recovery()
+        registration = load(state / 'collection-recovery-registration.json')
+        foreign = dump(self.root / 'foreign-state' / 'collection-recovery-registration-02.json', registration)
+        receipt = load(self.recovery_path)
+        receipt['registration'] = self.R.pin(self.root, foreign)
+        dump(self.recovery_path, receipt)
+        with self.assertRaises((ValueError, RuntimeError)):
+            self.resolve()
+
+    def enable_collection_finalization(self):
+        """Authenticate an existing archive and predecessor; never fetch payload."""
+        import tarfile
+        state = self.enable_collection_recovery()
+        R = self.R
+        old_receipt = load(self.recovery_path)
+        self.recovery_path.unlink()
+        prior_path = state / 'collection-recovery-registration.json'
+        prior = load(prior_path)
+        dump(state / 'collection-recovery-started.json',
+             dict(registration=R.pin(self.root, prior_path), started_at=1001.))
+        failure_path = dump(state / 'collection-recovery-failure.json',
+            dict(state='failed', error='Fresh exact cleanup observation rejected',
+                 registration=R.pin(self.root, prior_path), failed_at=1006., additional_gpu_executions=0))
+        source_archive = self.root / 'executed-recovery-sources.tar'
+        with tarfile.open(source_archive, 'w', format=tarfile.USTAR_FORMAT) as stream:
+            for name in R.SOURCES:
+                stream.add(self.root / name, arcname=name, recursive=False)
+        # The predecessor must authenticate its archived bytes, not relabel the
+        # corrected finalizer source as the executable that downloaded the model.
+        dump(self.root / R.SOURCES[0], dict(synthetic_finalizer_source=True))
+        prior_permission = load(self.root / 'collection-recovery-permission.json')
+        permission_path = dump(self.root / 'collection-finalization-permission.json',
+            dict(schema='trid-fresh-eight-collection-finalization-authorization-v1',
+                collection_only=True, additional_gpu_executions=0,
+                prior_registration=R.pin(self.root, prior_path),
+                prior_failure=R.pin(self.root, failure_path),
+                source_archive=R.pin(self.root, source_archive),
+                archive=R.pin(self.root, state / 'recovered-export.tar'),
+                context=prior_permission['context'], max_metadata_requests=3,
+                max_metadata_bytes=3 * 1024**2))
+        with patch.object(R.time, 'time', return_value=2000.):
+            registration = R.finalization_spec(self.root, state, prior_path, source_archive,
+                                               permission_path, 2100.)
+        registration_path = dump(state / 'collection-finalization-registration.json', registration)
+        requests = []
+        operations = [
+            ('sts', 'get-caller-identity', []),
+            ('ec2', 'describe-instances', ['--instance-ids', prior['instance_id']]),
+            ('ec2', 'describe-volumes', ['--volume-ids', prior['root_volume_ids'][0]])]
+        for index, (service, operation, arguments) in enumerate(operations, 1):
+            path = dump(state / 'collection-finalization-requests' / f'{index:04d}.json',
+                dict(sequence=index, service=service, operation=operation, arguments=arguments,
+                     reserved_bytes=1024**2, reserved_at=2001.))
+            requests.append(R.pin(self.root, path))
+        cleanup = [
+            dict(operation='describe-instances', identifier=prior['instance_id'],
+                 started_at=2002., observed_at=2003., response=dict(Reservations=[])),
+            dict(operation='describe-volumes', identifier=prior['root_volume_ids'][0],
+                 started_at=2004., observed_at=2005., response=dict(Volumes=[]))]
+        observations = []
+        caller = dict(operation='get-caller-identity', identifier=registration['account'],
+            started_at=2001., observed_at=2002., response=dict(Account=registration['account']))
+        for index, row in enumerate([caller, *cleanup]):
+            path = dump(state / f'collection-finalization-observation-{index}.json', row)
+            observations.append(R.pin(self.root, path))
+        self.finalization_path = dump(state / 'collection-finalization.json',
+            dict(schema=R.FINALIZATION_SCHEMA, state='accepted', collection_only=True,
+                additional_gpu_executions=0, quality_accepted=False, cloud_evaluation=False,
+                registration=R.pin(self.root, registration_path),
+                prior_registration=registration['prior_registration'],
+                prior_failure=registration['prior_failure'], source_archive=registration['source_archive'],
+                archive=registration['archive'], candidate=registration['candidate'],
+                validation=old_receipt['validation'], cleanup=cleanup, observations=observations,
+                requests=requests, accounting=R.finalization_accounting(self.root, state, registration, requests),
+                accepted_at=2006.))
+        return state
+
+    def test_metadata_only_finalization_preserves_failed_attempt_and_archived_source_provenance(self):
+        state = self.enable_collection_finalization()
+        paths = [state / 'recovered-export.tar', state / 'collection-recovery-failure.json',
+                 state / 'controller-result.json', state / 'collection-recovery-registration.json']
+        originals = {path: path.read_bytes() for path in paths}
+        with patch.object(self.R, 'RecoveryClient', side_effect=AssertionError('no payload transfer')), \
+             patch.object(self.R, 'FinalizationClient', side_effect=AssertionError('no consumer cloud call')):
+            contract = self.resolve()
+        public = C.public_contract(contract)
+        self.assertEqual(C.bound(self.root, public['collection_recovery']), self.finalization_path)
+        self.assertEqual(C.bound(self.root, public['collection_finalization']), self.finalization_path)
+        self.assertEqual(C.bound(self.root, public['collection_failure']), state / 'collection-recovery-failure.json')
+        self.assertEqual(C.bound(self.root, public['predecessor_registration']),
+                         state / 'collection-recovery-registration.json')
+        self.assertEqual(C.bound(self.root, public['executed_recovery_sources']),
+                         self.root / 'executed-recovery-sources.tar')
+        self.assertEqual(load(self.finalization_path)['accounting']['new_reserved_bytes'], 3 * 1024**2)
+        for path, content in originals.items():
+            self.assertEqual(path.read_bytes(), content)
+        self.assertEqual(contract['training_runtime'], 'cuda')
+        self.assertEqual(contract['inference_runtime'], 'mps')
+
+    def test_finalization_rejects_foreign_incomplete_error_and_post_acceptance_observations(self):
+        state = self.enable_collection_finalization()
+        original = load(self.finalization_path)
+        original_rows = [load(state / f'collection-finalization-observation-{i}.json') for i in (0, 1, 2)]
+        for index, change in [
+            (0, lambda row: row['response'].update(Account='999999999999')),
+            (1, lambda row: row.update(identifier='i-fffffffffffffffff')),
+            (1, lambda row: row.update(response={})),
+            (1, lambda row: row.update(response=dict(error_type='TimeoutError', error='network failure'))),
+            (2, lambda row: row.update(identifier='vol-fffffffffffffffff')),
+            (2, lambda row: row.update(response=dict(error_code='RequestTimeout'))),
+            (2, lambda row: row.update(observed_at=2007.)),
+        ]:
+            receipt = copy.deepcopy(original)
+            row = copy.deepcopy(original_rows[index])
+            change(row)
+            path = dump(state / f'collection-finalization-observation-{index}.json', row)
+            receipt['observations'][index] = self.R.pin(self.root, path)
+            if index:
+                receipt['cleanup'][index - 1] = row
+            dump(self.finalization_path, receipt)
+            with self.subTest(index=index, row=row), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+            dump(path, original_rows[index])
+        dump(self.finalization_path, original)
+
+    def test_finalization_rejects_modified_predecessor_payload_sources_and_own_failure(self):
+        state = self.enable_collection_finalization()
+        for path in [state / 'collection-recovery-failure.json',
+                     state / 'collection-recovery-started.json',
+                     state / 'collection-recovery-requests/0001.json',
+                     self.root / 'executed-recovery-sources.tar',
+                     state / 'recovered-export.tar']:
+            original = path.read_bytes()
+            path.write_bytes(original + b' ')
+            with self.subTest(path=path.name), self.assertRaises((ValueError, RuntimeError)):
+                self.resolve()
+            path.write_bytes(original)
+        dump(state / 'collection-finalization-failure.json', dict(state='failed', error='cleanup failed'))
+        with self.assertRaises((ValueError, RuntimeError)):
+            self.resolve()
 
 
 class IsolatedTrainingConsumerSourceTests(unittest.TestCase):

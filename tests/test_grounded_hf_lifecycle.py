@@ -1826,21 +1826,39 @@ class OrderedInferenceAdmissionTests(unittest.TestCase):
                 plan['identity']['output_prefix'] + 'export.tar': payload,
                 plan['workload']['checkpoint_keys']['receipt']: L.canonical(checkpoint),
                 plan['workload']['checkpoint_keys']['decision']: L.canonical(decision)}
-            calls = []
 
             def transport(service, operation, *args):
-                self.assertEqual((service, operation), ('s3api', 'get-object'))
+                self.assertEqual(service, 's3api')
                 key = args[args.index('--key') + 1]
-                calls.append(key)
-                Path(args[-1]).write_bytes(objects[key])
+                body = objects[key]
+                etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+                metadata = dict(ContentLength=len(body), ETag=etag)
+                if operation == 'head-object':
+                    return metadata
+                self.assertEqual(operation, 'get-object')
+                if key == plan['identity']['output_prefix'] + 'export.tar':
+                    self.assertEqual(args[args.index('--if-match') + 1], etag)
+                requested = args[args.index('--range') + 1]
+                self.assertTrue(requested.startswith('bytes='))
+                start, end = map(int, requested.removeprefix('bytes=').split('-'))
+                end = min(end, len(body) - 1)
+                self.assertTrue(0 <= start <= end)
+                data = body[start:end + 1]
+                Path(args[-1]).write_bytes(data)
+                return dict(metadata, ContentLength=len(data),
+                            ContentRange=f'bytes {start}-{end}/{len(body)}')
 
             result = L.collect_export(transport, plan, 'a' * 64, state, checkpoint['instance_id'])
             self.assertTrue(result['native_pipeline_success'])
             self.assertEqual(result['semantic_acceptance'], 'not_evaluated')
-            self.assertIn(plan['workload']['checkpoint_keys']['decision'], calls)
+            self.assertEqual(result['export_sha256'], completion['export']['sha256'])
+            self.assertEqual((state / 'export.tar').read_bytes(), payload)
             objects[plan['workload']['checkpoint_keys']['decision']] = L.canonical({**decision, 'run_id': 'wrong'})
+            tampered_state = Path(temp) / 'tampered-state'
+            tampered_state.mkdir()
+            (tampered_state / 'release.json').write_bytes(L.canonical(release(plan)))
             with self.assertRaisesRegex(RuntimeError, 'independently retrieved'):
-                L.collect_export(transport, plan, 'a' * 64, state, checkpoint['instance_id'])
+                L.collect_export(transport, plan, 'a' * 64, tampered_state, checkpoint['instance_id'])
 
     def test_ordered_mode_uses_same_one_shot_release_and_cleanup_path(self):
         case = LaunchTests()
@@ -2467,20 +2485,34 @@ class FollowupInferenceAdmissionTests(unittest.TestCase):
             prefix = plan['identity']['output_prefix']
             objects = {prefix + 'completion.json': L.canonical(completion),
                        prefix + 'export.tar': path.read_bytes()}
-            calls = []
 
             def transport(service, operation, *args):
-                self.assertEqual((service, operation), ('s3api', 'get-object'))
+                self.assertEqual(service, 's3api')
                 key = args[args.index('--key') + 1]
                 self.assertIn(key, objects, 'Followup must never fetch checkpoint or parent decision')
-                calls.append(key)
-                Path(args[-1]).write_bytes(objects[key])
+                body = objects[key]
+                etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+                metadata = dict(ContentLength=len(body), ETag=etag)
+                if operation == 'head-object':
+                    return metadata
+                self.assertEqual(operation, 'get-object')
+                if key == prefix + 'export.tar':
+                    self.assertEqual(args[args.index('--if-match') + 1], etag)
+                requested = args[args.index('--range') + 1]
+                self.assertTrue(requested.startswith('bytes='))
+                start, end = map(int, requested.removeprefix('bytes=').split('-'))
+                end = min(end, len(body) - 1)
+                self.assertTrue(0 <= start <= end)
+                data = body[start:end + 1]
+                Path(args[-1]).write_bytes(data)
+                return dict(metadata, ContentLength=len(data),
+                            ContentRange=f'bytes {start}-{end}/{len(body)}')
 
             result = L.collect_export(transport, plan, 'a' * 64, state, completion['instance_id'])
             self.assertTrue(result['native_pipeline_success'])
             self.assertEqual(result['semantic_acceptance'], 'not_evaluated')
             self.assertEqual(result['export_sha256'], completion['export']['sha256'])
-            self.assertEqual(calls, [prefix + 'completion.json', prefix + 'export.tar'])
+            self.assertEqual((state / 'export.tar').read_bytes(), objects[prefix + 'export.tar'])
 
     def test_followup_shared_launch_release_cleanup_and_error_boundaries_are_one_shot(self):
         for boundary in ('release', 'ambiguous', 'schedule_wrong', 'prerequisites_wrong',

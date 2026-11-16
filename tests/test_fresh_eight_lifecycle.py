@@ -281,17 +281,25 @@ class FreshExportFailureTests(unittest.TestCase):
 
         class Transport:
             def __call__(self, service, operation, *args):
-                if (service, operation) != ('s3api', 'get-object'):
+                if service != 's3api' or operation not in ('head-object', 'get-object'):
                     raise AssertionError('Unexpected cloud operation')
                 key = args[args.index('--key') + 1]
                 calls.append(key)
-                if key == prefix + 'completion.json':
+                if key == prefix + 'completion.json' and operation == 'get-object':
                     Path(args[-1]).write_text(json.dumps(completion))
-                elif key == prefix + 'export.tar' and archive is not None:
-                    Path(args[-1]).write_bytes(archive)
-                else:
+                    return {}
+                if key != prefix + 'export.tar' or archive is None:
                     raise AssertionError('Unexpected archive retrieval after metadata-only failure')
-                return {}
+                metadata = dict(ContentLength=len(archive), ETag='"synthetic-export"')
+                if operation == 'head-object':
+                    return metadata
+                start, end = map(int, args[args.index('--range') + 1].removeprefix('bytes=').split('-'))
+                if args[args.index('--if-match') + 1] != metadata['ETag']:
+                    raise AssertionError('Missing immutable export condition')
+                part = archive[start:end + 1]
+                Path(args[-1]).write_bytes(part)
+                return dict(metadata, ContentLength=len(part),
+                            ContentRange=f'bytes {start}-{end}/{len(archive)}')
 
         self.calls = calls
         return L.collect_export(Transport(), self.plan, 'a' * 64, directory, 'i-owned')
@@ -337,7 +345,7 @@ class FreshExportFailureTests(unittest.TestCase):
         self.assertEqual(result['export_state'], 'authenticated_partial')
         self.assertEqual(result['completion']['error'], self.completion['error'])
         self.assertEqual(result['export_sha256'], hashlib.sha256(archive).hexdigest())
-        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.calls), 3)
 
     def test_failed_terminal_still_rejects_corrupt_archive_bytes(self):
         archive = self.archive()

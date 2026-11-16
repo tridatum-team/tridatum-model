@@ -610,6 +610,7 @@ LOCAL_SOURCES = {
     'scripts/train_open_weight_lora.py', 'scripts/aws_eval/grounded_hf_worker.py',
     'scripts/aws_eval/grounded_hf_lifecycle.py', 'scripts/aws_eval/qwen_cuda_smoke.py',
     'scripts/aws_eval/qwen_cpu_smoke.py', 'scripts/aws_eval/fresh_eight_experiment.py',
+    'scripts/aws_eval/fresh_eight_recover.py',
     'trid/prompts.py', 'trid/text.py', 'trid/case_prompts.py',
 }
 

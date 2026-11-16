@@ -241,6 +241,8 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
         require(model_identity(model['directory'], model['acquisition_manifest']['path']) == model,
                 'candidate official base authentication differs')
         required_sources = CUDA_TRAINED_MPS_SOURCES if cuda_trained else CANDIDATE_PRODUCER_SOURCES
+        if contract.get('collection_recovery'):
+            required_sources = required_sources | {'scripts/aws_eval/fresh_eight_recover.py'}
         authenticate_producer_sources(root, manifest.get('code'), loaded.get('code'), required_sources)
         if cuda_trained:
             from scripts.evaluate_local_eight import accepted_local_supervision

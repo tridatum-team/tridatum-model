@@ -472,13 +472,14 @@ JSON 제약은 이 표본의 구조 실패를 없앴지만 내용 정확성이�
 사용자는 **기존 총 $10 안에서 GPU 실행 1회 추가**를 승인했습니다. 새 계약은 `runs/mois-eight-training-recovery-20261116T014906Z/`에 등록했으며, 추가 $10이나 자동 재시도 승인이 아닙니다.
 
 - **실행 범위:** GPU는 용량 검증·동일 600행 학습·최종 150단계 가중치 회수까지만 수행합니다. 학습 archive 업로드 확인과 인스턴스·root volume 정리를 인증한 뒤 Mac에서 원본·후보의 개발 200문항, 새 답변 400개를 생성합니다. 학습 완료와 품질 수락은 별도 판정입니다.
-- **시간·비용:** 새 작업 lease 1800초에 export 여유 300초를 포함하고, 종료 여유 900초를 합쳐 최대 2700초를 계산합니다. 독립 검토의 조건부 상한은 이전 실행 $5.89와 새 실행 $3.94를 합친 **$9.83**입니다. 이전 비용은 제어기 경과 시간과 실제 자원 정리 증거에 기초한 5000초 가정이며 청구서가 아닙니다. 새 실행 cap은 $4.11입니다. 실제 가격·소유 자원·전체 보존 규칙 readback과 독립 종료 장치가 통과해야 실행합니다.
+- **시간·비용:** 새 작업 lease 1800초에 export 여유 300초를 포함하고, 종료 여유 900초를 합쳐 최대 2700초를 계산합니다. 독립 검토의 조건부 상한은 이전 실행 $5.89와 새 실행 $3.94를 합친 **$9.83**입니다. 이전 비용은 제어기 경과 시간과 실제 자원 정리 증거에 기초한 5000초 가정이며 청구서가 아닙니다. 새 실행 cap은 $4.11입니다. 실제 가격·소유 자원·전체 보존 규칙 readback과 독립 종료 장치를 확인한 뒤 승인된 추가 1회를 사용했습니다. 추가 GPU 실행은 승인되지 않았습니다.
 - **인증 분리:** 학습 원본 bundle의 전체 해시와 각 파일을 인증해 당시 코드·데이터를 검증합니다. 이후 Mac 평가 코드의 변경은 별도 소스 등록으로 관리하며, GPU 학습 증거를 현재 checkout으로 덮어쓰지 않습니다. BF16 원본과 FP32 LoRA를 유지합니다.
 - **Mac 감독:** 평가 한도는 별도 12시간이며, 메모리 압력·가용 메모리·swap 증가·RSS·footprint·MPS allocator/driver 한도와 소유 프로세스 그룹 정리를 강제합니다. **사용자 요청으로 이 평가만 배터리 전원을 허용**합니다. 기존 로컬 학습의 전원 조건은 바꾸지 않았으며, 배터리 소진·잠자기는 평가를 중단시킬 수 있습니다.
-- **검증:** 통합 468건 중 467건 통과·1건 skip. 실제 Torch 2.9.1 중단 후 임시 파일을 격리한 v2 archive 생성·내용 일치·scratch 정리를 확인했습니다. 실제 배터리 상태에서 모델 없는 하위 프로세스의 startup gate·짧은 시험 deadline·TERM/KILL·자손 회수를 확인했습니다. 이는 실제 8B 평가나 CUDA 학습 성공 증거가 아닙니다.
-- **현재 결과:** v2 실행 준비와 소스 검증을 완료했습니다. 아직 새 가중치 회수·품질 점수·배포 성공을 주장하지 않습니다. 보호 최종 자료와 `test.tridatum.co`는 변경하지 않았습니다.
+- **검증:** 통합 515건 중 514건 통과·1건 skip. 실제 Torch 2.9.1 중단 후 임시 파일을 격리한 v2 archive 생성·내용 일치·scratch 정리와 배터리 상태의 startup gate·deadline·TERM/KILL·자손 회수를 확인했습니다. 이 단위·감독 검증과 아래 실제 학습·회수 결과를 구분합니다.
+- **실제 학습·회수:** 동일 600행 학습과 최종 150단계 후보 인증을 완료했습니다. 최초 일괄 다운로드는 timeout으로 실패했지만, 별도 등록한 조건부 8MiB 범위 읽기로 **350,730,240바이트**를 회수했고 원격 SHA-256 `1d5d745354d93f76ca74aa43c7d257280879784bf3cc73cbb9262d873a6cc444`와 일치했습니다. 원래 실패·요청 기록은 보존했습니다. 이후 다운로드 없이 계정·정확한 인스턴스·정확한 root volume만 다시 조회한 최종화가 수락됐으며, 인스턴스 부재·root volume 삭제와 소유 사전 자원 정리를 확인했습니다.
+- **현재 평가:** 배터리에서 실제 개발 200문항 비교를 시작했지만, 가중치 로드 중 13.69초 샘플의 호스트 메모리 압력이 1→2로 변해 감독기가 중단했습니다. 소유 프로세스는 회수됐고 새 답변·품질 점수는 아직 없습니다. 전원·정밀도·메모리 제한을 임의로 우회하지 않으며 로드 경로를 조사 중입니다. 보호 최종 자료와 `test.tridatum.co`는 변경하지 않았습니다.
 
-로컬 근거: `authorization.json`, `aggregate-budget.json`, `resource-envelope.json`, `training-policy.json`, `execution-sources.json`, `executed-source.tar`, `source-verification.json`, `conditional-cost-admission.json`, `archive-smoke.json`, `battery-evaluation-authorization.json`, `battery-guard-verification.json`. 원본 학습 bundle은 `cloud-state/source-bundle.tar`에 보존하며 실제 모델 회수는 별도 검증 대상입니다. 실행 자료는 별도 보존 대상입니다.
+로컬 근거: `authorization.json`, `aggregate-budget.json`, `resource-envelope.json`, `training-policy.json`, `execution-sources.json`, `executed-source.tar`, `source-verification.json`, `conditional-cost-admission.json`, `archive-smoke.json`, `battery-evaluation-authorization.json`, `battery-guard-verification.json`, `collection-recovery-authorization.json`, `collection-finalization-permission.json`, `local-evaluation-registration-01.json`, `local-supervision-01/result.json`. 원본 학습 bundle은 `cloud-state/source-bundle.tar`, 회수 가중치는 `cloud-state/recovered-export.tar`, 최종 수락 근거는 `cloud-state/collection-finalization.json`, 소유 사전 자원 정리 근거는 `cloud-state/owned-cleanup-complete.json`에 보존합니다. 실행 자료는 별도 보존 대상입니다.
 
 ### Packed-head 학습 엔진
 

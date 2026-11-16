@@ -302,7 +302,7 @@ def resolve_cuda_candidate(root, manifest_path, expected_sha):
     config = load(directory / 'adapter_config.json')
     validate_adapter_config(config, policy['training']['targets'])
     profile.validate_completion(output, plan)
-    validate_cuda_export(output, plan, registration['plan']['sha256'])
+    export_provenance = validate_cuda_export(output, plan, registration['plan']['sha256'], root=root)
     identity = dict(status='registered_final_development_candidate_not_selected', step=150, files=files,
         checkpoint_ledger=dict(file_pin(output / 'train/checkpoints.json'), path='train/checkpoints.json'), config=config)
     return dict(arms=['base', 'candidate'], adapter_directory=str(directory), adapter=identity,
@@ -311,11 +311,17 @@ def resolve_cuda_candidate(root, manifest_path, expected_sha):
         review_protocol=policy['evaluation']['review_protocol'], training_runtime='cuda',
         inference_runtime='mps', producer='trid-fresh-eight-cuda-training-candidate-v2',
         completion_scope='cuda_capacity_train_export_only', quality_accepted=False,
-        cloud_evaluation=False, plan=registration['plan'], training_bundle=training_bundle)
+        cloud_evaluation=False, plan=registration['plan'], training_bundle=training_bundle,
+        **export_provenance)
 
 
-def validate_cuda_export(output, plan, plan_sha):
-    """Require exported success and independent controller compute/storage cleanup."""
+def validate_cuda_export(output, plan, plan_sha, *, root=None):
+    """Authenticate original success or explicitly registered collection recovery.
+
+    Recovery never replaces the failed controller or the remote training identity:
+    both original receipts and the independently authenticated recovery are public
+    evaluation provenance. A sidecar alone cannot nominate a partial export.
+    """
     from scripts.aws_eval import fresh_eight_experiment as profile
     output = Path(output)
     export = load(output / 'export-manifest.json')
@@ -349,8 +355,20 @@ def validate_cuda_export(output, plan, plan_sha):
     require(all(completion.get(key) == value for key, value in status.items())
             and completion.get('training_success') is True
             and completion.get('stop_errors') == []
-            and not any(key in completion for key in ('error', 'export_error'))
-            and controller.get('state') == 'complete' and controller.get('training_success') is True
+            and not any(key in completion for key in ('error', 'export_error')),
+            'CUDA independent cloud completion differs')
+    provenance = dict(controller_result=file_pin(output.parent / 'controller-result.json'),
+                      remote_completion=file_pin(output.parent / 'completion.json'))
+    if controller.get('training_success') is not True:
+        require(root is not None, 'CUDA collection recovery requires repository authentication')
+        from scripts.aws_eval.fresh_eight_recover import validate_collection_recovery
+        recovery = validate_collection_recovery(root, output, plan, plan_sha)
+        require(isinstance(recovery, dict) and 'collection_recovery' in recovery
+                and all(key not in recovery or same_pin(root, value, recovery[key])
+                        for key, value in provenance.items()),
+                'CUDA collection recovery provenance differs')
+        return dict(recovery, **provenance)
+    require(controller.get('state') == 'complete'
             and not any(key in controller for key in ('error', 'evidence_error', 'schedule_cleanup_error'))
             and evidence.get('native_pipeline_success') is True and evidence.get('completion') == completion
             and evidence.get('export_sha256') == completion.get('export', {}).get('sha256'),
@@ -363,6 +381,7 @@ def validate_cuda_export(output, plan, plan_sha):
             and set(cleanup['root_volume_ids']) <= set(cleanup.get('recorded_volume_ids', []))
             and set(cleanup.get('absent_volume_ids', [])) == set(cleanup.get('recorded_volume_ids', [])),
             'CUDA instance/root-volume cleanup is not complete')
+    return provenance
 
 
 def public_contract(contract):
