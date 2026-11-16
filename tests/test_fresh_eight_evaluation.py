@@ -201,6 +201,53 @@ class EvaluationContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             E.validate_mode(Path('.'), 'capacity', {})
 
+
+    def test_artifact_validation_preserves_failure_and_still_checks_answers(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan = mode_fixture(root, 'smoke')
+            folder = root / 'smoke'
+            failure = folder / 'failure.json'
+            original_failure = b'not a success receipt\n'
+            failure.write_bytes(original_failure)
+            manifest = E.validate_mode_artifacts(root, 'smoke', plan)
+            self.assertEqual(manifest['mode'], 'smoke')
+            self.assertEqual(failure.read_bytes(), original_failure)
+            with self.assertRaisesRegex(ValueError, 'Failure evidence'):
+                E.validate_mode(root, 'smoke', plan)
+
+            path = folder / 'base-outputs.jsonl'
+            row = json.loads(path.read_text())
+            row['exception'] = dict(type='RuntimeError', message='generation failed')
+            path.write_text(json.dumps(row) + '\n')
+            completion = json.loads((folder / 'completion.json').read_bytes())
+            completion['outputs']['base'] = E.pin(path, folder)
+            save(folder / 'completion.json', completion)
+            with self.assertRaises(ValueError):
+                E.validate_mode_artifacts(root, 'smoke', plan)
+            self.assertEqual(failure.read_bytes(), original_failure)
+
+    def test_artifact_validation_keeps_attempt_coverage_gate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan = mode_fixture(root, 'smoke')
+            save(root / 'smoke/failure.json', dict(status='failed'))
+            (root / 'smoke/attempts.jsonl').write_text('')
+            with self.assertRaisesRegex(ValueError, 'Attempt coverage'):
+                E.validate_mode_artifacts(root, 'smoke', plan)
+
+    def test_native_completion_rejects_either_failure_before_content_validation(self):
+        for mode in ('smoke', 'evaluation'):
+            for body in (b'{}', b'null', b'not json'):
+                with self.subTest(mode=mode, body=body), tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    failure = root / mode / 'failure.json'
+                    failure.parent.mkdir()
+                    failure.write_bytes(body)
+                    with self.assertRaisesRegex(ValueError, 'Failure evidence'):
+                        E.validate_completion(root, {})
+                    self.assertEqual(failure.read_bytes(), body)
+
     def test_portable_pin_refuses_parent_traversal(self):
         with self.assertRaises(ValueError):
             E.bound('.', dict(path='../secret', bytes=1, sha256='a' * 64))

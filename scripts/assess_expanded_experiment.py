@@ -226,6 +226,18 @@ def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded):
     plan_path = exported / 'plan.json'
     plan, plan_sha = load(plan_path), digest(plan_path)
     require(evaluation.is_evaluation(plan), 'CUDA evaluation plan schema differs')
+    # Metadata recovery is a separate admission, never a native-success alias.
+    # Its registered historical validator reauthenticates the preserved failure,
+    # original archive, all402 answers, failed-unit boundary and positive cleanup.
+    from scripts.aws_eval import fresh_eight_evaluation_recover as recovery
+    if (state / recovery.RECEIPT_NAME).exists():
+        lineage = candidate.cuda_evaluation_lineage(root,
+            candidate.bound(root, contract['registration']), contract['registration']['sha256'])
+        require(load(exported / 'lineage-binding.json') == lineage
+                and manifest.get('evaluation_contract') == lineage['provenance']
+                and lineage['adapter_sha256'] == contract['adapter_sha256'],
+                'Recovered CUDA original candidate lineage differs')
+        return recovery.validate_recovery(root, exported, plan, plan_sha)
     run = state.parent
     authenticate(run / 'plan.json', pin(plan_path, root))
     registration_path, approval_path = run / 'registration.json', run / 'approval.json'
@@ -375,7 +387,6 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     arms = contract['arms'] if contract else ARMS
     cuda_trained = contract is not None and contract.get('training_runtime') == 'cuda'
     adapter_sha = contract['adapter_sha256'] if contract else design['model']['adapter_sha256']
-    require(not (directory / 'failure.json').exists(), 'failed local run is not complete')
     names = ['run-manifest.json', 'decoder-profile.json', 'prompt-preflight.json',
              'loaded-runtime.json', 'completion.json', *[arm + '-outputs.jsonl' for arm in arms]]
     pins = {name: pin(directory / name, root) for name in names}
@@ -386,6 +397,8 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     loaded = load(directory / 'loaded-runtime.json')
     manifest_sha = pins['run-manifest.json']['sha256']
     cuda_evaluation = manifest.get('schema') == 'trid-cuda-eight-paired-v1'
+    if not cuda_evaluation:
+        require(not (directory / 'failure.json').exists(), 'failed local run is not complete')
     if cuda_evaluation:
         require(contract is not None and cuda_trained and profile == 'unconstrained'
                 and len(cases) == 200, 'CUDA evaluation requires final150 primary200')

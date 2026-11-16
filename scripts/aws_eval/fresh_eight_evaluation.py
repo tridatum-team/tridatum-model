@@ -250,7 +250,12 @@ def validate_answer(row, case, arm, mode, binding, config):
         require(row['termination_reason'] == 'eos' and row['response_text'].strip() and not row['truncated_output'], 'Smoke requires nonblank normal EOS')
 
 
-def validate_mode(root, mode, plan):
+def validate_mode_artifacts(root, mode, plan):
+    """Authenticate generated content only; never assert native terminal success.
+
+    Metadata recovery separately authenticates the preserved post-generation
+    failure and owned cleanup before using this evidence-only boundary.
+    """
     root = Path(root)
     require(mode in ('smoke', 'evaluation'), 'Unknown evaluation mode')
     folder = root / mode
@@ -312,15 +317,20 @@ def validate_mode(root, mode, plan):
             validate_answer(row, case, arm, mode, binding, config)
     attempts = [json.loads(line) for line in (folder / 'attempts.jsonl').read_text().splitlines()]
     require([(a['id'], a['arm'], a['state']) for a in attempts] == [(i, arm, 'started') for i in ids for arm in ARMS], 'Attempt coverage differs')
-    require(not (folder / 'failure.json').exists(), 'Failure evidence forbids completion')
     return manifest
 
 
-def validate_completion(root, plan):
+def validate_mode(root, mode, plan):
+    require(not (Path(root) / mode / 'failure.json').exists(), 'Failure evidence forbids completion')
+    return validate_mode_artifacts(root, mode, plan)
+
+
+def validate_completion_artifacts(root, plan):
+    """Authenticate all402 immutable answers and receipts, not process success."""
     root = Path(root)
     require(json.loads((root / 'plan.json').read_bytes()) == plan and is_evaluation(plan), 'Export plan differs')
     validate_limits(plan)
-    manifests = {mode: validate_mode(root, mode, plan) for mode in ('smoke', 'evaluation')}
+    manifests = {mode: validate_mode_artifacts(root, mode, plan) for mode in ('smoke', 'evaluation')}
     for field in ('model', 'adapter', 'input', 'runtime', 'code', 'evaluation_contract'):
         require(manifests['smoke'][field] == manifests['evaluation'][field], 'Smoke/full loaded identity differs')
     for key, filename in (('lineage_binding', 'lineage-binding.json'), ('source_manifest', 'source-manifest.json')):
@@ -350,6 +360,12 @@ def validate_completion(root, plan):
     for mode in ('smoke', 'evaluation'):
         require(result[mode] == pin(root / mode / 'completion.json', root), 'Worker accepted different completion')
     return result
+
+
+def validate_completion(root, plan):
+    for mode in ('smoke', 'evaluation'):
+        require(not (Path(root) / mode / 'failure.json').exists(), 'Failure evidence forbids completion')
+    return validate_completion_artifacts(root, plan)
 
 
 def validate_supervision(root, plan):

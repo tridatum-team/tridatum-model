@@ -1029,6 +1029,25 @@ class CudaEvaluationEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'deletion readback'):
             self.admit()
 
+    def test_metadata_recovery_marker_cannot_bypass_original_authentication(self):
+        from scripts.aws_eval import fresh_eight_evaluation_recover as recovery
+        # This intentionally invalid marker is not a fixture claiming real CUDA
+        # acceptance. The actual recovery admission must reject it, unmocked.
+        registration = dump(self.state / recovery.REG_NAME,
+            dict(schema=recovery.REGISTRATION_SCHEMA, approved=True))
+        dump(self.state / recovery.RECEIPT_NAME,
+            dict(registration=file_pin(registration, self.root)))
+        with self.assertRaisesRegex(ValueError, 'registration fields'):
+            self.admit()
+
+    def test_recovery_branch_still_requires_original_candidate_lineage(self):
+        from scripts.aws_eval import fresh_eight_evaluation_recover as recovery
+        dump(self.state / recovery.RECEIPT_NAME, {})
+        with patch.object(self.C, 'cuda_evaluation_lineage',
+                          return_value=dict(self.lineage, adapter_sha256='0' * 64)):
+            with self.assertRaisesRegex(ValueError, 'original candidate lineage'):
+                self.admit()
+
 
 class ExpandedAssessmentPanelTests(unittest.TestCase):
     def setUp(self):

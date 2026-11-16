@@ -1,11 +1,13 @@
 """Exercise real paired loops, journals, decoder and greedy observation offline."""
 import contextlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -22,6 +24,9 @@ class Config:
     max_new_tokens = 768
     return_dict_in_generate = True
     eos_token_id = [9]
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
     def to_dict(self):
         return dict(do_sample=self.do_sample, num_beams=self.num_beams, max_new_tokens=768,
@@ -43,7 +48,12 @@ class Tensor:
 
 class Torch:
     long = 'long'
+    bfloat16 = 'torch.bfloat16'
+    float32 = 'torch.float32'
     seeds = []
+
+    def get_num_threads(self):
+        return 1
 
     def __init__(self):
         self.cuda = SimpleNamespace(manual_seed_all=self.manual_seed, synchronize=lambda: None,
@@ -66,6 +76,14 @@ class Torch:
         return contextlib.nullcontext()
 
 
+class Device:
+    type = 'cuda'
+    index = 0
+
+    def __str__(self):
+        return 'cuda:0'
+
+
 class Model:
     def __init__(self, fail_at=None, blank=False, bypass=False):
         self.disabled = False
@@ -73,6 +91,25 @@ class Model:
         self.fail_at = fail_at
         self.blank = blank
         self.bypass = bypass
+        self.generation_config = Config()
+        self.config = SimpleNamespace(_attn_implementation='sdpa')
+
+    def eval(self):
+        return self
+
+    def modules(self):
+        return [self]
+
+    def named_parameters(self):
+        return [(name, SimpleNamespace(dtype=dtype, device=Device(),
+            requires_grad=False, numel=lambda: 1, element_size=lambda size=size: size))
+            for name, dtype, size in [('weight', Torch.bfloat16, 2), ('layer.lora_A.weight', Torch.float32, 4)]]
+
+    def parameters(self):
+        return [parameter for _, parameter in self.named_parameters()]
+
+    def buffers(self):
+        return []
 
     @contextlib.contextmanager
     def disable_adapter(self):
@@ -98,6 +135,10 @@ class Model:
 
 
 class Tokenizer:
+    pad_token_id = None
+    eos_token_id = 9
+    bos_token_id = 1
+
     def decode(self, tokens, **kwargs):
         return ''.join('<eos>' if t == 9 else str(t) for t in tokens)
 
@@ -117,7 +158,157 @@ def cases(count):
         messages=[dict(role='user', content='question ' + str(i))]) for i in range(count)])
 
 
+@contextlib.contextmanager
+def child_fixture(base):
+    """Synthetic model/admission only; real journals, hashes and receipt validators.
+
+    This fixture exercises control flow on CPU, not CUDA or model equivalence.
+    """
+    root = base / 'output'
+    root.mkdir()
+    (base / 'model').mkdir()
+    model_file = base / 'model/weights'
+    model_file.write_bytes(b'synthetic weights, not a model')
+    sources = []
+    for name in sorted(E.REQUIRED_SOURCES):
+        path = base / 'code' / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((ROOT / name).read_bytes())
+        sources.append(E.pin(path, base / 'code'))
+    adapter_files = [dict(path='adapter/' + name, bytes=size, sha256=sha)
+                     for name, (size, sha) in E.ADAPTER_FILES.items()]
+    lineage = dict(schema=E.LINEAGE_SCHEMA, candidate=dict(bytes=414, sha256=E.CANDIDATE_SHA),
+        adapter_sha256=E.ADAPTER_SHA, adapter_files=adapter_files, provenance=dict(test_fixture=True))
+    W.save_new(root / 'lineage-binding.json', lineage)
+    W.save_new(root / 'source-manifest.json', dict(files=sources))
+    W.save_new(base / 'code/lineage-binding.json', lineage)
+    W.save_new(base / 'code/source-manifest.json', dict(files=sources))
+    plan = dict(schema=E.SCHEMA, limits=dict(E.LIMITS),
+        lifetime=dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False),
+        cost=dict(termination_grace_seconds=900), runtime=dict(gpu_name='synthetic GPU'),
+        model=dict(files=[E.pin(model_file, base / 'model')]),
+        sources={p['path']: p['sha256'] for p in sources},
+        workload=dict(adapter_files=adapter_files, acquisition_manifest=dict(test_fixture=True),
+            evaluation_inputs=dict(path='inputs.json', bytes=0, sha256=E.INPUT_SHA),
+            lineage_binding=E.pin(root / 'lineage-binding.json', root),
+            source_manifest=E.pin(root / 'source-manifest.json', root)))
+    W.save_new(base / 'plan.json', plan)
+    W.save_new(root / 'plan.json', plan)
+    release = dict(gpu=dict(uuid='GPU-synthetic'), instance_id='synthetic-instance')
+    W.save_new(base / 'release.json', release)
+    W.save_new(root / 'runtime.json', dict(packages=E.RUNTIME_PACKAGES,
+        plan_sha256=core.digest(base / 'plan.json'), instance_id=release['instance_id'],
+        torch=E.RUNTIME_PACKAGES['torch'], cuda='12.8', count=1, bf16=True,
+        name=plan['runtime']['gpu_name'], run_id=E.RUN_ID))
+    acquisition = dict(status='authenticated', model_id=E.MODEL_ID, revision=E.MODEL_REVISION,
+        plan_sha256=core.digest(base / 'plan.json'), files=plan['model']['files'])
+    W.save_new(root / 'model-acquisition.json', acquisition)
+    admitted = dict(evaluation_inputs=[dict(id=p['id'], messages=p['messages']) for p in cases(200)],
+        lineage=lineage, adapter_config={}, sources=sources)
+    model, torch = Model(), Torch()
+    distributions = [SimpleNamespace(metadata={'Name': name}, version=version)
+                     for name, version in E.RUNTIME_PACKAGES.items()]
+    modules = dict(transformers=SimpleNamespace(
+        AutoModelForCausalLM=SimpleNamespace(from_pretrained=lambda *a, **kw: model),
+        AutoTokenizer=SimpleNamespace(from_pretrained=lambda *a, **kw: Tokenizer()),
+        GenerationConfig=Config),
+        peft=SimpleNamespace(PeftModel=SimpleNamespace(from_pretrained=lambda *a, **kw: model)))
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(patch.dict(sys.modules, modules))
+        stack.enter_context(patch.dict(os.environ, CUDA_VISIBLE_DEVICES=release['gpu']['uuid']))
+        stack.enter_context(patch.object(W.importlib.metadata, 'distributions', return_value=distributions))
+        stack.enter_context(patch.object(E, 'validate_data', return_value=admitted))
+        stack.enter_context(patch.object(core, 'validate_model', return_value=None))
+        stack.enter_context(patch.object(core, 'native_runtime', return_value=torch))
+        stack.enter_context(patch.object(W, 'helpers', return_value=H))
+        yield plan, model, acquisition
+
+
 class EvaluationWorkerTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'posix' and os.geteuid() != 0,
+                         'Real chmod denial requires an unprivileged POSIX user')
+    def test_child_completes_with_private_receipt_but_parent_authenticates_it(self):
+        for tampered in (False, True):
+            with self.subTest(tampered=tampered), tempfile.TemporaryDirectory() as temp:
+                base = Path(temp)
+                with child_fixture(base) as (plan, model, acquisition):
+                    root = base / 'output'
+                    private = root / 'model-acquisition.json'
+                    # run_experiment owns creation of these parent receipts.
+                    for name in ('plan.json', 'lineage-binding.json', 'source-manifest.json',
+                                 'model-acquisition.json'):
+                        (root / name).unlink()
+
+                    def supervise(plan, base, phase, *args, **kwargs):
+                        private.chmod(0o000)
+                        try:
+                            with self.assertRaises(PermissionError):
+                                private.read_bytes()
+                            W.child_stage(core, plan, base, phase)
+                            self.assertEqual(private.stat().st_mode & 0o777, 0)
+                            with self.assertRaises(PermissionError):
+                                private.read_bytes()
+                            self.assertFalse((root / 'evaluation/failure.json').exists())
+                            self.assertFalse((root / 'smoke/failure.json').exists())
+                            worker = json.loads((root / 'evaluation/evaluation-worker.json').read_bytes())
+                            self.assertEqual(worker['generation_calls'], 402)
+                            self.assertTrue(worker['evaluation_success'])
+                            self.assertFalse(worker['quality_accepted'])
+                        finally:
+                            # Restore only the synthetic parent's access, never world-readability.
+                            private.chmod(0o600)
+                        self.assertEqual(json.loads(private.read_bytes()), acquisition)
+                        if tampered:
+                            private.write_bytes(E.canonical(dict(acquisition, status='unauthenticated')))
+                        return dict(phase=phase, state='complete', cleanup_verified=True,
+                            invocation='synthetic-invocation', run_id=E.RUN_ID,
+                            instance_id='synthetic-instance', plan_sha256=core.digest(base / 'plan.json'),
+                            stopped_state={'LoadState': 'not-found'})
+
+                    try:
+                        with patch.object(core, 'download'), \
+                             patch.object(core, 'supervise_phase', side_effect=supervise), \
+                             patch.object(os, 'chown'):
+                            expected = (self.assertRaisesRegex(ValueError, 'model acquisition receipt')
+                                        if tampered else contextlib.nullcontext())
+                            with expected:
+                                W.run_experiment(core, plan, base, dict(stages=[]), {},
+                                    SimpleNamespace(pw_uid=os.geteuid(), pw_gid=os.getegid()),
+                                    9999999999, 9999999999, [], set(), [])
+                        self.assertEqual(len(model.calls), 402)
+                        self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+                        self.assertEqual((root / 'evaluation/supervisor-result.json').exists(), not tampered)
+                        if not tampered:
+                            self.assertEqual(E.validate_supervision(root, plan)['status'], 'accepted')
+                    finally:
+                        # Parent acceptance freezes output directories; restore this fixture only.
+                        for path in root.rglob('*'):
+                            if path.is_dir():
+                                path.chmod(0o755)
+
+    def test_child_rejects_invalid_mode_evidence_before_worker_completion(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            with child_fixture(base) as (plan, model, _):
+                run_pairs = W.run_pairs
+
+                def corrupt_mode(*args):
+                    run_pairs(*args)
+                    manifest_path = args[-1] / 'run-manifest.json'
+                    manifest = json.loads(manifest_path.read_bytes())
+                    manifest['retries'] = True
+                    manifest_path.write_bytes(E.canonical(manifest))
+
+                with patch.object(W, 'run_pairs', side_effect=corrupt_mode):
+                    with self.assertRaisesRegex(ValueError, 'Paired mode contract'):
+                        W.child_stage(core, plan, base, 'evaluation')
+                self.assertEqual(len(model.calls), 2)
+                failure = json.loads((base / 'output/smoke/failure.json').read_bytes())
+                self.assertEqual(failure['type'], 'ValueError')
+                self.assertTrue(failure['completed_rows_retained'])
+                self.assertFalse((base / 'output/evaluation/evaluation-worker.json').exists())
+                self.assertFalse((base / 'output/evaluation/base-outputs.jsonl').exists())
+
     def test_smoke_then_all200_are_402_new_calls(self):
         torch, model = Torch(), Model()
         with tempfile.TemporaryDirectory() as temp:

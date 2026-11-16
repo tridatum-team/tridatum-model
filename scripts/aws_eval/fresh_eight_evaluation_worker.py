@@ -242,7 +242,8 @@ def child_stage(core, plan, base, phase):
             completion_scope=E.COMPLETION_SCOPE, quality_accepted=False, rows_per_arm=200,
             smoke_rows_per_arm=1, generation_calls=402, model_loads=1,
             smoke=E.pin(root / 'smoke/completion.json', root), evaluation=E.pin(folder / 'completion.json', root)))
-        E.validate_completion(root, plan)
+        # Whole-run validation belongs to the privileged supervisor: the model
+        # acquisition receipt is parent-private, unlike these per-mode outputs.
     except BaseException as error:
         save_new(active / 'failure.json', dict(status='failed', type=type(error).__name__, message=str(error),
             elapsed_seconds=time.perf_counter() - started, completed_rows_retained=True,
