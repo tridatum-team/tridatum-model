@@ -471,22 +471,43 @@ def assert_greedy_config(config):
             'Effective generation policy is not the registered greedy policy')
 
 
-def resolve_generation_policy(model, requested):
+def generation_dispatch(profile='greedy'):
+    if profile == 'greedy':
+        return dict(GREEDY_DISPATCH)
+    from fresh_eight_evaluation import generation_dispatch as dispatch
+    return dispatch(profile)
+
+
+def assert_generation_config(config, profile='greedy'):
+    if profile == 'greedy':
+        assert_greedy_config(config)
+        return
+    from fresh_eight_evaluation import validate_generation_policy
+    validate_generation_policy(config.to_dict(), dict(
+        generation_profile=profile, generation_mode=config.get_generation_mode().value,
+        effective_config_sha256=object_sha(config.to_dict()),
+        dispatch_kwargs=generation_dispatch(profile)), profile)
+
+
+def resolve_generation_policy(model, requested, profile='greedy'):
     target = generation_target(model)
-    effective, unused = target._prepare_generation_config(requested, **GREEDY_DISPATCH)
+    dispatch = generation_dispatch(profile)
+    effective, unused = target._prepare_generation_config(requested, **dispatch)
     require(not unused, 'Unexpected model kwargs during generation-policy resolution')
-    assert_greedy_config(effective)
+    assert_generation_config(effective, profile)
     implementation = Path(inspect.getsourcefile(target._prepare_generation_config))
-    policy = dict(dispatch_kwargs=dict(GREEDY_DISPATCH),
+    policy = dict(dispatch_kwargs=dispatch,
                   generation_mode=effective.get_generation_mode().value,
                   effective_config_sha256=object_sha(effective.to_dict()),
                   preparation_implementation=dict(path=str(implementation.resolve()),
                       bytes=implementation.stat().st_size, sha256=digest(implementation)))
+    if profile != 'greedy':
+        policy['generation_profile'] = profile
     return effective, policy
 
 
 @contextlib.contextmanager
-def observe_generation_policy(model, expected_config):
+def observe_generation_policy(model, expected_config, profile='greedy'):
     """Assert the actual HF prepare call before its resolved mode is dispatched.
 
     A scoped instance hook observes the underlying Qwen model used by PEFT;
@@ -499,12 +520,16 @@ def observe_generation_policy(model, expected_config):
     previous = target.__dict__.get('_prepare_generation_config', sentinel)
     observed = {}
     expected_sha = object_sha(expected_config.to_dict())
+    dispatch = generation_dispatch(profile)
 
     def observe(requested, use_model_defaults=None, **kwargs):
-        require(use_model_defaults is False and kwargs.get('do_sample') is False
-                and kwargs.get('num_beams') == 1, 'Explicit greedy dispatch controls missing')
+        require(use_model_defaults is False
+                and all(k in kwargs and canonical(kwargs[k]) == canonical(v)
+                        for k, v in dispatch.items() if k != 'use_model_defaults'),
+                'Explicit greedy dispatch controls missing' if profile == 'greedy'
+                else 'Explicit sampling dispatch controls missing')
         effective, model_kwargs = original(requested, use_model_defaults=use_model_defaults, **kwargs)
-        assert_greedy_config(effective)
+        assert_generation_config(effective, profile)
         require(object_sha(effective.to_dict()) == expected_sha,
                 'Actual effective generation configuration differs from bound runtime receipt')
         observed['generation_mode'] = effective.get_generation_mode().value

@@ -25,6 +25,13 @@ the third report must cover that entire anonymous pair. Candidate aggregation
 reauthenticates registration and supervision, never searches checkpoints/profiles
 or compares scores against the historical grading policy.
 
+The separate inference-only CUDA sampling condition requires explicit packet
+--generation-profile qwen3_nonthinking_sampling and authenticated matching plan,
+manifest, runtime, output and per-case seeds. Omission preserves historical greedy
+authentication, including archive-only original failure recovery. Aggregate uses
+the committed condition without another flag. One fixed seed is not evidence of
+stochastic robustness; conditions are never pooled or selected against each other.
+
 Review JSON: schema trid-expanded-blind-review-v1, packet_sha256, reviewer_id,
 independent:true, blinded:true, judgments:{sample_id:{semantic_pass:bool,
 format_pass:bool, critical_errors:[specific descriptions], reason:nonempty}}.
@@ -77,6 +84,7 @@ PIN_NAMES = {'design', 'source_allocation', 'evaluation_inputs', 'evaluation_met
              'evaluation_references', 'training_manifest', 'semantic_review_resolution'}
 METRICS = ('structural_pass', 'semantic_pass', 'format_pass', 'joint_pass')
 ANONYMOUS_PROTOCOL_SHA = 'aa2ea535907290693f2d470cb21cb70d5573be20899da1052fbf3bc9f68abeb8'
+GENERATION_PROFILES = ('greedy', 'qwen3_nonthinking_sampling')
 PROTOCOL_FIELDS = ('instructions', 'paired_consistency', 'critical_error_codes', 'critical_errors_are_codes')
 # Always imported by the evaluator before either code_identity receipt. Keep the
 # producer and its local decoding/loading dependencies authenticated, not merely
@@ -211,7 +219,7 @@ def frozen_dataset(root, path, expected_sha):
     return frozen, design, inputs, metadata, references
 
 
-def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded):
+def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded, generation_profile='greedy'):
     """Admit one independently collected CUDA execution, never historical scores."""
     import tempfile
     from scripts import local_eight_candidate as candidate
@@ -226,11 +234,14 @@ def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded):
     plan_path = exported / 'plan.json'
     plan, plan_sha = load(plan_path), digest(plan_path)
     require(evaluation.is_evaluation(plan), 'CUDA evaluation plan schema differs')
+    require(evaluation.plan_decoder_profile(plan) == generation_profile,
+            'CUDA plan generation profile differs')
     # Metadata recovery is a separate admission, never a native-success alias.
     # Its registered historical validator reauthenticates the preserved failure,
     # original archive, all402 answers, failed-unit boundary and positive cleanup.
     from scripts.aws_eval import fresh_eight_evaluation_recover as recovery
     if (state / recovery.RECEIPT_NAME).exists():
+        require(generation_profile == 'greedy', 'historical recovery is greedy only')
         lineage = candidate.cuda_evaluation_lineage(root,
             candidate.bound(root, contract['registration']), contract['registration']['sha256'])
         require(load(exported / 'lineage-binding.json') == lineage
@@ -381,9 +392,12 @@ def authenticate_cuda_evaluation(root, directory, contract, manifest, loaded):
                 public_input=candidate.bound(root, manifest['input']))
 
 
-def completed_run(root, directory, cases, design, profile, input_pin=None, contract=None):
+def completed_run(root, directory, cases, design, profile, input_pin=None, contract=None,
+                  generation_profile='greedy'):
     """Authenticate the evaluator's actual file/row contract, never model weights."""
     directory = Path(directory)
+    require(generation_profile in GENERATION_PROFILES, 'unknown generation profile')
+    sampling = generation_profile == 'qwen3_nonthinking_sampling'
     arms = contract['arms'] if contract else ARMS
     cuda_trained = contract is not None and contract.get('training_runtime') == 'cuda'
     adapter_sha = contract['adapter_sha256'] if contract else design['model']['adapter_sha256']
@@ -397,12 +411,22 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     loaded = load(directory / 'loaded-runtime.json')
     manifest_sha = pins['run-manifest.json']['sha256']
     cuda_evaluation = manifest.get('schema') == 'trid-cuda-eight-paired-v1'
+    require(not sampling or (cuda_evaluation and contract is not None and cuda_trained
+            and profile == 'unconstrained' and len(cases) == 200),
+            'sampling requires separate CUDA final150 primary200')
+    if sampling:
+        require(manifest.get('generation_profile') == loaded.get('generation_profile') == generation_profile,
+                'manifest/runtime generation profile binding differs')
+    else:
+        require('generation_profile' not in manifest and 'generation_profile' not in loaded,
+                'historical greedy generation profile differs')
     if not cuda_evaluation:
         require(not (directory / 'failure.json').exists(), 'failed local run is not complete')
     if cuda_evaluation:
         require(contract is not None and cuda_trained and profile == 'unconstrained'
                 and len(cases) == 200, 'CUDA evaluation requires final150 primary200')
-        cuda_admission = authenticate_cuda_evaluation(root, directory, contract, manifest, loaded)
+        cuda_admission = authenticate_cuda_evaluation(
+            root, directory, contract, manifest, loaded, generation_profile)
         pins.update(cuda_admission['pins'])
     expected_schema = ('trid-cuda-eight-paired-v1' if cuda_evaluation else
                        'trid-local-eight-paired-v2' if contract else 'trid-local-eight-paired-v1')
@@ -450,9 +474,14 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     expected_generation = dict(enable_thinking=False, do_sample=False, num_beams=1, seed=14,
         max_new_tokens=768, context_tokens=4096, dtype='bfloat16',
         backend='transformers-cuda' if cuda_evaluation else 'transformers-mps')
-    require(generation == expected_generation
-            and all(generation[k] == design['generation'][k] for k in
-                    ('enable_thinking', 'do_sample', 'max_new_tokens', 'context_tokens')),
+    design_fields = ('enable_thinking', 'do_sample', 'max_new_tokens', 'context_tokens')
+    if sampling:
+        from scripts.aws_eval import fresh_eight_evaluation as evaluation
+        expected_generation = evaluation.generation_for_profile(generation_profile)
+        design_fields = ('enable_thinking', 'max_new_tokens', 'context_tokens')
+    require((object_sha(generation) == object_sha(expected_generation) if sampling
+             else generation == expected_generation)
+            and all(generation[k] == design['generation'][k] for k in design_fields),
             'registered generation differs')
     model = manifest['model']
     adapter = manifest['adapter']
@@ -499,14 +528,18 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
     prompts = indexed(preflight['prompts'], 'preflight')
     require(set(prompts) == set(cases), 'prompt preflight denominator')
     config = loaded['generation_config']
-    require(config.get('do_sample') is False and config.get('num_beams') == 1
-            and config.get('max_new_tokens') == 768 and config.get('return_dict_in_generate') is True,
-            'loaded generation configuration differs')
     policy = loaded.get('generation_policy', {})
-    require(policy.get('dispatch_kwargs') == {'use_model_defaults': False, 'do_sample': False, 'num_beams': 1}
-            and policy.get('generation_mode') == 'greedy_search'
-            and policy.get('effective_config_sha256') == object_sha(config),
-            'effective greedy generation policy differs')
+    if sampling:
+        evaluation.validate_generation_policy(config, policy, generation_profile)
+    else:
+        require(config.get('do_sample') is False and config.get('num_beams') == 1
+                and config.get('max_new_tokens') == 768 and config.get('return_dict_in_generate') is True,
+                'loaded generation configuration differs')
+        require(policy.get('dispatch_kwargs') == {'use_model_defaults': False, 'do_sample': False, 'num_beams': 1}
+                and policy.get('generation_mode') == 'greedy_search'
+                and policy.get('effective_config_sha256') == object_sha(config)
+                and 'generation_profile' not in policy,
+                'effective greedy generation policy differs')
     implementation = policy.get('preparation_implementation', {})
     require(isinstance(implementation.get('path'), str) and implementation['path']
             and type(implementation.get('bytes')) is int and implementation['bytes'] > 0
@@ -514,8 +547,11 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
             and all(c in '0123456789abcdef' for c in implementation['sha256']),
             'generation preparation implementation pin missing')
     requested = loaded.get('requested_generation_config', {})
-    require(all(requested.get(key) == config[key] for key in
-                ('do_sample', 'num_beams', 'max_new_tokens', 'return_dict_in_generate')),
+    requested_keys = ('do_sample', 'num_beams', 'max_new_tokens', 'return_dict_in_generate')
+    if sampling:
+        requested_keys = tuple(dict.fromkeys((*requested_keys, *evaluation.SAMPLING_PARAMETERS)))
+    require(all((key in requested and object_sha(requested[key]) == object_sha(config[key]))
+                if sampling else requested.get(key) == config[key] for key in requested_keys),
             'requested/effective generation contract differs')
     answers = {}
     for arm in arms:
@@ -546,8 +582,16 @@ def completed_run(root, directory, cases, design, profile, input_pin=None, contr
                     and row.get('decoder_profile_sha256') == pins['decoder-profile.json']['sha256']
                     and row.get('generation') == generation and row.get('generation_config') == config
                     and row.get('generation_policy_sha256') == object_sha(policy)
-                    and row.get('effective_generation_mode') == 'greedy_search',
+                    and row.get('effective_generation_mode') == ('sample' if sampling else 'greedy_search'),
                     'answer arm/runtime/profile/adapter binding differs')
+            if sampling:
+                require(row.get('generation_profile') == generation_profile
+                        and type(row.get('case_seed')) is int
+                        and row['case_seed'] == evaluation.case_seed('evaluation', cid),
+                        'answer generation profile/case seed binding differs')
+            else:
+                require('generation_profile' not in row and 'case_seed' not in row,
+                        'historical greedy answer profile/seed differs')
             if contract:
                 require(row.get('candidate_manifest_sha256') == contract['registration']['sha256'],
                         'answer registration binding differs')
@@ -568,8 +612,11 @@ def mapping_body(mapping):
 
 
 def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None,
-                candidate_manifest=None, candidate_sha=None):
+                candidate_manifest=None, candidate_sha=None, generation_profile='greedy'):
     require(bool(candidate_manifest) == bool(candidate_sha), 'candidate manifest and SHA must be paired')
+    require(generation_profile in GENERATION_PROFILES, 'unknown generation profile')
+    require(generation_profile == 'greedy' or (candidate_manifest and secondary is None),
+            'sampling requires registered candidate without secondary search')
     contract = resolve_candidate(root, candidate_manifest, candidate_sha) if candidate_manifest else None
     arms = contract['arms'] if contract else ARMS
     if contract:
@@ -590,11 +637,14 @@ def make_packet(root, frozen_path, frozen_sha, primary, out, secondary=None,
         mapping['evaluation_contract'] = public_contract(contract)
     for suite, directory, subset, profile in runs:
         answers, pins, manifest, loaded = completed_run(root, directory, subset, design, profile,
-            frozen['pins']['evaluation_inputs'] if suite == 'primary' else None, contract=contract)
+            frozen['pins']['evaluation_inputs'] if suite == 'primary' else None, contract=contract,
+            generation_profile=generation_profile)
         mapping['runs'][suite] = {'directory': str(Path(directory).resolve()), 'pins': pins,
                                   'runtime': manifest['runtime'], 'generation': manifest['generation'],
                                   'generation_config': loaded['generation_config'],
                                   'generation_policy': loaded['generation_policy']}
+        if generation_profile != 'greedy':
+            mapping['runs'][suite]['generation_profile'] = generation_profile
         if suite == 'secondary':
             primary_run = mapping['runs']['primary']
             require(manifest['runtime'] == primary_run['runtime']
@@ -1005,10 +1055,15 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
         for entry in run['pins'].values():
             bound(root, entry)
         subset = cases if suite == 'primary' else {cid: cases[cid] for cid in dataset['secondary_case_ids']}
-        answers, current_pins, _, _ = completed_run(root, run['directory'], subset, design,
+        answers, current_pins, manifest, loaded = completed_run(root, run['directory'], subset, design,
             'unconstrained' if suite == 'primary' else 'json-schema',
-            dataset['pins']['evaluation_inputs'] if suite == 'primary' else None, contract=contract)
+            dataset['pins']['evaluation_inputs'] if suite == 'primary' else None, contract=contract,
+            generation_profile=run.get('generation_profile', 'greedy'))
         require(current_pins == run['pins'], 'run artifact membership changed')
+        if run.get('generation_profile', 'greedy') != 'greedy':
+            require(all(run.get(key) == manifest[key] for key in ('runtime', 'generation'))
+                    and all(run.get(key) == loaded[key] for key in ('generation_config', 'generation_policy')),
+                    'sampling mapping runtime/generation differs')
         expected.update({(suite, cid, arm): row for (cid, arm), row in answers.items()})
     joined = []
     seen = set()
@@ -1060,6 +1115,15 @@ def aggregate(root, judgments_path, judgments_sha, mapping_path, out):
             checks=checks, passed=all(checks.values()), deployment_qualification=False)
         result['interpretation'] = ('Contemporaneous base versus one prospectively fixed final endpoint on development data. '
             'No historical score comparison, checkpoint selection, unseen-final claim, or deployment qualification.')
+        generation_profile = mapping['runs']['primary'].get('generation_profile', 'greedy')
+        if generation_profile != 'greedy':
+            result.update(generation_profile=generation_profile,
+                generation_condition='separate_inference_only_fixed_seed_sampling',
+                historical_pooling=False, stochastic_robustness_established=False,
+                generation=mapping['runs']['primary']['generation'])
+            result['interpretation'] += (
+                ' Separate nonthinking sampling condition with one fixed paired per-case seed; '
+                'no pooling with historical greedy results, decoder tuning, or stochastic robustness claim.')
     if 'secondary' in mapping['runs']:
         secondary_rows = [r for r in joined if r['suite'] == 'secondary']
         result['secondary'] = suite_summary(secondary_rows, arms)
@@ -1093,6 +1157,7 @@ def main(argv=None):
     packet.add_argument('--secondary', type=Path)
     packet.add_argument('--candidate-manifest', type=Path)
     packet.add_argument('--candidate-sha256')
+    packet.add_argument('--generation-profile', choices=GENERATION_PROFILES, default='greedy')
     packet.add_argument('--out', type=Path, required=True)
     command = commands.add_parser('shard')
     command.add_argument('--packet', type=Path, required=True)
@@ -1121,7 +1186,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == 'packet':
         result = make_packet(args.root, args.frozen, args.frozen_sha256, args.primary, args.out, args.secondary,
-                             args.candidate_manifest, args.candidate_sha256)
+                             args.candidate_manifest, args.candidate_sha256, args.generation_profile)
     elif args.command == 'shard':
         result = shard(args.root, args.packet, args.packet_sha256, args.size, args.out)
     elif args.command == 'collect':

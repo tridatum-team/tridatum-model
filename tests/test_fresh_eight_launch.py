@@ -110,6 +110,96 @@ def evaluation_registration(root):
     return reg
 
 
+def sampling_registration(root):
+    """Actual JSON shape, synthetic resources; never an executable cloud approval."""
+    reg = evaluation_registration(root)
+    old = reg['identity']['run_id']
+    reg = json.loads(json.dumps(reg).replace(old, 'mois-eight-sampling-offline'))
+    reg.update(decoder_profile=fresh.lifecycle.SAMPLING_PROFILE,
+               absolute_termination_deadline=fresh.lifecycle.SAMPLING_DEADLINE)
+    name = fresh.lifecycle.OVERNIGHT_AUTHORIZATION
+    previous_pins = {reg[key]['path'] for key in ('authorization', 'resource_envelope')}
+    reg['authorization'] = pin(root, name, (Path(__file__).resolve().parents[1] / name).read_bytes())
+    envelope = json.loads((root / reg['resource_envelope']['path']).read_bytes())
+    envelope.update(schema='trid-cuda-evaluation-sampling-resource-envelope-v1',
+        identity=reg['identity'], authorization=reg['authorization'],
+        decoder_profile=reg['decoder_profile'], absolute_termination_deadline=reg['absolute_termination_deadline'],
+        operator_imposed_cap_usd='20', automatic_retry=False, automatic_extension=False,
+        gpu_execution_lease_seconds_max=13500, total_billable_lifetime_seconds_max=14400)
+    reg['resource_envelope'] = pin(root, 'sampling-envelope.json', envelope)
+    reg['bundle']['files'] = [row for row in reg['bundle']['files'] if row['path'] not in previous_pins]
+    reg['bundle']['files'] += [reg['authorization'], reg['resource_envelope']]
+    return reg
+
+
+class SamplingPreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.reg = sampling_registration(self.root)
+        self.now = fresh.lifecycle.timestamp(fresh.lifecycle.SAMPLING_DEADLINE) - 20000
+
+    def test_sampling_registration_binds_separate_grant_and_deadline(self):
+        with patch.object(fresh.time, 'time', return_value=self.now), patch.object(fresh, 'validate_lineage'):
+            self.assertIs(fresh.validate_registration(self.reg, self.root), self.reg)
+        with patch.object(fresh.time, 'time', return_value=self.now + 20001):
+            with self.assertRaisesRegex(RuntimeError, 'remaining overnight'):
+                fresh.validate_registration(self.reg, self.root)
+        with patch.object(fresh.time, 'time', return_value=self.now + 20001), patch.object(fresh, 'validate_lineage'):
+            self.assertIs(fresh.validate_registration(self.reg, self.root, launch_window=False), self.reg)
+
+    def test_sampling_cannot_reuse_consumed_greedy_authorization(self):
+        name = 'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
+        self.reg['authorization'] = pin(self.root, name, (Path(__file__).resolve().parents[1] / name).read_bytes())
+        with patch.object(fresh.time, 'time', return_value=self.now), patch.object(fresh, 'validate_lineage'):
+            with self.assertRaisesRegex(RuntimeError, 'Separate overnight authorization'):
+                fresh.validate_registration(self.reg, self.root)
+
+    def test_sampling_envelope_cannot_extend_deadline_or_lease(self):
+        for key, value in (('absolute_termination_deadline', '2026-11-17T00:00:00Z'),
+                           ('gpu_execution_lease_seconds_max', 18900),
+                           ('total_billable_lifetime_seconds_max', 19800)):
+            with self.subTest(key=key):
+                reg = copy.deepcopy(self.reg)
+                envelope = json.loads((self.root / reg['resource_envelope']['path']).read_bytes())
+                envelope[key] = value
+                reg['resource_envelope'] = pin(self.root, 'mutated-envelope.json', envelope)
+                with patch.object(fresh.time, 'time', return_value=self.now), patch.object(fresh, 'validate_lineage'):
+                    with self.assertRaises(RuntimeError):
+                        fresh.validate_registration(reg, self.root)
+
+    def test_final_plan_must_match_registration_deadline(self):
+        reg = self.reg
+        plan = {key: reg[key] for key in ('identity', 'iam', 'controller_arn', 'authorization', 'resource_envelope')}
+        plan.update(schema=fresh.lifecycle.EVALUATION_SCHEMA,
+                    workload=dict(decoder_profile=reg['decoder_profile'], lineage_binding=reg['lineage_binding']),
+                    absolute_termination_deadline='2026-11-17T00:00:00Z')
+        with self.assertRaisesRegex(RuntimeError, 'Final absolute deadline differs'):
+            fresh.validate_final(reg, SHA, self.root, self.root, plan, {}, SHA, active=False)
+
+    def test_exact_sampling_approval_rejects_changed_deadline_and_prior_grant(self):
+        E = fresh.lifecycle.evaluation_module({'schema': fresh.lifecycle.EVALUATION_SCHEMA})
+        plan = dict(schema=fresh.lifecycle.EVALUATION_SCHEMA, identity=self.reg['identity'],
+                    workload={'decoder_profile': E.SAMPLING_PROFILE}, authorization=self.reg['authorization'],
+                    absolute_termination_deadline=self.reg['absolute_termination_deadline'])
+        approval = dict(schema=E.SAMPLING_APPROVAL_SCHEMA, run_id=plan['identity']['run_id'],
+            plan_sha256=SHA, instance_limit=1, operator_imposed_cap_usd='20',
+            fixed_dollar_cap_explicitly_selected_by_user=False,
+            workload_sha256=fresh.lifecycle.object_sha(plan['workload']),
+            authorization_sha256=plan['authorization']['sha256'], limits=E.SAMPLING_LIMITS,
+            ebs_kms_key_arn='synthetic-key', automatic_retry=False, automatic_extension=False,
+            retraining=False, deployment=False, approved=True, decoder_profile=E.SAMPLING_PROFILE,
+            absolute_termination_deadline=plan['absolute_termination_deadline'])
+        E.validate_approval(plan, approval, SHA, 'synthetic-key')
+        for key, value in (('absolute_termination_deadline', '2026-11-17T00:00:00Z'),
+                           ('authorization_sha256', '4967ea79e40e1f5df25004460642d80f8832c190d8d785323250cf2428fafd98'),
+                           ('fixed_dollar_cap_explicitly_selected_by_user', True)):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                E.validate_approval(plan, dict(approval, **{key: value}), SHA, 'synthetic-key')
+
+
+
 class CudaEvaluationPreparationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

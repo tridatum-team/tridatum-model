@@ -518,6 +518,16 @@ Mac의 메모리 한도를 낮추거나 같은 로드를 반복하지 않고, �
 - **불확실성:** 자료군 60개를 같은 가중치로 집계하면 완전 통과 변화는 −1.04%p입니다. 문항 가중치의 +1.0%p와 다르며, 관련 문항 200개를 독립 표본처럼 취급한 신뢰구간은 제시하지 않습니다. 현행 법령 인증·일반적인 정확도·미사용 최종 자료 성능을 주장하지 않습니다.
 - **보존:** `blind-assessment/{collected/,collected-third/,adjudication/,frozen-judgments.json,assessment.json}`에 원 판정·재심·최종 집계를 보존합니다. 기존 점수나 단계 선택을 소급 변경하지 않았으며, `candidate_step=150`, `selected_step=null`, `deployment_qualified=false`입니다.
 
+#### 동일 8B 가중치의 비사고 샘플링 비교 · 실행 준비
+
+- **관찰된 문제:** 앞선 구조 실패는 원본 12개(길이 1·잘못된 JSON 10·잘못된 인용 1), 후보 35개(길이 33·잘못된 JSON 2)입니다. 후보의 행정안전부 길이 실패 30개 모두 반복 토큰 구간이 있었으며, 28개는 동일 구간의 연속 반복이 확인됐습니다. 학습 EOS 누락·무음 잘림·채팅 템플릿 불일치는 발견되지 않았습니다. 반복이 발생한 학습 원인까지 규명했다는 뜻은 아닙니다.
+- **다음 조건:** `runs/mois-eight-sampling-20261116T171738Z/`에 별도 추론 실험을 등록합니다. [Qwen 공식 비사고 모드 권장값](https://huggingface.co/Qwen/Qwen3-8B#enable_thinkingfalse)인 temperature 0.7·top-p 0.8·top-k 20·min-p 0을 원본과 동일 최종 150단계 후보 모두에 적용합니다. 공식 문서의 명시적인 greedy 경고는 사고 모드 절에 있으며, 이번 비사고 반복의 원인이 입증됐다고 인용하지 않습니다.
+- **비교 계약:** 가중치·공개 200문항·768 출력 토큰·4096 문맥·비사고 설정은 그대로 둡니다. seed 14와 문항 ID·실행 mode의 SHA-256에서 문항별 seed를 만들고, 같은 문항의 두 arm에 같은 seed를 생성 직전 적용합니다. 실제 HF의 `sample` 실행 설정을 관찰·인증하며, 반복 패널티·강제 종료·출력 수정·답변 재사용은 없습니다. 단일 seed 조건이므로 확률적 안정성까지 주장하지 않습니다.
+- **별도 야간 승인:** 기존 소비된 $20 승인을 재사용하지 않습니다. 별도 야간 GPU 승인에 운영상 $20 상한과 동시 L40S 1대 제한을 적용합니다. 총 4시간(작업 13,500초·종료 여유 900초) 이내이며 절대 종료 경계는 **2026-11-17 08:00 KST**입니다. 실행 전 잔여 시간 검사·독립 종료 예약·host 절대 종료 timer를 결박하고 자동 재시도·연장은 금지합니다. AWS 종료 완료 시각이나 청구 금액을 강제 보장하는 장치는 아닙니다.
+- **구현 검증:** 통합 640건 중 639건 통과·1건 skip, bootstrap shell 구문 검증 통과. 별도 CPU 소형 Qwen3+PEFT의 실제 생성에서 두 문항 각각 원본/adapter의 seed 일치·동일 토큰열·EOS 종료, 실제 `sample` dispatch와 기존 `greedy_search` 보존을 관찰했습니다. 이는 8B CUDA 실행이나 품질 개선의 증거가 아닙니다. 독립 검토에서 발견한 종료 직후 회수 시간 부족을 수정해, instance·모든 volume 부재 확인 후에만 별도 900초 회수 시간을 주며 GPU lease·요청·회수 바이트 한도는 늘리지 않습니다.
+- **비용 검토:** 새 가격·환경 조회와 선택적 과금 기능의 추가 조회를 검토한 조건부 상한은 **$13.91**입니다. 4시간 실행, 31일 보존 가격, bootstrap 포함 host 2GiB·제어기 1GiB 송신, KMS 최대 100요청 가정, 세전 $1 예비비와 10% 세금을 포함합니다. 이는 확인한 증분 서비스와 사용량 가정에 따른 모델이며 AWS 청구 상한이 아닙니다. 기존 보존 규칙 14개를 유지하고 신규 prefix 규칙 2개만 추가하는 실제 readback은 실행 전에 별도로 확인합니다.
+- **현재 상태:** 독립 구현·안전·비용 검토가 종료됐고 새 GPU 실행 전 자원 인증 단계입니다. 새 조건의 답변·품질 점수는 아직 없으며, 기존 greedy 결과와 섞거나 `test.tridatum.co`를 교체하지 않습니다. 진단은 앞선 실행의 `failure-diagnostics.json`, `token-contract-audit.json`; 새 계약·검증은 `experiment-design.json`, `upstream-decoding-guidance.json`, `integration-tests-closed-review.log`, `tiny-generation-smoke.json`, `independent-{science,safety-cost}-review.json`에 보존합니다.
+
 
 ### Packed-head 학습 엔진
 

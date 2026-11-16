@@ -52,6 +52,10 @@ FOLLOWUP_SCHEMA = 'trid-hf14-followup-v1'
 EIGHT_SCHEMA = 'trid-eight-sft-experiment-v1'
 FRESH_SCHEMA = 'trid-fresh-eight-training-experiment-v2'
 EVALUATION_SCHEMA = 'trid-fresh-eight-cuda-evaluation-v1'
+SAMPLING_PROFILE = 'qwen3_nonthinking_sampling'
+SAMPLING_DEADLINE = '2026-11-16T23:00:00Z'
+OVERNIGHT_AUTHORIZATION = 'runs/mois-eight-cuda-evaluation-20261116T134815Z/overnight-gpu-authorization.json'
+OVERNIGHT_AUTHORIZATION_SHA = '992847c031abad5e0c21c13b9f9f94b540d6d899859cf800fda20816f34e11e2'
 FOLLOWUP_PHASES = dict(acquire14=900, dev14=2400, val14=2400)
 CHECKPOINT_MAX = 32 * 1024**2
 CHECKPOINT_CHANNEL_BYTES = CHECKPOINT_MAX + 3 * 1024**2
@@ -63,6 +67,30 @@ ORDERED_MODELS = {
 
 def evaluation_mode(plan):
     return plan.get('schema') == EVALUATION_SCHEMA
+
+
+def sampling_mode(plan):
+    return evaluation_mode(plan) and plan.get('workload', {}).get('decoder_profile') == SAMPLING_PROFILE
+
+
+def absolute_deadline(plan):
+    require(plan.get('absolute_termination_deadline') == SAMPLING_DEADLINE,
+            'Sampling requires the exact overnight absolute UTC deadline')
+    return timestamp(SAMPLING_DEADLINE)
+
+
+def validate_launch_window(plan, now):
+    """Reserve the entire four-hour envelope and one single-call dispatch margin."""
+    if sampling_mode(plan):
+        require(now + 14400 + 60 < absolute_deadline(plan),
+                'Insufficient remaining overnight launch window; no retry or extension')
+
+
+def work_deadline(plan, launch_time):
+    deadline = launch_time + lifetime_seconds(plan)
+    if sampling_mode(plan):
+        deadline = min(deadline, absolute_deadline(plan) - 900)
+    return deadline
 
 
 def evaluation_module(plan):
@@ -490,7 +518,7 @@ def fresh_cost_bound(plan):
 
 
 def evaluation_cost_bound(plan):
-    """Independent new USD20 grant; historical training spend is never reused."""
+    """Independent evaluation admission; sampling uses an operator USD20 ceiling."""
     evaluation_module(plan).validate_limits(plan)
     cost, network = plan['cost'], plan['network']
     # At most120 readiness GETs plus one completion GET reserve121MiB even
@@ -513,7 +541,7 @@ def evaluation_cost_bound(plan):
             and math.isfinite(cost['contingency_usd']) and cost['contingency_usd'] >= 1,
             'CUDA evaluation sealed storage/egress/request/tax envelope differs')
     rates = {key: Decimal(str(value)) for key, value in cost['rates'].items()}
-    hours = Decimal(19800) / Decimal(3600)
+    hours = Decimal(14400 if sampling_mode(plan) else 19800) / Decimal(3600)
     usage = hours * (rates['ec2_hour'] + rates['ipv4_hour'])
     usage += Decimal(120) * rates['ebs_gb_month'] * hours / Decimal(28 * 24)
     usage += Decimal(cost['retained_bytes']) / Decimal(10**9) * rates['s3_gb_month'] * Decimal(31) / Decimal(28)
@@ -522,7 +550,9 @@ def evaluation_cost_bound(plan):
     usage += cost['scheduler_invocations'] * rates['scheduler_invocation'] + Decimal(str(cost['ancillary_bound_usd']))
     pretax = usage + Decimal(str(cost['contingency_usd']))
     total = (pretax * (1 + Decimal(str(cost['tax_rate'])))).quantize(Decimal('0.01'), rounding=ROUND_CEILING)
-    require(total.is_finite() and total <= Decimal(20), 'CUDA evaluation all-in bound exceeds new USD20 grant')
+    require(total.is_finite() and total <= Decimal(20),
+            'Sampling all-in bound exceeds operator USD20 ceiling' if sampling_mode(plan)
+            else 'CUDA evaluation all-in bound exceeds new USD20 grant')
     return dict(additional_pretax_bound_usd=float(pretax), all_in_bound_usd=str(total),
                 current_run_cap_usd='20', tax_rate=cost['tax_rate'],
                 contingency_usd=cost['contingency_usd'], invoice=False, spending_hard_cap=False)
@@ -748,6 +778,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                     recipe=recipe, limits=LIMITS, ebs_kms_key_arn=key_arn, automatic_retry=False, approved=True),
                 'Exact new final approval is missing or mismatched')
     current = time.time() if now is None else now
+    validate_launch_window(plan, current)
     require(0 <= current - timestamp(plan['checked_at']) <= 3600, 'Admission observations are stale')
     require(plan['ami']['ImageId'] == 'ami-040ebe879ae70cc30'
             and plan['ami']['OwnerId'] == '898082745236' and plan['ami']['root_volume_gib'] == 75,
@@ -1117,34 +1148,56 @@ def validate_evaluation_resources(root, plan):
         return read_bound(path, pin['sha256'])
 
     authorization = bound(plan['authorization'])
-    require(plan['authorization']['path'] ==
-            'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
-            and plan['authorization']['sha256'] == '4967ea79e40e1f5df25004460642d80f8832c190d8d785323250cf2428fafd98'
-            and authorization['schema'] == 'trid-cuda-evaluation-authorization-v1'
-            and authorization['run_id'] == plan['identity']['run_id']
-            and authorization['cap_usd'] == '20'
-            and authorization['additional_to_prior_spending'] is True
-            and authorization['maximum_instance_executions'] == 1
-            and authorization['maximum_total_lifetime_seconds_including_shutdown_grace'] == 19800
-            and authorization['work_lease_seconds'] == 18900
-            and authorization['shutdown_grace_seconds'] == 900
-            and authorization['evaluation_only'] is True
-            and authorization['retraining_allowed'] is False
-            and authorization['automatic_instance_retry_allowed'] is False
-            and authorization['prior_training_authorization_reused'] is False,
-            'Exact new CUDA evaluation authorization required')
+    sampling = sampling_mode(plan)
+    if sampling:
+        require(plan['authorization']['path'] == OVERNIGHT_AUTHORIZATION
+                and plan['authorization']['sha256'] == OVERNIGHT_AUTHORIZATION_SHA
+                and authorization['schema'] == 'trid-overnight-gpu-authorization-v1'
+                and plan['identity']['run_id'] not in ('mois-eight-cuda-evaluation-20261116T134815Z',
+                                                      'mois-eight-cuda-eval-20261116-134815')
+                and authorization['maximum_concurrent_instances'] == 1
+                and authorization['instance_type'] == 'g6e.2xlarge'
+                and authorization['gpu'] == 'NVIDIA L40S'
+                and authorization['fixed_dollar_cap_explicitly_selected_by_user'] is False
+                and timestamp(authorization['conservative_operational_deadline']) == absolute_deadline(plan),
+                'Separate overnight authorization required; consumed prior grant cannot be reused')
+    else:
+        require(plan['authorization']['path'] ==
+                'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
+                and plan['authorization']['sha256'] == '4967ea79e40e1f5df25004460642d80f8832c190d8d785323250cf2428fafd98'
+                and authorization['schema'] == 'trid-cuda-evaluation-authorization-v1'
+                and authorization['run_id'] == plan['identity']['run_id']
+                and authorization['cap_usd'] == '20'
+                and authorization['additional_to_prior_spending'] is True
+                and authorization['maximum_instance_executions'] == 1
+                and authorization['maximum_total_lifetime_seconds_including_shutdown_grace'] == 19800
+                and authorization['work_lease_seconds'] == 18900
+                and authorization['shutdown_grace_seconds'] == 900
+                and authorization['evaluation_only'] is True
+                and authorization['retraining_allowed'] is False
+                and authorization['automatic_instance_retry_allowed'] is False
+                and authorization['prior_training_authorization_reused'] is False,
+                'Exact new CUDA evaluation authorization required')
     envelope = bound(plan['resource_envelope'])
-    require(envelope['schema'] == 'trid-cuda-evaluation-resource-envelope-v1'
+    if sampling:
+        require(envelope.get('absolute_termination_deadline') == plan['absolute_termination_deadline']
+                and envelope.get('decoder_profile') == SAMPLING_PROFILE
+                and envelope.get('operator_imposed_cap_usd') == '20'
+                and envelope.get('automatic_retry') is False
+                and envelope.get('automatic_extension') is False,
+                'Sampling envelope must bind the absolute deadline and operator ceiling')
+    require(envelope['schema'] == ('trid-cuda-evaluation-sampling-resource-envelope-v1' if sampling
+                                    else 'trid-cuda-evaluation-resource-envelope-v1')
             and envelope['identity'] == plan['identity']
             and envelope['authorization'] == plan['authorization']
             and 'aggregate_ledger' not in envelope
             and envelope['instance_type'] == plan['instance_type'] == 'g6e.2xlarge'
             and envelope['root_gib'] == 120 and envelope['root_encrypted'] is True
             and envelope['root_delete_on_termination'] is True
-            and envelope['gpu_execution_lease_seconds_max'] == 18900
+            and envelope['gpu_execution_lease_seconds_max'] == (13500 if sampling else 18900)
             and envelope['export_reserve_seconds'] == 300
             and envelope['termination_grace_seconds_max'] == 900
-            and envelope['total_billable_lifetime_seconds_max'] == 19800
+            and envelope['total_billable_lifetime_seconds_max'] == (14400 if sampling else 19800)
             and envelope['whole_host_egress_bytes_max'] == 2 * GIB
             and envelope['controller_retrieval_bytes_max'] == GIB
             and envelope['priced_egress_bytes'] == 3 * GIB
@@ -1385,11 +1438,40 @@ def cleanup_cutoff(plan, plan_sha, state):
         require(receipt['run_id'] == identity['run_id'] and receipt['plan_sha256'] == plan_sha
                 and type(receipt['launch_time']) in (int, float)
                 and math.isfinite(receipt['launch_time']) and receipt['launch_time'] > 0
-                and receipt['deadline'] == receipt['launch_time'] + lifetime_seconds(plan),
+                and receipt['deadline'] == work_deadline(plan, receipt['launch_time']),
                 'Cleanup cutoff launch evidence differs')
         verify_schedule(receipt['schedule'], schedule_spec(plan, receipt['instance_id'], receipt['launch_time']))
         launch_times.append(receipt['launch_time'])
-    return min(launch_times) + lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
+    cutoff = min(launch_times) + lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
+    return min(cutoff, absolute_deadline(plan)) if sampling_mode(plan) else cutoff
+
+
+def reconcile_compute(client, plan, plan_sha, state, expected, *, evidence,
+                      evidence_path=None, clock=time.time, pause=time.sleep):
+    """Keep the compute lease immutable; recovery grants only cleanup RPC time."""
+    now = clock()
+    deadline = now + plan['cost']['termination_grace_seconds']
+    cutoff = cleanup_cutoff(plan, plan_sha, state) if bounded_mode(plan) else deadline
+    recovery = sampling_mode(plan) and now >= cutoff
+    deadline = now + 300 if recovery else min(deadline, cutoff)
+    if sampling_mode(plan):
+        # The same client retains all charged request and retrieval counters.
+        client.deadline = deadline
+    result = reconcile(client, plan['identity'], expected, deadline, evidence=evidence,
+                       evidence_path=evidence_path, clock=clock, pause=pause)
+    if sampling_mode(plan):
+        result.update(compute_cutoff=cutoff, post_deadline_recovery=recovery,
+                      observation_deadline=deadline)
+        if result['cleanup_state'] == 'complete':
+            require(result.get('instance_terminated') is True
+                    and result.get('root_volume_ids') and result.get('remaining_volumes') == []
+                    and set(result.get('absent_volume_ids', [])) == set(evidence['volumes'])
+                    and set(result['root_volume_ids']) <= set(result['absent_volume_ids']),
+                    'Post-compute control requires exact termination and every owned volume absent')
+            # No compute remains: schedule deletion and ranged evidence retrieval
+            # receive their own finite control window, never a renewed GPU lease.
+            client.deadline = clock() + 900
+    return result
 
 
 def reconcile(client, identity, expected, deadline, *, evidence, evidence_path=None,
@@ -1774,7 +1856,7 @@ def schedule_spec(plan, instance_id, launch_time):
     identity = plan['identity']
     # Schedule one minute early: scheduler's 60-second precision cannot push the
     # requested invocation past the sealed compute deadline.
-    when = dt.datetime.fromtimestamp(launch_time + lifetime_seconds(plan) - 60, dt.timezone.utc)
+    when = dt.datetime.fromtimestamp(work_deadline(plan, launch_time) - 60, dt.timezone.utc)
     expression = 'at(' + when.strftime('%Y-%m-%dT%H:%M:%S') + ')'
     target = dict(Arn='arn:aws:scheduler:::aws-sdk:ec2:terminateInstances',
                   RoleArn=plan['iam']['scheduler_role']['arn'],
@@ -1810,7 +1892,7 @@ def ordered_schedule_readback(observed, spec, identity):
 def verify_termination_ticket(ticket, plan, plan_sha, instance_id, now):
     require(ticket['run_id'] == plan['identity']['run_id'] and ticket['plan_sha256'] == plan_sha
             and ticket['instance_id'] == instance_id and ticket['schedule_verified'] is True
-            and ticket['deadline'] == ticket['launch_time'] + lifetime_seconds(plan)
+            and ticket['deadline'] == work_deadline(plan, ticket['launch_time'])
             and ticket['launch_time'] <= now < ticket['deadline'] - reserve_seconds(plan),
             'Independent termination ticket rejected')
     verify_schedule(ticket['schedule'], schedule_spec(plan, instance_id, ticket['launch_time']))
@@ -1820,7 +1902,7 @@ def verify_termination_ticket(ticket, plan, plan_sha, instance_id, now):
 def verify_release(release, plan, plan_sha, instance_id, now):
     require(release['run_id'] == plan['identity']['run_id'] and release['plan_sha256'] == plan_sha
             and release['instance_id'] == instance_id and release['schedule_verified'] is True
-            and release['deadline'] == release['launch_time'] + lifetime_seconds(plan)
+            and release['deadline'] == work_deadline(plan, release['launch_time'])
             and release['launch_time'] <= now < release['deadline'] - reserve_seconds(plan),
             'Worker release barrier rejected')
     verify_gpu_observation(release['gpu'], plan)
@@ -1842,6 +1924,8 @@ def bootstrap_text(plan, plan_sha, root):
                   REGION=plan['identity']['region'], CODE_PREFIX=plan['identity']['code_prefix'],
                   PLAN_SHA=plan_sha, BUNDLE_SHA=plan['bundle']['sha256'],
                   BUNDLE_BYTES=str(plan['bundle']['bytes']))
+    if sampling_mode(plan):
+        values['ABSOLUTE_WORK_DEADLINE'] = str(int(absolute_deadline(plan) - 900))
     text = path.read_text().replace('# INJECT_BOUND_VALUES', '\n'.join(k + '=' + shlex.quote(v) for k, v in values.items()))
     require(len(text.encode()) <= 16384, 'Raw user-data exceeds EC2 limit')
     return text
@@ -2374,6 +2458,8 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     evidence = volume_identity(identity, plan_sha, plan['ami']['RootDeviceName'])
     try:
         validate_plan(plan, approval, plan_sha, now=clock())
+        if sampling_mode(plan):
+            client.deadline = absolute_deadline(plan) - 900
         authenticate_archive(Path(root) / plan['bundle']['local_path'], plan['bundle'])
         validate_data(root, plan)
         validate_cost_admission(root, plan)
@@ -2410,6 +2496,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
                 KmsKeyId=ebs_key_arn(plan), DeleteOnTermination=True))],
             TagSpecifications=[dict(ResourceType=kind, Tags=[{'Key': k, 'Value': v} for k, v in identity['tags'].items()])
                                for kind in ('instance', 'volume')], UserData=user_data)
+        validate_launch_window(plan, clock())
         if ordered:
             dispatch_record = dict(run_id=identity['run_id'], plan_sha256=plan_sha,
                                    request_sha256=object_sha(request), at=clock())
@@ -2422,6 +2509,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
                  dict(run_id=identity['run_id'], plan_sha256=plan_sha), state / 'remote-approval-intent.json')
         if not ordered:
             dispatch_record = dict(request_sha256=object_sha(request), at=clock())
+        validate_launch_window(plan, clock())
         exclusive_intent(state / 'launch-dispatched.json', dispatch_record)
         dispatched = True
         result.update(phase='run_instances', dispatch_attempted=True)
@@ -2434,7 +2522,11 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         require(len(rows) == 1 and owned(rows[0], identity, expected) == expected, 'Launch not exactly observable')
         observe_volume_identity(client, identity, rows[0], evidence, evidence_path)
         launch_time = timestamp(rows[0]['LaunchTime'])
-        deadline = launch_time + lifetime_seconds(plan)
+        deadline = work_deadline(plan, launch_time)
+        if sampling_mode(plan):
+            require(launch_time + 14400 <= absolute_deadline(plan),
+                    'Launch delay exceeded the overnight window; terminate without extension')
+            client.deadline = min(deadline, work_deadline(plan, dispatch_record['at']))
         require(clock() < deadline - reserve_seconds(plan), 'Launch visibility too late')
         result.update(instance_id=expected, launch_time=launch_time, deadline=deadline,
                       state='scheduled', phase='scheduler_setup')
@@ -2501,10 +2593,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         result.update(state='failed', error=f'{type(exc).__name__}: {exc}')
     finally:
         if dispatched:
-            cleanup_deadline = clock() + plan['cost']['termination_grace_seconds']
-            if bounded_mode(plan):
-                cleanup_deadline = min(cleanup_deadline, cleanup_cutoff(plan, plan_sha, state))
-            result['cleanup'] = reconcile(client, identity, expected, cleanup_deadline,
+            result['cleanup'] = reconcile_compute(client, plan, plan_sha, state, expected,
                 evidence=evidence, evidence_path=evidence_path, clock=clock, pause=pause)
             if result['cleanup']['cleanup_state'] == 'complete' and schedule_created:
                 try:
@@ -2543,11 +2632,8 @@ def main():
         require(intent == dict(run_id=plan['identity']['run_id'], plan_sha256=args.plan_sha256),
                 'Reconciliation requires exact local consumed approval')
         evidence = load_volume_identity(args.state, plan, args.plan_sha256)
-        cleanup_deadline = time.time() + plan['cost']['termination_grace_seconds']
-        if bounded_mode(plan):
-            cleanup_deadline = min(cleanup_deadline, cleanup_cutoff(plan, args.plan_sha256, args.state))
-        result = reconcile(client, plan['identity'], evidence['instance_id'], cleanup_deadline,
-                           evidence=evidence, evidence_path=args.state / 'volume-identity.json')
+        result = reconcile_compute(client, plan, args.plan_sha256, args.state, evidence['instance_id'],
+                                   evidence=evidence, evidence_path=args.state / 'volume-identity.json')
         save(args.state / 'reconcile-result.json', result)
         if result['cleanup_state'] == 'complete':
             cleanup_schedule(client, plan['identity'], args.state, result, plan=plan, plan_sha=args.plan_sha256)

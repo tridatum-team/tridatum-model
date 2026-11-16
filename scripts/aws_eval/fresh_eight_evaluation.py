@@ -27,6 +27,13 @@ GENERATION = dict(enable_thinking=False, do_sample=False, num_beams=1, seed=14,
 LIMITS = dict(instance_count=1, lifetime_seconds=18900, reserve_seconds=300,
               root_gib=120, rss_bytes=48 * 1024**3, allocator_bytes=40 * 1024**3,
               gpu_bytes=42 * 1024**3, output_bytes=512 * 1024**2, cpu_cores=6, swap_bytes=0)
+SAMPLING_PROFILE = 'qwen3_nonthinking_sampling'
+SAMPLING_APPROVAL_SCHEMA = 'trid-cuda-evaluation-sampling-approval-v1'
+SAMPLING_PARAMETERS = dict(do_sample=True, temperature=0.7, top_p=0.8, top_k=20,
+                           min_p=0.0, num_beams=1, repetition_penalty=1.0, no_repeat_ngram_size=0)
+SAMPLING_LIMITS = dict(LIMITS, lifetime_seconds=13500)
+SAMPLING_DEADLINE = '2026-11-16T23:00:00Z'
+SAMPLING_AUTHORIZATION_SHA = '992847c031abad5e0c21c13b9f9f94b540d6d899859cf800fda20816f34e11e2'
 REQUIRED_SOURCES = {
     'scripts/aws_eval/fresh_eight_evaluation.py', 'scripts/aws_eval/fresh_eight_evaluation_worker.py',
     'scripts/aws_eval/grounded_hf_lifecycle.py', 'scripts/aws_eval/grounded_hf_worker.py',
@@ -69,6 +76,88 @@ def object_sha(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
+def generation_for_profile(profile='greedy'):
+    require(profile in ('greedy', SAMPLING_PROFILE), 'Unknown generation profile')
+    return dict(GENERATION, **SAMPLING_PARAMETERS) if profile == SAMPLING_PROFILE else dict(GENERATION)
+
+
+def plan_decoder_profile(plan):
+    profile = plan.get('workload', {}).get('decoder_profile', 'greedy')
+    generation_for_profile(profile)
+    return profile
+
+
+def run_id_for_plan(plan):
+    if plan_decoder_profile(plan) == 'greedy':
+        return RUN_ID
+    run_id = plan['identity']['run_id']
+    require(isinstance(run_id, str) and run_id and run_id != RUN_ID, 'Fresh sampling run identity required')
+    return run_id
+
+
+def case_seed(mode, case_id):
+    require(mode in ('smoke', 'evaluation') and isinstance(case_id, str) and case_id,
+            'Sampling seed requires a public case identity and mode')
+    payload = json.dumps(['trid-qwen3-sampling-v1', 14, mode, case_id],
+                         ensure_ascii=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], 'big') % (2**63)
+
+
+def generation_dispatch(profile='greedy'):
+    generation_for_profile(profile)
+    return dict(use_model_defaults=False, **(SAMPLING_PARAMETERS if profile == SAMPLING_PROFILE
+                                            else dict(do_sample=False, num_beams=1)))
+
+
+def validate_generation_policy(config, policy, profile='greedy'):
+    dispatch = generation_dispatch(profile)
+    mode = 'sample' if profile == SAMPLING_PROFILE else 'greedy_search'
+    expected = {k: v for k, v in dispatch.items() if k != 'use_model_defaults'}
+    expected.update(max_new_tokens=768, return_dict_in_generate=True, use_cache=True)
+    require(all(k in config and canonical(config[k]) == canonical(v) for k, v in expected.items())
+            and policy['generation_mode'] == mode
+            and policy['effective_config_sha256'] == object_sha(config)
+            and canonical(policy['dispatch_kwargs']) == canonical(dispatch), 'Effective generation policy differs')
+    if profile == SAMPLING_PROFILE:
+        require(policy.get('generation_profile') == profile, 'Sampling policy profile missing')
+        # These defaults must never become a secondary decoder or output repair.
+        neutral = dict(forced_bos_token_id=None, forced_eos_token_id=None, bad_words_ids=None,
+                       force_words_ids=None, constraints=None, suppress_tokens=None,
+                       begin_suppress_tokens=None, sequence_bias=None, stop_strings=None,
+                       min_length=0, min_new_tokens=None, num_return_sequences=1,
+                       typical_p=1.0, epsilon_cutoff=0.0, eta_cutoff=0.0,
+                       encoder_repetition_penalty=1.0, encoder_no_repeat_ngram_size=0,
+                       penalty_alpha=None, diversity_penalty=0.0, dola_layers=None,
+                       watermarking_config=None, token_healing=False, guidance_scale=None,
+                       exponential_decay_length_penalty=None, renormalize_logits=False,
+                       remove_invalid_values=False, max_time=None)
+        require(all(canonical(config.get(k, v)) == canonical(v) for k, v in neutral.items()),
+                'Sampling profile forbids secondary generation controls')
+
+
+def configure_decoder_profile(plan, *, decoder_profile, run_id, authorization,
+                              absolute_termination_deadline):
+    """Construct the explicit sampling condition before sealing evidence and approval.
+
+    Caller must refresh bundle/source/resource/cost evidence for this new plan;
+    this helper neither authorizes execution nor reuses a consumed approval.
+    """
+    import copy
+    require(decoder_profile == SAMPLING_PROFILE, 'Only the explicit sampling cutover is supported')
+    require(isinstance(run_id, str) and run_id and run_id != RUN_ID, 'Fresh sampling run identity required')
+    require(absolute_termination_deadline == SAMPLING_DEADLINE, 'Fixed overnight deadline differs')
+    require(authorization['sha256'] == SAMPLING_AUTHORIZATION_SHA, 'Separate overnight grant required')
+    result = copy.deepcopy(plan)
+    result['identity']['run_id'] = run_id
+    result['workload']['decoder_profile'] = decoder_profile
+    result['workload']['generation'] = generation_for_profile(decoder_profile)
+    result['limits'] = dict(SAMPLING_LIMITS)
+    result['lifetime'] = dict(total_seconds=14400, termination_grace_seconds=900, automatic_extension=False)
+    result['absolute_termination_deadline'] = absolute_termination_deadline
+    result['authorization'] = dict(authorization)
+    return result
+
+
 def is_evaluation(plan):
     return plan.get('schema') == SCHEMA
 
@@ -97,19 +186,32 @@ def load(root, record):
 
 
 def validate_limits(plan):
-    require(plan['limits'] == LIMITS and all(type(v) is int for v in plan['limits'].values()), 'Fixed evaluation limits differ')
-    require(plan['lifetime'] == dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False),
-            'Evaluation requires total19800/work18900/grace900')
+    sampling = plan_decoder_profile(plan) == SAMPLING_PROFILE
+    limits = SAMPLING_LIMITS if sampling else LIMITS
+    require(plan['limits'] == limits and all(type(v) is int for v in plan['limits'].values()), 'Fixed evaluation limits differ')
+    require(plan['lifetime'] == dict(total_seconds=14400 if sampling else 19800,
+            termination_grace_seconds=900, automatic_extension=False), 'Fixed evaluation lifetime differs')
     require(plan['cost']['termination_grace_seconds'] == 900, 'Priced shutdown grace differs')
+    if sampling:
+        require(plan.get('absolute_termination_deadline') == SAMPLING_DEADLINE,
+                'Fixed sampling absolute deadline differs')
 
 
 def validate_approval(plan, approval, plan_sha, key_arn):
-    expected = dict(schema=APPROVAL_SCHEMA, run_id=RUN_ID, plan_sha256=plan_sha,
+    sampling = plan_decoder_profile(plan) == SAMPLING_PROFILE
+    expected = dict(schema=SAMPLING_APPROVAL_SCHEMA if sampling else APPROVAL_SCHEMA,
+        run_id=plan['identity']['run_id'] if sampling else RUN_ID, plan_sha256=plan_sha,
         instance_limit=1, cap_usd='20', workload_sha256=object_sha(plan['workload']),
-        authorization_sha256=plan['authorization']['sha256'], limits=LIMITS,
+        authorization_sha256=plan['authorization']['sha256'], limits=SAMPLING_LIMITS if sampling else LIMITS,
         ebs_kms_key_arn=key_arn, automatic_retry=False, automatic_extension=False,
         retraining=False, deployment=False, approved=True)
-    require(approval == expected, 'Exact new USD20 evaluation approval required')
+    if sampling:
+        del expected['cap_usd']
+        expected.update(operator_imposed_cap_usd='20', fixed_dollar_cap_explicitly_selected_by_user=False,
+                        decoder_profile=SAMPLING_PROFILE,
+                        absolute_termination_deadline=plan['absolute_termination_deadline'])
+        require(plan['authorization']['sha256'] == SAMPLING_AUTHORIZATION_SHA, 'Separate overnight grant required')
+    require(approval == expected, 'Exact new evaluation approval required')
 
 
 def output_members(plan=None):
@@ -124,13 +226,21 @@ def output_members(plan=None):
 
 
 def validate_workload(plan, bundled):
-    require(is_evaluation(plan) and plan['identity']['run_id'] == RUN_ID, 'Evaluation profile/run identity differs')
+    profile = plan_decoder_profile(plan)
+    sampling = profile == SAMPLING_PROFILE
+    run_id = plan['identity']['run_id']
+    require(is_evaluation(plan) and isinstance(run_id, str) and bool(run_id)
+            and (run_id != RUN_ID if sampling else run_id == RUN_ID), 'Evaluation profile/run identity differs')
     require(not ({'recipe', 'data', 'evaluation', 'phase_seconds'} & set(plan)), 'Recipe/training/alternate evaluation channels forbidden')
     validate_limits(plan)
     w = plan['workload']
-    require(set(w) == {'evaluation_inputs', 'acquisition_manifest', 'lineage_binding', 'adapter_files',
-                       'source_manifest', 'generation', 'smoke_id'}, 'Exact public evaluation workload required')
-    require(canonical(w['generation']) == canonical(GENERATION) and w['smoke_id'] == SMOKE_ID, 'Frozen greedy/smoke contract differs')
+    keys = {'evaluation_inputs', 'acquisition_manifest', 'lineage_binding', 'adapter_files',
+            'source_manifest', 'generation', 'smoke_id'}
+    if sampling:
+        keys.add('decoder_profile')
+    require(set(w) == keys, 'Exact public evaluation workload required')
+    require(canonical(w['generation']) == canonical(generation_for_profile(profile))
+            and w['smoke_id'] == SMOKE_ID, 'Frozen generation/smoke contract differs')
     require(w['evaluation_inputs'] == dict(path=INPUT_PATH, bytes=568597, sha256=INPUT_SHA)
             and w['acquisition_manifest']['sha256'] == ACQUISITION_SHA, 'Frozen public/model metadata differs')
     require(plan['model']['id'] == MODEL_ID and plan['model']['revision'] == MODEL_REVISION, 'Official base identity differs')
@@ -217,14 +327,21 @@ def parameter_inventory(inventory):
             'Actual frozen CUDA dtype inventory differs')
 
 
-def validate_answer(row, case, arm, mode, binding, config):
+def validate_answer(row, case, arm, mode, binding, config, decoder_profile='greedy'):
     require(mode in ('smoke', 'evaluation') and arm in ARMS, 'Unknown paired arm/mode')
-    require(canonical(row['generation']) == canonical(GENERATION)
+    generation = generation_for_profile(decoder_profile)
+    sampling = decoder_profile == SAMPLING_PROFILE
+    if sampling:
+        require(row.get('generation_profile') == decoder_profile
+                and type(row.get('case_seed')) is int and row['case_seed'] == case_seed(mode, case['id']),
+                'Sampling case seed/profile differs')
+    require(canonical(row['generation']) == canonical(generation)
             and canonical(row['generation_config']) == canonical(config), 'Generation types/values differ')
     require(all(row.get(k) == v for k, v in {**case, **binding, 'arm': arm, 'mode': mode,
-        'generation': GENERATION, 'generation_config': config, 'exception': None,
+        'generation': generation, 'generation_config': config, 'exception': None,
         'adapter_weights_sha256': None if arm == 'base' else ADAPTER_SHA,
-        'context_truncated': False, 'skipped_context': False, 'effective_generation_mode': 'greedy_search'}.items()),
+        'context_truncated': False, 'skipped_context': False,
+        'effective_generation_mode': 'sample' if sampling else 'greedy_search'}.items()),
         'Answer identity/generation binding differs')
     tokens = row['output_token_ids']
     require(isinstance(tokens, list) and 0 < len(tokens) <= 768 and all(type(t) is int and t >= 0 for t in tokens)
@@ -261,7 +378,12 @@ def validate_mode_artifacts(root, mode, plan):
     folder = root / mode
     read = lambda name: json.loads((folder / name).read_bytes())
     manifest, loaded, completion = (read(name) for name in ('run-manifest.json', 'loaded-runtime.json', 'completion.json'))
-    require(manifest['schema'] == RUN_SCHEMA and manifest['mode'] == mode and canonical(manifest['generation']) == canonical(GENERATION)
+    profile = plan_decoder_profile(plan)
+    if profile == SAMPLING_PROFILE:
+        require(manifest.get('generation_profile') == loaded.get('generation_profile') == profile,
+                'Manifest/runtime sampling profile differs')
+    require(manifest['schema'] == RUN_SCHEMA and manifest['mode'] == mode
+            and canonical(manifest['generation']) == canonical(generation_for_profile(profile))
             and manifest['arm_order'] == list(ARMS) and manifest['grading_access'] is False
             and manifest['retries'] is False and manifest['resume'] is False, 'Paired mode contract differs')
     require(manifest['plan'] == pin(root / 'plan.json', root)
@@ -288,11 +410,7 @@ def validate_mode_artifacts(root, mode, plan):
             and loaded['model_loads'] == 1 and loaded['adapter_merged'] is False, 'Loaded inference state differs')
     parameter_inventory(loaded['parameter_inventory'])
     config, policy = loaded['generation_config'], loaded['generation_policy']
-    require(config['do_sample'] is False and type(config['num_beams']) is int and config['num_beams'] == 1
-            and type(config['max_new_tokens']) is int and config['max_new_tokens'] == 768
-            and config['return_dict_in_generate'] is True and config['use_cache'] is True
-            and policy['generation_mode'] == 'greedy_search' and policy['effective_config_sha256'] == object_sha(config)
-            and policy['dispatch_kwargs'] == dict(use_model_defaults=False, do_sample=False, num_beams=1), 'Effective greedy policy differs')
+    validate_generation_policy(config, policy, profile)
     decoder = read('decoder-profile.json')
     require(decoder == manifest['decoder_profile'] == dict(profile='unconstrained', semantic_truth_guarantee=False), 'Secondary decoder forbidden')
     preflight = read('prompt-preflight.json')
@@ -314,7 +432,7 @@ def validate_mode_artifacts(root, mode, plan):
         rows = [json.loads(line) for line in bound(folder, completion['outputs'][arm]).read_text().splitlines()]
         require([r['id'] for r in rows] == ids, 'Missing, duplicate or reordered answers')
         for row, case in zip(rows, prepared):
-            validate_answer(row, case, arm, mode, binding, config)
+            validate_answer(row, case, arm, mode, binding, config, decoder_profile=profile)
     attempts = [json.loads(line) for line in (folder / 'attempts.jsonl').read_text().splitlines()]
     require([(a['id'], a['arm'], a['state']) for a in attempts] == [(i, arm, 'started') for i in ids for arm in ARMS], 'Attempt coverage differs')
     return manifest
@@ -340,7 +458,7 @@ def validate_completion_artifacts(root, plan):
     runtime = json.loads((root / 'runtime.json').read_bytes())
     require(runtime['packages'] == RUNTIME_PACKAGES and runtime['torch'] == RUNTIME_PACKAGES['torch']
             and runtime['cuda'] == '12.8' and runtime['count'] == 1 and runtime['bf16'] is True
-            and runtime['name'] == plan['runtime']['gpu_name'] and runtime['run_id'] == RUN_ID
+            and runtime['name'] == plan['runtime']['gpu_name'] and runtime['run_id'] == run_id_for_plan(plan)
             and runtime['plan_sha256'] == pin(root / 'plan.json')['sha256']
             and runtime['instance_id'] == manifests['evaluation']['runtime']['instance_id'],
             'Exported native runtime proof differs')
@@ -354,7 +472,7 @@ def validate_completion_artifacts(root, plan):
     result = json.loads((root / 'evaluation/evaluation-worker.json').read_bytes())
     require(result['schema'] == WORKER_SCHEMA and result['status'] == 'complete' and result['evaluation_success'] is True
             and result['completion_scope'] == COMPLETION_SCOPE and result['quality_accepted'] is False
-            and result['run_id'] == RUN_ID and result['plan_sha256'] == pin(root / 'plan.json')['sha256']
+            and result['run_id'] == run_id_for_plan(plan) and result['plan_sha256'] == pin(root / 'plan.json')['sha256']
             and result['rows_per_arm'] == 200 and result['smoke_rows_per_arm'] == 1
             and result['generation_calls'] == 402 and result['model_loads'] == 1, 'Child completion scope/count differs')
     for mode in ('smoke', 'evaluation'):
@@ -373,11 +491,11 @@ def validate_supervision(root, plan):
     receipt = json.loads((root / 'evaluation/supervisor-result.json').read_bytes())
     require(receipt['schema'] == SUPERVISION_SCHEMA and receipt['phase'] == 'evaluation'
             and receipt['status'] == 'accepted' and receipt['cleanup_verified'] is True
-            and receipt['run_id'] == RUN_ID and receipt['plan_sha256'] == pin(root / 'plan.json')['sha256']
+            and receipt['run_id'] == run_id_for_plan(plan) and receipt['plan_sha256'] == pin(root / 'plan.json')['sha256']
             and receipt['worker_result'] == pin(root / 'evaluation/evaluation-worker.json', root), 'Owned supervision acceptance differs')
     unit = receipt['unit']
     stopped = unit['stopped_state']
-    require(unit['state'] == 'complete' and unit['cleanup_verified'] is True and unit['run_id'] == RUN_ID
+    require(unit['state'] == 'complete' and unit['cleanup_verified'] is True and unit['run_id'] == run_id_for_plan(plan)
             and unit['phase'] == 'evaluation' and unit['plan_sha256'] == receipt['plan_sha256']
             and unit['invocation'] and unit['instance_id']
             and (stopped.get('LoadState') == 'not-found' or stopped.get('ActiveState') in ('inactive', 'failed')), 'Owned process reap proof missing')

@@ -240,6 +240,21 @@ class ExpandedAssessmentTests(unittest.TestCase):
         for row in packet['rows']:
             self.assertEqual(set(row), {'sample_id', 'messages', 'response', 'reference_answer', 'rubric', 'structural'})
 
+    def test_historical_greedy_receipts_need_no_sampling_fields_or_new_policy_validator(self):
+        from scripts.aws_eval import fresh_eight_evaluation as evaluation
+        with patch.object(evaluation, 'validate_generation_policy',
+                          side_effect=AssertionError('historical policy must remain independently validated')), \
+             patch.object(evaluation, 'case_seed',
+                          side_effect=AssertionError('historical greedy has no per-case sampling seed')):
+            packet, mapping = self.fixture.packet()
+            self.assertNotIn('generation_profile', load(mapping)['runs']['primary'])
+            frozen = self.fixture.freeze(packet, self.fixture.reports(packet))
+            result = self.fixture.aggregate(frozen, mapping)
+        self.assertEqual(result['primary']['answers'], 400)
+        self.assertNotIn('generation_profile', result)
+        self.assertIsNone(result['selected_step'])
+        self.assertFalse(result['deployment_qualified'])
+
     def test_full_primary_pipeline_preserves_families_and_anonymity(self):
         packet_path, mapping_path = self.fixture.packet()
         packet, mapping = load(packet_path), load(mapping_path)
@@ -868,6 +883,175 @@ class CudaEvaluationAssessmentTests(unittest.TestCase):
             self.packet()
 
 
+class CudaSamplingAssessmentTests(CudaEvaluationAssessmentTests):
+    """Fresh sampling receipts retain the same200 pairs and inherited gate checks."""
+
+    generation_profile = 'qwen3_nonthinking_sampling'
+
+    def setUp(self):
+        super().setUp()
+        from scripts.aws_eval import fresh_eight_evaluation as evaluation
+        self.evaluation = evaluation
+        manifest = load(self.directory / 'run-manifest.json')
+        manifest.update(generation_profile=self.generation_profile,
+                        generation=evaluation.generation_for_profile(self.generation_profile))
+        dump(self.directory / 'run-manifest.json', manifest)
+        loaded = load(self.directory / 'loaded-runtime.json')
+        config = dict(loaded['generation_config'], **evaluation.SAMPLING_PARAMETERS)
+        policy = dict(loaded['generation_policy'],
+            dispatch_kwargs=dict(use_model_defaults=False, **evaluation.SAMPLING_PARAMETERS),
+            generation_profile=self.generation_profile, generation_mode='sample',
+            effective_config_sha256=assessment.object_sha(config))
+        loaded.update(generation_profile=self.generation_profile, generation_config=config,
+                      requested_generation_config=copy.deepcopy(config), generation_policy=policy)
+        dump(self.directory / 'loaded-runtime.json', loaded)
+        for arm in self.contract['arms']:
+            rows = self.fixture.rows(self.directory, arm)
+            for row in rows:
+                row.update(generation_profile=self.generation_profile,
+                           case_seed=evaluation.case_seed('evaluation', row['id']),
+                           effective_generation_mode='sample')
+            self.fixture.write_rows(self.directory, arm, rows, refresh=False)
+        self.rebind_receipts()
+
+    def rebind_receipts(self):
+        manifest = load(self.directory / 'run-manifest.json')
+        loaded = load(self.directory / 'loaded-runtime.json')
+        for arm in self.contract['arms']:
+            rows = self.fixture.rows(self.directory, arm)
+            for row in rows:
+                row.update(generation=manifest['generation'],
+                    run_manifest_sha256=sha(self.directory / 'run-manifest.json'),
+                    loaded_runtime_sha256=sha(self.directory / 'loaded-runtime.json'),
+                    generation_config=loaded['generation_config'],
+                    generation_policy_sha256=assessment.object_sha(loaded['generation_policy']))
+            self.fixture.write_rows(self.directory, arm, rows, refresh=False)
+        self.refresh_completion()
+
+    def packet(self, name='cuda-blind'):
+        out = self.root / name
+        assessment.make_packet(self.root, self.fixture.frozen_path, sha(self.fixture.frozen_path),
+            self.directory, out, candidate_manifest=self.registration, candidate_sha=sha(self.registration),
+            generation_profile=self.generation_profile)
+        return out / 'review-packet.json', out / 'private-mapping.json'
+
+    def test_sampling_requires_explicit_opt_in_and_never_relabels_greedy(self):
+        with self.assertRaisesRegex(ValueError, 'greedy generation profile'):
+            CudaEvaluationAssessmentTests.packet(self)
+        cases = assessment.indexed(self.fixture.inputs, 'synthetic')
+        for profile in ('unknown', 'greedy'):
+            with self.subTest(profile=profile), self.assertRaises(ValueError):
+                assessment.completed_run(self.root, self.directory, cases, self.fixture.design,
+                    'unconstrained', contract=self.contract, generation_profile=profile)
+        with self.assertRaisesRegex(ValueError, 'without secondary'):
+            assessment.make_packet(self.root, self.fixture.frozen_path, sha(self.fixture.frozen_path),
+                self.directory, self.root / 'secondary-search', secondary=self.directory,
+                candidate_manifest=self.registration, candidate_sha=sha(self.registration),
+                generation_profile=self.generation_profile)
+
+    def test_sampling_profile_and_exact_parameters_bind_manifest_runtime_and_policy(self):
+        mutations = [
+            ('run-manifest.json', lambda x: x.pop('generation_profile')),
+            ('run-manifest.json', lambda x: x.update(generation_profile='greedy')),
+            ('run-manifest.json', lambda x: x['generation'].update(temperature=0.8)),
+            ('run-manifest.json', lambda x: x['generation'].update(seed=15)),
+            ('loaded-runtime.json', lambda x: x.pop('generation_profile')),
+            ('loaded-runtime.json', lambda x: x.update(generation_profile='greedy')),
+            ('loaded-runtime.json', lambda x: x['generation_policy'].pop('generation_profile')),
+            ('loaded-runtime.json', lambda x: x['generation_policy'].update(generation_mode='greedy_search')),
+            ('loaded-runtime.json', lambda x: x['generation_policy']['dispatch_kwargs'].update(top_k=21)),
+            ('loaded-runtime.json', lambda x: x['generation_config'].update(top_p=0.9)),
+            ('loaded-runtime.json', lambda x: x['requested_generation_config'].update(min_p=0.1)),
+        ]
+        originals = {name: load(self.directory / name) for name, _ in mutations}
+        for index, (name, mutate) in enumerate(mutations):
+            changed = copy.deepcopy(originals[name])
+            mutate(changed)
+            dump(self.directory / name, changed)
+            self.rebind_receipts()
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                self.packet('invalid-profile-' + str(index))
+            dump(self.directory / name, originals[name])
+            self.rebind_receipts()
+
+    def test_sampling_rows_bind_profile_and_seed_to_mode_case_not_arm_or_tuning(self):
+        original = self.fixture.rows(self.directory, 'candidate')
+        variants = [
+            lambda x: x.pop('generation_profile'),
+            lambda x: x.update(generation_profile='greedy'),
+            lambda x: x.pop('case_seed'),
+            lambda x: x.update(case_seed=True),
+            lambda x: x.update(case_seed=x['case_seed'] + 1),
+            lambda x: x.update(case_seed=self.evaluation.case_seed('smoke', x['id'])),
+            lambda x: x.update(case_seed=original[1]['case_seed']),
+            lambda x: x.update(effective_generation_mode='greedy_search'),
+        ]
+        for index, mutate in enumerate(variants):
+            rows = copy.deepcopy(original)
+            mutate(rows[0])
+            self.fixture.write_rows(self.directory, 'candidate', rows, refresh=False)
+            self.refresh_completion()
+            with self.subTest(index=index), self.assertRaises(ValueError):
+                self.packet('invalid-seed-' + str(index))
+
+    def test_sampling_panels_pair_third_and_distinct_unpooled_aggregate(self):
+        packet, mapping = self.packet()
+        document = load(packet)
+        for row in document['rows']:
+            self.assertFalse({'generation_profile', 'case_seed', 'arm'} & row.keys())
+        self.assertEqual(load(mapping)['runs']['primary']['generation_profile'], self.generation_profile)
+        base_rows = self.fixture.rows(self.directory, 'base')
+        candidate_rows = self.fixture.rows(self.directory, 'candidate')
+        self.assertEqual([r['case_seed'] for r in base_rows], [r['case_seed'] for r in candidate_rows])
+        index = ExpandedAssessmentPanelTests.shard(self, packet_path=packet)
+        sid = document['rows'][0]['sample_id']
+        panels, _ = ExpandedAssessmentPanelTests.panels(self, index,
+            overrides={('second', sid): vote(semantic=False)})
+        reports = ExpandedAssessmentPanelTests.collect(self, index, panels)
+        adjudication_dir = self.root / 'pair-adjudication'
+        assessment.adjudication(self.root, packet, reports, adjudication_dir)
+        adjudication = adjudication_dir / 'adjudication-packet.json'
+        self.assertEqual(len(load(adjudication)['rows']), 2)
+        third_index = ExpandedAssessmentPanelTests.shard(
+            self, packet_path=adjudication, name='third-shards')
+        third_panels, _ = ExpandedAssessmentPanelTests.panels(self, third_index, panel_ids=('third',))
+        third = ExpandedAssessmentPanelTests.collect(
+            self, third_index, third_panels, name='third-collected', third=True)[0]
+        frozen = self.fixture.freeze(packet, reports, third=third, adjudication_path=adjudication)
+        result = self.fixture.aggregate(frozen, mapping)
+        self.assertEqual(result['generation_profile'], self.generation_profile)
+        self.assertEqual(result['generation_condition'], 'separate_inference_only_fixed_seed_sampling')
+        self.assertFalse(result['historical_pooling'])
+        self.assertFalse(result['stochastic_robustness_established'])
+        self.assertEqual(len(result['development_gate']['checks']), 6)
+        self.assertEqual(result['adjudicated_samples'], 2)
+        self.assertEqual(result['primary']['answers'], 400)
+        self.assertIsNone(result['selected_step'])
+        self.assertFalse(result['deployment_qualified'])
+
+    def test_aggregate_reauthenticates_sampling_seed_even_when_file_pins_are_refreshed(self):
+        packet, mapping_path = self.packet()
+        frozen_path = self.fixture.freeze(packet, self.fixture.reports(packet))
+        rows = self.fixture.rows(self.directory, 'candidate')
+        rows[0]['case_seed'] += 1
+        self.fixture.write_rows(self.directory, 'candidate', rows, refresh=False)
+        self.refresh_completion()
+        mapping = load(mapping_path)
+        for name in ('candidate-outputs.jsonl', 'completion.json'):
+            mapping['runs']['primary']['pins'][name] = file_pin(self.directory / name, self.root)
+        packet_document = load(packet)
+        packet_document['mapping_commitment'] = assessment.object_sha(assessment.mapping_body(mapping))
+        dump(packet, packet_document)
+        mapping['packet_sha256'] = sha(packet)
+        dump(mapping_path, mapping)
+        # Re-freeze synthetic reviews so rejection reaches output seed validation,
+        # not a stale report or mapping digest.
+        frozen_path.unlink()
+        frozen = self.fixture.freeze(packet, self.fixture.reports(packet))
+        with self.assertRaisesRegex(ValueError, 'case seed binding'):
+            self.fixture.aggregate(frozen, mapping_path)
+
+
 class CudaEvaluationEvidenceTests(unittest.TestCase):
     """Exercise consumer custody/collection checks with synthetic component contracts."""
 
@@ -999,6 +1183,30 @@ class CudaEvaluationEvidenceTests(unittest.TestCase):
         result = self.admit()
         self.assertEqual(result['public_input'], (self.root / 'public.json').resolve())
         self.assertGreater(len(result['pins']), 10)
+
+    def test_plan_generation_profile_cannot_be_relabelled_by_assessor(self):
+        profile = 'qwen3_nonthinking_sampling'
+        with self.assertRaisesRegex(ValueError, 'plan generation profile'):
+            assessment.authenticate_cuda_evaluation(self.root, self.directory,
+                self.contract, self.manifest, self.loaded, generation_profile=profile)
+        plan = copy.deepcopy(self.plan)
+        plan['workload']['decoder_profile'] = profile
+        dump(self.exported / 'plan.json', plan)
+        with self.assertRaisesRegex(ValueError, 'plan generation profile'):
+            self.admit()
+
+    def test_sampling_cannot_reinterpret_original_archive_recovery(self):
+        from scripts.aws_eval import fresh_eight_evaluation_recover as recovery
+        profile = 'qwen3_nonthinking_sampling'
+        plan = copy.deepcopy(self.plan)
+        plan['workload']['decoder_profile'] = profile
+        dump(self.exported / 'plan.json', plan)
+        dump(self.state / recovery.RECEIPT_NAME, {})
+        with patch.object(recovery, 'validate_recovery',
+                          side_effect=AssertionError('sampling never enters historical recovery')):
+            with self.assertRaisesRegex(ValueError, 'recovery is greedy only'):
+                assessment.authenticate_cuda_evaluation(self.root, self.directory,
+                    self.contract, self.manifest, self.loaded, generation_profile=profile)
 
     def test_source_archive_or_original_lineage_tampering_is_rejected(self):
         with patch.object(self.C, 'cuda_evaluation_lineage', return_value=dict(self.lineage, adapter_sha256='0' * 64)):

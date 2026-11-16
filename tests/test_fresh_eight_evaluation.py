@@ -21,23 +21,28 @@ def prepared(index=0):
         prompt_sha256=E.object_sha(messages), rendered_prompt_sha256='a' * 64, prompt_token_ids=[1, 2])
 
 
-def config():
-    return dict(do_sample=False, num_beams=1, max_new_tokens=768, return_dict_in_generate=True,
+def config(profile='greedy'):
+    values = dict(do_sample=False, num_beams=1, max_new_tokens=768, return_dict_in_generate=True,
         use_cache=True, eos_token_id=[9], pad_token_id=9)
+    if profile == E.SAMPLING_PROFILE:
+        values.update(E.SAMPLING_PARAMETERS)
+    return values
 
 
-def answer(case, arm='base', mode='evaluation', binding=None):
-    return dict(**case, **(binding or {}), arm=arm, mode=mode, generation=dict(E.GENERATION),
-        generation_config=config(), adapter_weights_sha256=None if arm == 'base' else E.ADAPTER_SHA,
+def answer(case, arm='base', mode='evaluation', binding=None, profile='greedy'):
+    extra = dict(generation_profile=profile, case_seed=E.case_seed(mode, case['id'])) if profile == E.SAMPLING_PROFILE else {}
+    return dict(**case, **(binding or {}), **extra, arm=arm, mode=mode, generation=E.generation_for_profile(profile),
+        generation_config=config(profile), adapter_weights_sha256=None if arm == 'base' else E.ADAPTER_SHA,
         exception=None, context_truncated=False, skipped_context=False,
-        effective_generation_mode='greedy_search', output_token_ids=[8, 9], generated_tokens=2,
+        effective_generation_mode='sample' if profile == E.SAMPLING_PROFILE else 'greedy_search',
+        output_token_ids=[8, 9], generated_tokens=2,
         terminal_stop_token_id=9, termination_reason='eos', truncated_output=False,
         response_text='Answer', raw_output='Answer<eos>', elapsed_seconds=0.5,
         cuda_memory=dict(device='cuda:0', allocated_bytes=1, reserved_bytes=2,
             peak_allocated_bytes=3, peak_reserved_bytes=4))
 
 
-def mode_fixture(root, mode='evaluation'):
+def mode_fixture(root, mode='evaluation', profile='greedy'):
     """Complete synthetic paired-mode receipt, with actual immutable JSONL hashes."""
     rows = [prepared(i) for i in range(200 if mode == 'evaluation' else 1)]
     adapter = [dict(path='adapter/' + name, bytes=size, sha256=sha) for name, (size, sha) in E.ADAPTER_FILES.items()]
@@ -50,12 +55,17 @@ def mode_fixture(root, mode='evaluation'):
         cost=dict(termination_grace_seconds=900), sources={p['path']: p['sha256'] for p in sources},
         model=dict(files=[dict(path='model.safetensors', bytes=2, sha256='c' * 64)]),
         workload=dict(evaluation_inputs=dict(path=E.INPUT_PATH, bytes=568597, sha256=E.INPUT_SHA), adapter_files=adapter))
+    if profile == E.SAMPLING_PROFILE:
+        plan.update(identity=dict(run_id='new-sampling-run'), authorization=dict(
+            path='overnight.json', bytes=1, sha256=E.SAMPLING_AUTHORIZATION_SHA))
+        plan = E.configure_decoder_profile(plan, decoder_profile=profile, run_id='new-sampling-run',
+            authorization=plan['authorization'], absolute_termination_deadline=E.SAMPLING_DEADLINE)
     save(root / 'plan.json', plan)
     save(root / 'lineage-binding.json', lineage)
     save(root / 'source-manifest.json', dict(files=sources))
     folder = root / mode
     decoder = dict(profile='unconstrained', semantic_truth_guarantee=False)
-    manifest = dict(schema=E.RUN_SCHEMA, mode=mode, generation=E.GENERATION, arm_order=list(E.ARMS),
+    manifest = dict(schema=E.RUN_SCHEMA, mode=mode, generation=E.generation_for_profile(profile), arm_order=list(E.ARMS),
         grading_access=False, retries=False, resume=False, plan=E.pin(root / 'plan.json', root),
         lineage_binding=E.pin(root / 'lineage-binding.json', root), source_manifest=E.pin(root / 'source-manifest.json', root),
         input=plan['workload']['evaluation_inputs'], evaluation_contract=lineage['provenance'],
@@ -65,12 +75,15 @@ def mode_fixture(root, mode='evaluation'):
         runtime=dict(device='cuda', dtype='torch.bfloat16', cpu_fallback=False, cuda_equivalence_claim=False,
             packages=E.RUNTIME_PACKAGES, gpu_uuid='GPU-synthetic'), code={p['path']: p for p in sources},
         decoder_profile=decoder, selected_ids=[r['id'] for r in rows])
-    policy = dict(generation_mode='greedy_search', effective_config_sha256=E.object_sha(config()),
-        dispatch_kwargs=dict(use_model_defaults=False, do_sample=False, num_beams=1))
+    policy = dict(generation_mode='sample' if profile == E.SAMPLING_PROFILE else 'greedy_search',
+        effective_config_sha256=E.object_sha(config(profile)), dispatch_kwargs=E.generation_dispatch(profile))
     loaded = dict(code=manifest['code'], gpu_uuid='GPU-synthetic', parameter_dtypes=['torch.bfloat16', 'torch.float32'],
-        frozen=True, model_loads=1, adapter_merged=False, generation_config=config(), generation_policy=policy,
+        frozen=True, model_loads=1, adapter_merged=False, generation_config=config(profile), generation_policy=policy,
         parameter_inventory={group: {dtype + '@cuda:0': dict(tensors=1, elements=2, bytes=size * 2)}
             for group, dtype, size in [('base', 'torch.bfloat16', 2), ('adapter', 'torch.float32', 4)]})
+    if profile == E.SAMPLING_PROFILE:
+        for record in (manifest, loaded, policy):
+            record['generation_profile'] = profile
     for name, value in [('run-manifest.json', manifest), ('loaded-runtime.json', loaded),
         ('decoder-profile.json', decoder), ('prompt-preflight.json', dict(status='passed', prompts=rows,
             all_selected_preflighted_before_weights=True, all_200_preflighted_before_weights=True, truncation=False))]:
@@ -81,7 +94,7 @@ def mode_fixture(root, mode='evaluation'):
         decoder_profile='unconstrained', decoder_profile_sha256=E.pin(folder / 'decoder-profile.json')['sha256'],
         generation_policy_sha256=E.object_sha(policy), candidate_manifest_sha256=E.CANDIDATE_SHA)
     for arm in E.ARMS:
-        (folder / (arm + '-outputs.jsonl')).write_text(''.join(json.dumps(answer(r, arm, mode, binding)) + '\n' for r in rows))
+        (folder / (arm + '-outputs.jsonl')).write_text(''.join(json.dumps(answer(r, arm, mode, binding, profile)) + '\n' for r in rows))
     (folder / 'attempts.jsonl').write_text(''.join(json.dumps(dict(id=r['id'], arm=arm, state='started')) + '\n'
         for r in rows for arm in E.ARMS))
     save(folder / 'completion.json', dict(status='complete', mode=mode, rows_per_arm=len(rows),
@@ -91,6 +104,112 @@ def mode_fixture(root, mode='evaluation'):
 
 
 class EvaluationContractTests(unittest.TestCase):
+    def test_sampling_seed_contract_is_stable_ascii_and_mode_scoped(self):
+        self.assertEqual(E.case_seed('smoke', E.SMOKE_ID), 2338782599544318392)
+        self.assertEqual(E.case_seed('evaluation', E.SMOKE_ID), 7024020061738947416)
+        self.assertEqual(E.case_seed('evaluation', '한글-사례'), 8450635525320065537)
+        self.assertNotEqual(E.case_seed('evaluation', 'case-1'), E.case_seed('evaluation', 'case-2'))
+        for mode, identifier in [('unknown', E.SMOKE_ID), ('evaluation', '')]:
+            with self.assertRaises(ValueError):
+                E.case_seed(mode, identifier)
+
+    def test_sampling_is_explicit_and_fixed_not_generation_kwargs(self):
+        self.assertEqual(E.generation_for_profile(), E.GENERATION)
+        self.assertFalse(E.GENERATION['do_sample'])
+        for profile in ('unknown', 'sampling', None):
+            with self.assertRaises(ValueError):
+                E.generation_for_profile(profile)
+            with self.assertRaises(ValueError):
+                E.plan_decoder_profile(dict(workload=dict(decoder_profile=profile)))
+        values = config(E.SAMPLING_PROFILE)
+        policy = dict(generation_mode='sample', generation_profile=E.SAMPLING_PROFILE,
+            dispatch_kwargs=E.generation_dispatch(E.SAMPLING_PROFILE), effective_config_sha256=E.object_sha(values))
+        E.validate_generation_policy(values, policy, E.SAMPLING_PROFILE)
+        for key, value in [('temperature', 0.6), ('top_p', 0.9), ('top_k', 50),
+                           ('min_p', 0.1), ('do_sample', False), ('num_beams', True),
+                           ('repetition_penalty', 1.1), ('no_repeat_ngram_size', 4),
+                           ('forced_eos_token_id', 9), ('stop_strings', ['stop'])]:
+            changed = dict(values, **{key: value})
+            rebound = dict(policy, effective_config_sha256=E.object_sha(changed))
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                E.validate_generation_policy(changed, rebound, E.SAMPLING_PROFILE)
+        with self.assertRaises(ValueError):
+            E.validate_generation_policy(values, dict(policy, generation_profile='greedy'), E.SAMPLING_PROFILE)
+
+    def test_sampling_rows_require_paired_seed_and_cannot_be_read_as_greedy(self):
+        case = prepared()
+        for arm in E.ARMS:
+            row = answer(case, arm=arm, profile=E.SAMPLING_PROFILE)
+            E.validate_answer(row, case, arm, 'evaluation', {}, config(E.SAMPLING_PROFILE), E.SAMPLING_PROFILE)
+            for key, value in [('case_seed', row['case_seed'] + 1), ('case_seed', True),
+                               ('generation_profile', 'greedy'), ('effective_generation_mode', 'greedy_search')]:
+                with self.subTest(arm=arm, key=key), self.assertRaises(ValueError):
+                    E.validate_answer(dict(row, **{key: value}), case, arm, 'evaluation', {},
+                                      config(E.SAMPLING_PROFILE), E.SAMPLING_PROFILE)
+            with self.assertRaises(ValueError):
+                E.validate_answer(row, case, arm, 'evaluation', {}, config())
+
+    def test_sampling_plan_limits_and_explicit_new_authorization(self):
+        old = dict(identity=dict(run_id=E.RUN_ID), workload=dict(generation=dict(E.GENERATION)),
+            limits=dict(E.LIMITS), cost=dict(termination_grace_seconds=900),
+            lifetime=dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False))
+        original = copy.deepcopy(old)
+        grant = dict(path='overnight.json', bytes=123, sha256=E.SAMPLING_AUTHORIZATION_SHA)
+        kwargs = dict(decoder_profile=E.SAMPLING_PROFILE, run_id='new-sampling-run',
+                      authorization=grant, absolute_termination_deadline=E.SAMPLING_DEADLINE)
+        plan = E.configure_decoder_profile(old, **kwargs)
+        self.assertEqual(old, original)
+        E.validate_limits(plan)
+        self.assertEqual(plan['limits']['lifetime_seconds'], 13500)
+        self.assertEqual(plan['lifetime']['total_seconds'], 14400)
+        for change in (dict(run_id=E.RUN_ID), dict(decoder_profile='unknown'),
+                       dict(authorization=dict(grant, sha256='0' * 64)),
+                       dict(absolute_termination_deadline='2026-11-17T23:00:00Z')):
+            with self.assertRaises(ValueError):
+                E.configure_decoder_profile(old, **dict(kwargs, **change))
+        for key, value in [('lifetime_seconds', 18900), ('reserve_seconds', 0)]:
+            changed = copy.deepcopy(plan)
+            changed['limits'][key] = value
+            with self.assertRaises(ValueError):
+                E.validate_limits(changed)
+        approval = dict(schema=E.SAMPLING_APPROVAL_SCHEMA, run_id='new-sampling-run', plan_sha256='a' * 64,
+            instance_limit=1, operator_imposed_cap_usd='20', fixed_dollar_cap_explicitly_selected_by_user=False,
+            workload_sha256=E.object_sha(plan['workload']), authorization_sha256=grant['sha256'],
+            limits=E.SAMPLING_LIMITS, ebs_kms_key_arn='synthetic-key', automatic_retry=False,
+            automatic_extension=False, retraining=False, deployment=False, approved=True,
+            decoder_profile=E.SAMPLING_PROFILE, absolute_termination_deadline=E.SAMPLING_DEADLINE)
+        E.validate_approval(plan, approval, 'a' * 64, 'synthetic-key')
+        for key, value in [('schema', E.APPROVAL_SCHEMA), ('run_id', E.RUN_ID),
+                           ('fixed_dollar_cap_explicitly_selected_by_user', True),
+                           ('authorization_sha256', '0' * 64), ('decoder_profile', 'greedy')]:
+            with self.assertRaises(ValueError):
+                E.validate_approval(plan, dict(approval, **{key: value}), 'a' * 64, 'synthetic-key')
+
+    def test_sampling_all200_and_hash_rebound_profile_tampering(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan = mode_fixture(root, profile=E.SAMPLING_PROFILE)
+            E.validate_mode(root, 'evaluation', plan)
+            folder = root / 'evaluation'
+            path = folder / 'candidate-outputs.jsonl'
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            rows[1]['case_seed'] = rows[0]['case_seed']
+            path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            completion = json.loads((folder / 'completion.json').read_bytes())
+            completion['outputs']['candidate'] = E.pin(path, folder)
+            save(folder / 'completion.json', completion)
+            with self.assertRaisesRegex(ValueError, 'case seed'):
+                E.validate_mode(root, 'evaluation', plan)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plan = mode_fixture(root, 'smoke', profile=E.SAMPLING_PROFILE)
+            path = root / 'smoke/loaded-runtime.json'
+            loaded = json.loads(path.read_bytes())
+            loaded['generation_profile'] = 'greedy'
+            save(path, loaded)
+            with self.assertRaisesRegex(ValueError, 'sampling profile'):
+                E.validate_mode(root, 'smoke', plan)
+
     def test_recipe_free_workload_and_exact_runtime_source_contract(self):
         record = lambda name: dict(path=name, bytes=1, sha256='a' * 64)
         w = dict(evaluation_inputs=dict(path=E.INPUT_PATH, bytes=568597, sha256=E.INPUT_SHA),
@@ -114,6 +233,20 @@ class EvaluationContractTests(unittest.TestCase):
         bundled = {p['path']: p for p in records}
         bundled.update({name: record(name) for name in E.REQUIRED_SOURCES})
         E.validate_workload(plan, bundled)
+        grant = dict(plan['authorization'], sha256=E.SAMPLING_AUTHORIZATION_SHA)
+        sampling = E.configure_decoder_profile(plan, decoder_profile=E.SAMPLING_PROFILE,
+            run_id='new-sampling-run', authorization=grant, absolute_termination_deadline=E.SAMPLING_DEADLINE)
+        sampling_bundle = dict(bundled, **{grant['path']: grant})
+        E.validate_workload(sampling, sampling_bundle)
+        for mutate in (lambda p: p['workload'].update(decoder_profile='unknown'),
+                       lambda p: p['workload'].update(decoder_profile='greedy'),
+                       lambda p: p['workload']['generation'].update(temperature=0.6),
+                       lambda p: p['workload']['generation'].update(stop_strings=['stop']),
+                       lambda p: p['identity'].update(run_id=E.RUN_ID)):
+            changed = copy.deepcopy(sampling)
+            mutate(changed)
+            with self.assertRaises(ValueError):
+                E.validate_workload(changed, sampling_bundle)
         mutations = [
             lambda p: p.update(recipe={}),
             lambda p: p.update(schema='unknown'),

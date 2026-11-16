@@ -36,6 +36,13 @@ class Config:
         return SimpleNamespace(value='sample' if self.do_sample else 'greedy_search')
 
 
+class SamplingConfig(Config):
+    def to_dict(self):
+        values = super().to_dict()
+        values.update({key: getattr(self, key) for key in E.SAMPLING_PARAMETERS})
+        return values
+
+
 class Tensor:
     def __init__(self, values):
         self.values = values
@@ -85,12 +92,13 @@ class Device:
 
 
 class Model:
-    def __init__(self, fail_at=None, blank=False, bypass=False):
+    def __init__(self, fail_at=None, blank=False, bypass=False, profile='greedy'):
         self.disabled = False
         self.calls = []
         self.fail_at = fail_at
         self.blank = blank
         self.bypass = bypass
+        self.profile = profile
         self.generation_config = Config()
         self.config = SimpleNamespace(_attn_implementation='sdpa')
 
@@ -120,7 +128,9 @@ class Model:
             self.disabled = False
 
     def _prepare_generation_config(self, requested, use_model_defaults=None, **kwargs):
-        if use_model_defaults is not False or kwargs != dict(do_sample=False, num_beams=1):
+        expected = {key: value for key, value in E.generation_dispatch(self.profile).items()
+                    if key != 'use_model_defaults'}
+        if use_model_defaults is not False or kwargs != expected:
             raise AssertionError('wrong generation dispatch')
         return requested, {}
 
@@ -159,7 +169,7 @@ def cases(count):
 
 
 @contextlib.contextmanager
-def child_fixture(base):
+def child_fixture(base, profile='greedy'):
     """Synthetic model/admission only; real journals, hashes and receipt validators.
 
     This fixture exercises control flow on CPU, not CUDA or model equivalence.
@@ -183,7 +193,7 @@ def child_fixture(base):
     W.save_new(root / 'source-manifest.json', dict(files=sources))
     W.save_new(base / 'code/lineage-binding.json', lineage)
     W.save_new(base / 'code/source-manifest.json', dict(files=sources))
-    plan = dict(schema=E.SCHEMA, limits=dict(E.LIMITS),
+    plan = dict(schema=E.SCHEMA, identity=dict(run_id=E.RUN_ID), limits=dict(E.LIMITS),
         lifetime=dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False),
         cost=dict(termination_grace_seconds=900), runtime=dict(gpu_name='synthetic GPU'),
         model=dict(files=[E.pin(model_file, base / 'model')]),
@@ -192,6 +202,10 @@ def child_fixture(base):
             evaluation_inputs=dict(path='inputs.json', bytes=0, sha256=E.INPUT_SHA),
             lineage_binding=E.pin(root / 'lineage-binding.json', root),
             source_manifest=E.pin(root / 'source-manifest.json', root)))
+    if profile == E.SAMPLING_PROFILE:
+        plan = E.configure_decoder_profile(plan, decoder_profile=profile, run_id='synthetic-sampling',
+            authorization=dict(path='overnight.json', bytes=1, sha256=E.SAMPLING_AUTHORIZATION_SHA),
+            absolute_termination_deadline=E.SAMPLING_DEADLINE)
     W.save_new(base / 'plan.json', plan)
     W.save_new(root / 'plan.json', plan)
     release = dict(gpu=dict(uuid='GPU-synthetic'), instance_id='synthetic-instance')
@@ -199,19 +213,19 @@ def child_fixture(base):
     W.save_new(root / 'runtime.json', dict(packages=E.RUNTIME_PACKAGES,
         plan_sha256=core.digest(base / 'plan.json'), instance_id=release['instance_id'],
         torch=E.RUNTIME_PACKAGES['torch'], cuda='12.8', count=1, bf16=True,
-        name=plan['runtime']['gpu_name'], run_id=E.RUN_ID))
+        name=plan['runtime']['gpu_name'], run_id=plan['identity']['run_id']))
     acquisition = dict(status='authenticated', model_id=E.MODEL_ID, revision=E.MODEL_REVISION,
         plan_sha256=core.digest(base / 'plan.json'), files=plan['model']['files'])
     W.save_new(root / 'model-acquisition.json', acquisition)
     admitted = dict(evaluation_inputs=[dict(id=p['id'], messages=p['messages']) for p in cases(200)],
         lineage=lineage, adapter_config={}, sources=sources)
-    model, torch = Model(), Torch()
+    model, torch = Model(profile=profile), Torch()
     distributions = [SimpleNamespace(metadata={'Name': name}, version=version)
                      for name, version in E.RUNTIME_PACKAGES.items()]
     modules = dict(transformers=SimpleNamespace(
         AutoModelForCausalLM=SimpleNamespace(from_pretrained=lambda *a, **kw: model),
         AutoTokenizer=SimpleNamespace(from_pretrained=lambda *a, **kw: Tokenizer()),
-        GenerationConfig=Config),
+        GenerationConfig=SamplingConfig if profile == E.SAMPLING_PROFILE else Config),
         peft=SimpleNamespace(PeftModel=SimpleNamespace(from_pretrained=lambda *a, **kw: model)))
     with contextlib.ExitStack() as stack:
         stack.enter_context(patch.dict(sys.modules, modules))
@@ -225,6 +239,70 @@ def child_fixture(base):
 
 
 class EvaluationWorkerTests(unittest.TestCase):
+    def test_sampling_child_completes_all402_with_parent_only_whole_run_validation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            with child_fixture(base, E.SAMPLING_PROFILE) as (plan, model, _):
+                with patch.object(E, 'validate_completion', side_effect=AssertionError('parent-only')) as whole:
+                    W.child_stage(core, plan, base, 'evaluation')
+                whole.assert_not_called()
+                self.assertEqual(len(model.calls), 402)
+                E.validate_completion(base / 'output', plan)
+                for mode, count in [('smoke', 1), ('evaluation', 200)]:
+                    folder = base / 'output' / mode
+                    rows = {arm: [json.loads(line) for line in (folder / (arm + '-outputs.jsonl')).read_text().splitlines()]
+                            for arm in E.ARMS}
+                    self.assertEqual(len(rows['base']), count)
+                    self.assertEqual([r['case_seed'] for r in rows['base']],
+                                     [r['case_seed'] for r in rows['candidate']])
+                    self.assertTrue(all(r['generation_profile'] == E.SAMPLING_PROFILE
+                                        and r['effective_generation_mode'] == 'sample' for r in rows['base']))
+                smoke = json.loads((base / 'output/smoke/base-outputs.jsonl').read_text())
+                first = json.loads((base / 'output/evaluation/base-outputs.jsonl').read_text().splitlines()[0])
+                self.assertNotEqual(smoke['case_seed'], first['case_seed'])
+
+    def test_sampling_rng_reset_is_immediately_before_each_arm_after_setup(self):
+        events = []
+
+        class ObservedTorch(Torch):
+            def manual_seed(self, seed):
+                events.append(('seed', seed))
+                super().manual_seed(seed)
+
+            def tensor(self, values, **kwargs):
+                events.append(('input', None))
+                return super().tensor(values, **kwargs)
+
+            @contextlib.contextmanager
+            def inference_mode(self):
+                events.append(('inference', None))
+                yield
+
+        class ObservedModel(Model):
+            def generate(self, input_ids, attention_mask, generation_config, **kwargs):
+                if events[-3][0] != 'inference' or [event[0] for event in events[-2:]] != ['seed', 'seed']:
+                    raise AssertionError('RNG reset was not immediately before generate')
+                events.append(('generate', self.disabled))
+                return super().generate(input_ids, attention_mask, generation_config, **kwargs)
+
+        torch, model = ObservedTorch(), ObservedModel(profile=E.SAMPLING_PROFILE)
+        prepared = cases(2)
+        with tempfile.TemporaryDirectory() as temp:
+            W.run_pairs(core, H, torch, model, Tokenizer(), prepared, SamplingConfig(**E.SAMPLING_PARAMETERS),
+                        dict(mode='evaluation'), Path(temp), decoder_profile=E.SAMPLING_PROFILE)
+        self.assertEqual(torch.seeds, [E.case_seed('evaluation', case['id'])
+                                      for case in prepared for _ in range(4)])
+        self.assertEqual([entry for entry in events if entry[0] == 'generate'],
+                         [('generate', True), ('generate', False)] * 2)
+
+    def test_unknown_profile_refused_before_output_creation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            with self.assertRaisesRegex(ValueError, 'Unknown generation profile'):
+                W.run_pairs(core, H, Torch(), Model(), Tokenizer(), cases(1), Config(),
+                            dict(mode='evaluation'), folder, decoder_profile='unknown')
+            self.assertFalse(list(folder.iterdir()))
+
     @unittest.skipUnless(os.name == 'posix' and os.geteuid() != 0,
                          'Real chmod denial requires an unprivileged POSIX user')
     def test_child_completes_with_private_receipt_but_parent_authenticates_it(self):
@@ -292,8 +370,8 @@ class EvaluationWorkerTests(unittest.TestCase):
             with child_fixture(base) as (plan, model, _):
                 run_pairs = W.run_pairs
 
-                def corrupt_mode(*args):
-                    run_pairs(*args)
+                def corrupt_mode(*args, **kwargs):
+                    run_pairs(*args, **kwargs)
                     manifest_path = args[-1] / 'run-manifest.json'
                     manifest = json.loads(manifest_path.read_bytes())
                     manifest['retries'] = True

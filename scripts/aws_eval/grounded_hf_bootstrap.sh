@@ -5,6 +5,15 @@ set -euo pipefail
 umask 077
 trap '/sbin/shutdown -h now' EXIT
 # INJECT_BOUND_VALUES
+# Sampling's immutable absolute watchdog survives cancellation of shutdown(8)
+# by the authenticated worker. Arm before network; never extend this timer.
+if [[ -n "${ABSOLUTE_WORK_DEADLINE:-}" ]]; then
+  [[ "$ABSOLUTE_WORK_DEADLINE" =~ ^[0-9]+$ ]]
+  (( $(date -u +%s) < ABSOLUTE_WORK_DEADLINE ))
+  systemd-run --unit="trid-${RUN}-absolute-stop" \
+    --on-calendar="@${ABSOLUTE_WORK_DEADLINE}" --timer-property=AccuracySec=1s \
+    /sbin/shutdown -h now
+fi
 export AWS_DEFAULT_REGION="$REGION" AWS_MAX_ATTEMPTS=1 AWS_RETRY_MODE=standard AWS_PAGER='' AWS_IGNORE_CONFIGURED_ENDPOINT_URLS=true
 export PYTHONDONTWRITEBYTECODE=1
 BASE="/opt/trid-$RUN"
@@ -34,8 +43,8 @@ timeout 150 aws s3api get-object --endpoint-url "https://s3.${REGION}.amazonaws.
   --range "bytes=0-$((BUNDLE_BYTES-1))" --cli-connect-timeout 5 --cli-read-timeout 30 bundle.tar >/dev/null
 printf '%s  %s\n' "$BUNDLE_SHA" bundle.tar | sha256sum --check --status
 # This small stdlib verifier runs before any bundle import; no tar extraction API.
-python3 -I -B - "$BUNDLE_BYTES" <<'PY'
-import hashlib, json, pathlib, sys, tarfile
+python3 -I -B - "$BUNDLE_BYTES" "${ABSOLUTE_WORK_DEADLINE:-}" <<'PY'
+import datetime, hashlib, json, pathlib, sys, tarfile, time
 p = json.loads(pathlib.Path('plan.json').read_text())
 b = p['bundle']
 assert p.get('schema') in ('trid-grounded-hf-v1', 'trid-ordered-hf-inference-v1',
@@ -56,8 +65,16 @@ if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     assert p['network']['egress_byte_cap'] <= 2 * 1024**3
 if p.get('schema') == 'trid-fresh-eight-cuda-evaluation-v1':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
-    assert lease == dict(total_seconds=19800, termination_grace_seconds=900, automatic_extension=False)
-    assert limits['lifetime_seconds'] == 18900 and limits['reserve_seconds'] == 300
+    sampling = p.get('workload', {}).get('decoder_profile') == 'qwen3_nonthinking_sampling'
+    assert lease == dict(total_seconds=14400 if sampling else 19800,
+                         termination_grace_seconds=900, automatic_extension=False)
+    assert limits['lifetime_seconds'] == (13500 if sampling else 18900) and limits['reserve_seconds'] == 300
+    if sampling:
+        assert p['absolute_termination_deadline'] == '2026-11-16T23:00:00Z'
+        deadline = datetime.datetime.fromisoformat(p['absolute_termination_deadline'].replace('Z', '+00:00')).timestamp()
+        assert int(sys.argv[2]) == deadline - 900 and time.time() < deadline - 900
+    else:
+        assert not sys.argv[2]
     assert cost['termination_grace_seconds'] == 900 and cost['cap_usd'] == 20
     assert limits['output_bytes'] == 512 * 1024**2
     assert 0 < cost['export_bytes'] <= limits['output_bytes']

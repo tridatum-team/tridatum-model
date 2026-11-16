@@ -630,6 +630,61 @@ class EffectiveGreedyPolicyContracts(unittest.TestCase):
             self.assertEqual(observed['effective_config_sha256'], policy['effective_config_sha256'])
             self.assertNotIn('_prepare_generation_config', base.__dict__)
 
+    def test_real_hf_sampling_uses_vendor_config_and_paired_rng_through_peft(self):
+        import torch
+        from peft import LoraConfig, get_peft_model
+        import fresh_eight_evaluation as F
+        base, requested = self.tiny_model()
+        model = get_peft_model(base, LoraConfig(r=2, lora_alpha=2, target_modules=['q_proj', 'v_proj'],
+                                               task_type='CAUSAL_LM', inference_mode=True)).eval()
+        requested.update(**F.SAMPLING_PARAMETERS)
+        # In this toy vocabulary every token is a natural EOS; one actual
+        # multinomial draw exercises stochastic dispatch without a long loop.
+        requested.eos_token_id = list(range(32))
+        config, policy = E.resolve_generation_policy(model, requested, F.SAMPLING_PROFILE)
+        F.validate_generation_policy(config.to_dict(), policy, F.SAMPLING_PROFILE)
+        self.assertEqual(config.temperature, 0.7)
+        self.assertEqual(config.top_p, 0.8)
+        self.assertEqual(config.top_k, 20)
+        self.assertEqual(config.min_p, 0.0)
+        self.assertEqual(config.repetition_penalty, 1.0)
+        self.assertEqual(config.no_repeat_ngram_size, 0)
+        ids = torch.tensor([[1, 7]], dtype=torch.long)
+        sequences = []
+        with patch.object(torch, 'multinomial', wraps=torch.multinomial) as draw:
+            for disabled in (True, False):
+                with (model.disable_adapter() if disabled else contextlib.nullcontext()):
+                    with torch.inference_mode(), E.observe_generation_policy(model, config, F.SAMPLING_PROFILE) as observed:
+                        torch.manual_seed(F.case_seed('evaluation', F.SMOKE_ID))
+                        result = model.generate(input_ids=ids, attention_mask=torch.ones_like(ids),
+                                                generation_config=config, **E.generation_dispatch(F.SAMPLING_PROFILE))
+                sequences.append(result.sequences.tolist())
+                self.assertEqual(observed['generation_mode'], 'sample')
+                self.assertEqual(observed['effective_config_sha256'], policy['effective_config_sha256'])
+            self.assertEqual(draw.call_count, 2)
+        self.assertEqual(sequences[0], sequences[1])
+        self.assertNotIn('_prepare_generation_config', base.__dict__)
+        self.assertEqual(base.generation_config.temperature, 0.6)
+
+    def test_sampling_observer_rejects_dispatch_and_effective_config_tampering(self):
+        import fresh_eight_evaluation as F
+        model, requested = self.tiny_model()
+        requested.update(**F.SAMPLING_PARAMETERS)
+        config, _ = E.resolve_generation_policy(model, requested, F.SAMPLING_PROFILE)
+        dispatch = E.generation_dispatch(F.SAMPLING_PROFILE)
+        with self.assertRaisesRegex(ValueError, 'sampling dispatch'):
+            with E.observe_generation_policy(model, config, F.SAMPLING_PROFILE):
+                model._prepare_generation_config(config, **dict(dispatch, temperature=0.6))
+        changed = copy.deepcopy(config)
+        changed.eos_token_id = 7
+        with self.assertRaisesRegex(ValueError, 'configuration differs'):
+            with E.observe_generation_policy(model, config, F.SAMPLING_PROFILE):
+                model._prepare_generation_config(changed, **dispatch)
+        for operation in (lambda: E.resolve_generation_policy(model, requested, 'unknown'),
+                          lambda: E.generation_dispatch('unknown')):
+            with self.assertRaisesRegex(ValueError, 'Unknown generation profile'):
+                operation()
+
 
 class InferencePrecisionContracts(unittest.TestCase):
     def inventory(self, *, adapter_dtype='torch.float32', base_device='mps', adapter_device='mps',

@@ -484,11 +484,14 @@ class LaunchTests(unittest.TestCase):
 
     def run_launch(self, temp, *, ambiguous=False, schedule_wrong=False, prerequisites_wrong=False,
                    root_key_override=None, ordered=False, state_name='state', dispatch_state=None,
-                   preflight_error=None, remote_intent_error=False, remote_intent_delay=0):
+                   preflight_error=None, remote_intent_error=False, remote_intent_delay=0,
+                   initial_clock=1000.0, launch_delay=0):
         plan = self.fixture(temp); clock = Clock(); events = []
+        clock.now = initial_clock
         if ordered:
             plan['schema'] = L.INFERENCE_SCHEMA
         row = instance(plan['identity'])
+        row['LaunchTime'] = dt.datetime.fromtimestamp(initial_clock, dt.timezone.utc).isoformat()
         cloud = dict(launched=False, terminated=False, released=False, schedule=None,
                      root_key='arn:aws:kms:ap-northeast-2:148761639313:key/ffffffff-ffff-ffff-ffff-ffffffffffff')
         expectations = prerequisite_expectations()
@@ -521,6 +524,9 @@ class LaunchTests(unittest.TestCase):
                 # differs from the approved key in this behavioral transport.
                 cloud['root_key'] = request['BlockDeviceMappings'][0]['Ebs'].get('KmsKeyId', cloud['root_key'])
                 cloud['launched'] = True
+                clock.sleep(launch_delay)
+                if launch_delay:
+                    row['LaunchTime'] = dt.datetime.fromtimestamp(clock(), dt.timezone.utc).isoformat()
                 if ambiguous:
                     raise TimeoutError('response lost after EC2 accepted request')
                 return {'Instances': [copy.deepcopy(row)]}
@@ -543,14 +549,14 @@ class LaunchTests(unittest.TestCase):
                 return {'InstanceInitiatedShutdownBehavior': {'Value': 'terminate'}}
             if operation == 'create-schedule':
                 cloud['schedule'] = json.loads(args[args.index('--cli-input-json') + 1])
-                if L.inference_mode(plan):
+                if L.bounded_mode(plan):
                     return {'ScheduleArn': (f"arn:aws:scheduler:{plan['identity']['region']}:"
                         f"{plan['identity']['account']}:schedule/{plan['identity']['schedule_group']}/"
                         f"{plan['identity']['run_id']}")}
                 return {}
             if operation == 'get-schedule':
                 observed = copy.deepcopy(cloud['schedule'])
-                if L.inference_mode(plan):
+                if L.bounded_mode(plan):
                     observed.update(
                         Arn=(f"arn:aws:scheduler:{plan['identity']['region']}:{plan['identity']['account']}:"
                              f"schedule/{plan['identity']['schedule_group']}/{plan['identity']['run_id']}"),
@@ -571,7 +577,7 @@ class LaunchTests(unittest.TestCase):
                 raise RuntimeError('Synthetic transport has no native completion evidence')
             if operation == 'put-object':
                 key = args[args.index('--key') + 1]
-                if key.endswith('approval-consumed.json') and L.inference_mode(plan):
+                if key.endswith('approval-consumed.json') and L.bounded_mode(plan):
                     persisted = json.loads((state / 'controller-result.json').read_text())
                     self.assertTrue(persisted['remote_intent_attempted'])
                     self.assertFalse(persisted['dispatch_attempted'])
@@ -2029,6 +2035,10 @@ class OrderedInferenceAdmissionTests(unittest.TestCase):
                 evidence=evidence, clock=clock, pause=clock.sleep)
             self.assertEqual(result['cleanup_state'], 'unresolved')
             self.assertEqual(calls, [])
+            unchanged = L.reconcile_compute(lambda *args: calls.append(args), plan, 'a' * 64, state,
+                                            None, evidence=evidence, clock=clock, pause=clock.sleep)
+            self.assertEqual(unchanged, result)
+            self.assertEqual(calls, [])
             observed['plan_sha256'] = 'c' * 64
             L.save(state / 'termination.json', observed)
             with self.assertRaisesRegex(RuntimeError, 'launch evidence'):
@@ -2551,6 +2561,224 @@ class FollowupInferenceAdmissionTests(unittest.TestCase):
                     self.assertTrue(result['remote_intent_attempted'])
                     self.assertFalse(result['dispatch_attempted'])
                     self.assertTrue((Path(temp) / 'state/dispatch-authorization.json').exists())
+
+
+class SamplingDeadlineTests(unittest.TestCase):
+    """Synthetic clocks only: no AWS calls, real time waits or authorization."""
+    def plan(self):
+        plan = release_plan()
+        plan.update(schema=L.EVALUATION_SCHEMA,
+                    workload={'decoder_profile': L.SAMPLING_PROFILE},
+                    absolute_termination_deadline=L.SAMPLING_DEADLINE,
+                    limits=dict(lifetime_seconds=13500, reserve_seconds=300),
+                    cost=dict(termination_grace_seconds=900, controller_retrieval_bytes=L.GIB))
+        return plan
+
+    def cleanup_fixture(self, state, *, now, terminated=True, keep_root=False):
+        plan, clock = self.plan(), Clock()
+        end = L.absolute_deadline(plan)
+        clock.now = now
+        ident = plan['identity']
+        L.save(state / 'approval-consumed.json', dict(run_id=ident['run_id'], plan_sha256='a' * 64))
+        L.save(state / 'launch-dispatched.json', dict(run_id=ident['run_id'], plan_sha256='a' * 64,
+                                                     request_sha256='b' * 64, at=end - 14400))
+        row = instance(ident)
+        row['LaunchTime'] = dt.datetime.fromtimestamp(end - 14400, dt.timezone.utc).isoformat()
+        L.save(state / 'termination.json', dict(run_id=ident['run_id'], plan_sha256='a' * 64,
+            instance_id=row['InstanceId'], launch_time=end - 14400, deadline=end - 900,
+            schedule_verified=True, schedule=L.schedule_spec(plan, row['InstanceId'], end - 14400)))
+        payload = b'archive'
+
+        class Transport:
+            def __init__(self):
+                self.deadline = end - 900  # Deliberately expired, including before cutoff.
+                self.requests, self.retrieval_bytes = 7, 11
+                self.request_limit, self.retrieval_byte_limit = 10000, 100
+                self.terminated, self.events = terminated, []
+
+            def __call__(self, service, operation, *args):
+                L.remaining(self.deadline, clock())
+                L.require(self.requests < self.request_limit, 'Synthetic request budget exhausted')
+                self.requests += 1
+                self.events.append((operation, args))
+                clock.sleep(0.1)
+                if operation == 'describe-instances':
+                    current = copy.deepcopy(row)
+                    current['State']['Name'] = 'terminated' if self.terminated else 'running'
+                    return {'Reservations': [{'Instances': [current]}]}
+                if operation == 'terminate-instances':
+                    L.require(args == ('--instance-ids', row['InstanceId']), 'Wrong synthetic termination target')
+                    self.terminated = True
+                    return {}
+                if operation == 'describe-volumes':
+                    volume = dict(VolumeId='vol-synthetic', Tags=row['Tags'], Attachments=[])
+                    if self.terminated and not keep_root:
+                        if '--volume-ids' in args:
+                            raise L.AWSCallError(service, operation, 'An error occurred (InvalidVolume.NotFound)')
+                        return {'Volumes': []}
+                    return {'Volumes': [volume]}
+                if operation == 'head-object':
+                    return dict(ContentLength=len(payload), ETag='"synthetic-etag"')
+                if operation == 'get-object':
+                    raw_range = args[args.index('--range') + 1]
+                    first, last = (int(value) for value in raw_range.removeprefix('bytes=').split('-'))
+                    data = payload[first:last + 1]
+                    L.require(self.retrieval_bytes + len(data) <= self.retrieval_byte_limit,
+                              'Synthetic retrieval budget exhausted')
+                    self.retrieval_bytes += len(data)
+                    Path(args[-1]).write_bytes(data)
+                    return dict(ContentLength=len(data), ContentRange=f'bytes {first}-{last}/{len(payload)}',
+                                ETag='"synthetic-etag"')
+                raise AssertionError(operation)
+
+        return plan, clock, Transport(), L.volume_identity(ident, 'a' * 64, '/dev/sda1'), payload
+
+    def test_near_cutoff_cleanup_gives_export_its_own_window_without_resetting_counters(self):
+        end = L.timestamp(L.SAMPLING_DEADLINE)
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            plan, clock, client, evidence, payload = self.cleanup_fixture(state, now=end - 1)
+            result = L.reconcile_compute(client, plan, 'a' * 64, state, None, evidence=evidence,
+                                         clock=clock, pause=clock.sleep)
+            self.assertEqual(result['cleanup_state'], 'complete')
+            self.assertTrue(result['instance_terminated'])
+            self.assertEqual(result['absent_volume_ids'], ['vol-synthetic'])
+            self.assertFalse(result['post_deadline_recovery'])
+            self.assertEqual(result['compute_cutoff'], end)
+            self.assertEqual(result['observation_deadline'], end)
+            self.assertEqual(client.deadline, clock() + 900)
+            requests = client.requests
+            self.assertGreater(requests, 7)
+            self.assertEqual(client.retrieval_bytes, 11)
+            clock.sleep(2)  # Original compute/cleanup window has now expired.
+            target = state / 'export.tar'
+            L.download_export_ranges(client, plan['identity'],
+                dict(bytes=len(payload), sha256=hashlib.sha256(payload).hexdigest()), target, chunk_bytes=4)
+            self.assertEqual(target.read_bytes(), payload)
+            self.assertEqual(client.requests, requests + 3)
+            self.assertEqual(client.retrieval_bytes, 11 + len(payload))
+            self.assertEqual((client.request_limit, client.retrieval_byte_limit), (10000, 100))
+
+    def test_postcutoff_recovery_terminates_exact_owned_instance_without_renewing_lease(self):
+        end = L.timestamp(L.SAMPLING_DEADLINE)
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            plan, clock, client, evidence, _ = self.cleanup_fixture(state, now=end + 1, terminated=False)
+            immutable = {name: (state / name).read_bytes() for name in
+                         ('approval-consumed.json', 'launch-dispatched.json', 'termination.json')}
+            result = L.reconcile_compute(client, plan, 'a' * 64, state, None, evidence=evidence,
+                                         clock=clock, pause=clock.sleep)
+            self.assertEqual(result['cleanup_state'], 'complete')
+            self.assertTrue(result['post_deadline_recovery'])
+            self.assertEqual(result['compute_cutoff'], end)
+            self.assertEqual(result['observation_deadline'], end + 301)
+            self.assertEqual(result['absent_volume_ids'], ['vol-synthetic'])
+            self.assertEqual(sum(op == 'terminate-instances' for op, _ in client.events), 1)
+            self.assertTrue(all(op in ('describe-instances', 'describe-volumes', 'terminate-instances')
+                                for op, _ in client.events))
+            self.assertEqual({name: (state / name).read_bytes() for name in immutable}, immutable)
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, state), end)
+            self.assertEqual(plan['absolute_termination_deadline'], L.SAMPLING_DEADLINE)
+
+    def test_remaining_root_volume_forbids_post_compute_export_window(self):
+        end = L.timestamp(L.SAMPLING_DEADLINE)
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            plan, clock, client, evidence, _ = self.cleanup_fixture(state, now=end + 1, keep_root=True)
+            result = L.reconcile_compute(client, plan, 'a' * 64, state, None, evidence=evidence,
+                                         clock=clock, pause=clock.sleep)
+            self.assertEqual(result['cleanup_state'], 'unresolved')
+            self.assertEqual(result['remaining_volumes'], ['vol-synthetic'])
+            self.assertEqual(client.deadline, end + 301)
+            self.assertGreaterEqual(clock(), client.deadline)
+            self.assertEqual(client.retrieval_bytes, 11)
+
+    def test_past_and_boundary_deadlines_fail_closed(self):
+        plan = self.plan()
+        end = L.absolute_deadline(plan)
+        for now in (end + 1, end, end - 14460):
+            with self.subTest(now=now), self.assertRaisesRegex(RuntimeError, 'remaining overnight'):
+                L.validate_launch_window(plan, now)
+        L.validate_launch_window(plan, end - 14461)
+        plan['absolute_termination_deadline'] = '2026-11-17T00:00:00Z'
+        with self.assertRaisesRegex(RuntimeError, 'exact overnight'):
+            L.validate_launch_window(plan, end - 20000)
+
+    def test_schedule_ticket_and_cleanup_never_exceed_absolute_deadline(self):
+        plan = self.plan()
+        end = L.absolute_deadline(plan)
+        launch_time = end - 1000
+        deadline = L.work_deadline(plan, launch_time)
+        self.assertEqual(deadline, end - 900)
+        spec = L.schedule_spec(plan, 'i-0123456789abcdef0', launch_time)
+        self.assertEqual(spec['ScheduleExpression'], 'at(2026-11-16T22:44:00)')
+        self.assertEqual(json.loads(spec['Target']['Input']), {'InstanceIds': ['i-0123456789abcdef0']})
+        self.assertEqual(spec['Target']['RetryPolicy']['MaximumRetryAttempts'], 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp)
+            L.save(state / 'approval-consumed.json', dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64))
+            L.save(state / 'launch-dispatched.json', dict(run_id=plan['identity']['run_id'],
+                plan_sha256='a' * 64, request_sha256='b' * 64, at=launch_time))
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, state), end)
+        ticket = release(plan)
+        ticket.update(launch_time=end - 15000, deadline=end - 1500,
+                      schedule=L.schedule_spec(plan, ticket['instance_id'], end - 15000))
+        self.assertEqual(L.verify_termination_ticket(ticket, plan, 'a' * 64, ticket['instance_id'],
+                                                    end - 14999), end - 1500)
+        ticket['deadline'] += 1
+        with self.assertRaisesRegex(RuntimeError, 'ticket rejected'):
+            L.verify_termination_ticket(ticket, plan, 'a' * 64, ticket['instance_id'], end - 14999)
+
+    def test_launch_delay_terminates_owned_instance_without_release_or_retry(self):
+        case = LaunchTests()
+        original = case.fixture
+        def fixture(root):
+            plan = original(root)
+            plan.update({key: value for key, value in self.plan().items()
+                         if key in ('schema', 'workload', 'absolute_termination_deadline', 'limits', 'cost')})
+            return plan
+        case.fixture = fixture
+        with tempfile.TemporaryDirectory() as tmp:
+            result, events = case.run_launch(tmp, initial_clock=L.timestamp(L.SAMPLING_DEADLINE) - 14500,
+                                            launch_delay=101)
+        self.assertIn('Launch delay exceeded', result['error'])
+        self.assertEqual(result['cleanup']['cleanup_state'], 'complete')
+        self.assertEqual(sum(op == 'run-instances' for op, _ in events), 1)
+        self.assertTrue(any(op == 'terminate-instances' for op, _ in events))
+        self.assertFalse(any(op == 'create-schedule' for op, _ in events))
+        self.assertFalse(any(op == 'put-object' and any(str(arg).endswith('/release.json') for arg in args)
+                             for op, args in events))
+
+    def test_remote_intent_delay_rechecks_window_before_dispatch(self):
+        case = LaunchTests()
+        original = case.fixture
+        def fixture(root):
+            plan = original(root)
+            plan.update({key: value for key, value in self.plan().items()
+                         if key in ('schema', 'workload', 'absolute_termination_deadline', 'limits', 'cost')})
+            return plan
+        case.fixture = fixture
+        with tempfile.TemporaryDirectory() as tmp:
+            result, events = case.run_launch(tmp, initial_clock=L.timestamp(L.SAMPLING_DEADLINE) - 14500,
+                                            remote_intent_delay=40)
+        self.assertIn('remaining overnight', result['error'])
+        self.assertFalse(result['dispatch_attempted'])
+        self.assertFalse(any(op == 'run-instances' for op, _ in events))
+
+    def test_userdata_binds_absolute_watchdog_and_prior_profile_is_unchanged(self):
+        root = Path(__file__).resolve().parents[1]
+        plan = self.plan()
+        name = 'scripts/aws_eval/grounded_hf_bootstrap.sh'
+        plan.update(sources={name: L.digest(root / name)}, bundle={'sha256': 'a' * 64, 'bytes': 100})
+        text = L.bootstrap_text(plan, 'b' * 64, root)
+        self.assertIn('ABSOLUTE_WORK_DEADLINE=' + str(int(L.absolute_deadline(plan) - 900)), text)
+        self.assertIn('--on-calendar="@${ABSOLUTE_WORK_DEADLINE}"', text)
+        self.assertLess(text.index('systemd-run --unit='), text.index('timeout 45 aws'))
+        plan['workload'] = {}
+        plan['limits']['lifetime_seconds'] = 18900
+        self.assertEqual(L.work_deadline(plan, 1000), 19900)
+        L.validate_launch_window(plan, L.timestamp(L.SAMPLING_DEADLINE) + 1)
+        self.assertNotIn('ABSOLUTE_WORK_DEADLINE=', L.bootstrap_text(plan, 'b' * 64, root))
 
 
 if __name__ == '__main__':

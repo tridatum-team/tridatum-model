@@ -54,6 +54,24 @@ Approval schema is trid-fresh-eight-training-approval-v2 with exactly:
 Success means authenticated CUDA capacity/training/export plus positive compute
 cleanup only: training_success, never quality acceptance or CUDA evaluation.
 
+Sampling evaluation uses the same commands with a fresh registration/run/state:
+  schema:trid-cuda-evaluation-prerequisites-v1,
+  decoder_profile:qwen3_nonthinking_sampling,
+  absolute_termination_deadline:2026-11-16T23:00:00Z.
+Bind the separate overnight-gpu-authorization.json (never authorization.json
+from the consumed greedy run), and the sampling resource-envelope/approval
+schemas. The operator USD20 ceiling is not a new user-selected dollar cap.
+The envelope is work13500 (including export300), grace900, total14400; launch
+requires strictly more than14460 seconds before the absolute deadline, checked
+again immediately before dispatch. Preparation/validation after this prospective
+window fails closed; historical evaluation audit uses active=False only.
+Sampling reconciliation at/after the immutable compute cutoff has a separate
+300-second exact-owned termination/absence recovery window. Its receipt marks
+post_deadline_recovery; it is not evidence of termination within the priced
+four-hour assumption. Only positively verified instance/root-volume cleanup
+opens a separate900-second schedule-cleanup/evidence window on the same client,
+without resetting any request or retrieval-byte counters or renewing compute.
+
 Permissions: controller needs STS GetCallerIdentity; IAM Get/List role/profile,
 CreateRole/PutRolePolicy/CreateInstanceProfile/AddRoleToInstanceProfile and exact
 inverse cleanup actions; EC2 Describe*, Create/DeleteSecurityGroup; Scheduler
@@ -169,7 +187,7 @@ def validate_lineage(root, pin):
     require(lineage == actual, 'Staged CUDA evaluation lineage differs from authenticated final150')
 
 
-def validate_registration(reg, root, *, active=True):
+def validate_registration(reg, root, *, active=True, launch_window=True):
     fields = {'schema', 'approved', 'automatic_retry', 'identity', 'controller_arn', 'authorization',
               'resource_envelope', 'aggregate_ledger', 'sources', 'iam', 'network', 'bucket_lifecycle_before',
               'retention_days', 'lifecycle_rule_ids', 'bundle'}
@@ -177,6 +195,14 @@ def validate_registration(reg, root, *, active=True):
     require(active or evaluation, 'Historical prerequisite admission is CUDA-evaluation-only')
     if evaluation:
         fields = (fields - {'aggregate_ledger'}) | {'lineage_binding'}
+        if reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE:
+            fields |= {'decoder_profile', 'absolute_termination_deadline'}
+            shell = dict(schema=lifecycle.EVALUATION_SCHEMA,
+                         workload={'decoder_profile': reg['decoder_profile']},
+                         absolute_termination_deadline=reg['absolute_termination_deadline'])
+            lifecycle.absolute_deadline(shell)
+            if active and launch_window:
+                lifecycle.validate_launch_window(shell, time.time())
     require(set(reg) == fields and reg['schema'] in (SCHEMA, EVALUATION_SCHEMA) and reg['approved'] is True
             and reg['automatic_retry'] is False, 'Exact parent prerequisite registration required')
     ident = reg['identity']
@@ -211,7 +237,11 @@ def validate_registration(reg, root, *, active=True):
     envelope = bound_json(root, reg['resource_envelope'])
     pin_bytes(root, envelope['cost_evidence'])
     validator = lifecycle.validate_evaluation_resources if evaluation else lifecycle.validate_fresh_resources
-    validator(root, dict(reg, instance_type='g6e.2xlarge'))
+    resource_plan = dict(reg, instance_type='g6e.2xlarge')
+    if evaluation and reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE:
+        resource_plan.update(schema=lifecycle.EVALUATION_SCHEMA,
+                             workload={'decoder_profile': reg['decoder_profile']})
+    validator(root, resource_plan)
     require(envelope['billing_hard_cap'] is False, 'Resource budget is conditional, not a billing hard cap')
     require(reg['retention_days'] == envelope['s3_expiration_days']
             and envelope['multipart_abort_days'] == 1, 'Envelope retention differs')
@@ -523,6 +553,11 @@ def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha,
     if evaluation:
         require(plan['workload']['lineage_binding'] == reg['lineage_binding'],
                 'Final CUDA lineage differs from parent registration')
+        require(lifecycle.sampling_mode(plan) == (reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE),
+                'Final decoder profile differs from parent registration')
+        if lifecycle.sampling_mode(plan):
+            require(plan['absolute_termination_deadline'] == reg['absolute_termination_deadline'],
+                    'Final absolute deadline differs from parent registration')
         if active:
             validate_lineage(root, reg['lineage_binding'])
     else:
@@ -585,9 +620,8 @@ def reconcile(plan, plan_sha, state, client):
     require(load(state / 'approval-consumed.json') == dict(run_id=plan['identity']['run_id'], plan_sha256=plan_sha),
             'Exact consumed approval required')
     evidence = lifecycle.load_volume_identity(state, plan, plan_sha)
-    deadline = min(time.time() + plan['cost']['termination_grace_seconds'], lifecycle.cleanup_cutoff(plan, plan_sha, state))
-    result = lifecycle.reconcile(client, plan['identity'], evidence['instance_id'], deadline,
-                                 evidence=evidence, evidence_path=state / 'volume-identity.json')
+    result = lifecycle.reconcile_compute(client, plan, plan_sha, state, evidence['instance_id'],
+                                         evidence=evidence, evidence_path=state / 'volume-identity.json')
     lifecycle.save(state / 'reconcile-result.json', result)
     if result['cleanup_state'] == 'complete':
         lifecycle.cleanup_schedule(client, plan['identity'], state, result, plan=plan, plan_sha=plan_sha)
@@ -871,7 +905,8 @@ def main():
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         reg = lifecycle.read_bound(args.registration, args.registration_sha256)
-        validate_registration(reg, args.root)
+        validate_registration(reg, args.root,
+                              launch_window=args.action not in ('reconcile', 'owned-prerequisite-cleanup'))
         binding = dict(registration_sha256=args.registration_sha256, identity=reg['identity'])
         binding_path = args.state / 'registration-consumed.json'
         if binding_path.exists():
@@ -899,6 +934,8 @@ def main():
             result = stage(reg, args.registration_sha256, args.root, args.state, plan, args.plan_sha256, args.plan, client)
         elif args.action == 'launch':
             client.deadline = time.time() + lifecycle.lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
+            if lifecycle.sampling_mode(plan):
+                client.deadline = min(client.deadline, lifecycle.absolute_deadline(plan))
             client.request_limit = plan['cost']['control_requests']
             result = lifecycle.launch(plan, approval, args.plan_sha256, args.root, args.state, client)
         elif args.action == 'reconcile':

@@ -82,14 +82,20 @@ def generation_binding(folder, policy, mode):
         generation_policy_sha256=E.object_sha(policy), candidate_manifest_sha256=E.CANDIDATE_SHA)
 
 
-def run_pairs(core, helper, torch, model, tokenizer, prepared, config, binding, folder):
+def run_pairs(core, helper, torch, model, tokenizer, prepared, config, binding, folder,
+              decoder_profile='greedy'):
     """Exclusive journals make retry/reuse impossible; every call has fresh input/KV."""
     mode = binding['mode']
+    generation = E.generation_for_profile(decoder_profile)
+    sampling = decoder_profile == E.SAMPLING_PROFILE
+    dispatch = helper.generation_dispatch(decoder_profile)
     with contextlib.ExitStack() as stack:
         streams = {arm: stack.enter_context((folder / (arm + '-outputs.jsonl')).open('x', encoding='utf-8'))
                    for arm in E.ARMS}
         attempts = stack.enter_context((folder / 'attempts.jsonl').open('x', encoding='utf-8'))
         for case in prepared:
+            seed = E.case_seed(mode, case['id']) if sampling else generation['seed']
+            seed_record = dict(generation_profile=decoder_profile, case_seed=seed) if sampling else {}
             for arm in E.ARMS:
                 append_row(attempts, dict(id=case['id'], arm=arm, mode=mode, state='started',
                     timestamp=dt.datetime.now(dt.timezone.utc).isoformat()))
@@ -97,22 +103,25 @@ def run_pairs(core, helper, torch, model, tokenizer, prepared, config, binding, 
                 tokens = []
                 row_written = False
                 try:
-                    torch.manual_seed(E.GENERATION['seed'])
-                    torch.cuda.manual_seed_all(E.GENERATION['seed'])
                     ids = torch.tensor([case['prompt_token_ids']], dtype=torch.long, device='cuda:0')
                     attention = torch.ones_like(ids)
                     torch.cuda.synchronize()
                     with (model.disable_adapter() if arm == 'base' else contextlib.nullcontext()):
-                        with torch.inference_mode(), helper.observe_generation_policy(model, config) as observed:
+                        with torch.inference_mode(), helper.observe_generation_policy(
+                                model, config, decoder_profile) as observed:
+                            # Reset both RNG domains after all input/context setup,
+                            # immediately before each paired call; never search seeds.
+                            torch.manual_seed(seed)
+                            torch.cuda.manual_seed_all(seed)
                             result = model.generate(input_ids=ids, attention_mask=attention,
-                                generation_config=config, **helper.GREEDY_DISPATCH)
+                                generation_config=config, **dispatch)
                     torch.cuda.synchronize()
                     E.require(result.sequences.shape[0] == 1
                               and result.sequences[0, :len(case['prompt_token_ids'])].tolist() == case['prompt_token_ids'],
                               'Generation changed the prompt or batch dimension')
                     tokens = result.sequences[0, len(case['prompt_token_ids']):].tolist()
                     decoded = core.decode_generation(tokenizer, tokens, config.eos_token_id, 768)
-                    row = dict(**case, arm=arm, **binding, generation=dict(E.GENERATION),
+                    row = dict(**case, arm=arm, **binding, **seed_record, generation=dict(generation),
                         adapter_weights_sha256=None if arm == 'base' else E.ADAPTER_SHA,
                         generation_config=config.to_dict(), output_token_ids=tokens, **decoded,
                         exception=None, context_truncated=False, skipped_context=False,
@@ -123,7 +132,8 @@ def run_pairs(core, helper, torch, model, tokenizer, prepared, config, binding, 
                     # smoke failure remains evidence, and is never replaced or retried.
                     append_row(streams[arm], row)
                     row_written = True
-                    E.validate_answer(row, case, arm, mode, binding, config.to_dict())
+                    E.validate_answer(row, case, arm, mode, binding, config.to_dict(),
+                                      decoder_profile=decoder_profile)
                     print(json.dumps(dict(event='answer_complete', mode=mode, id=case['id'], arm=arm,
                         generated_tokens=len(tokens), termination_reason=row['termination_reason'],
                         elapsed_seconds=row['elapsed_seconds'])), flush=True)
@@ -131,9 +141,9 @@ def run_pairs(core, helper, torch, model, tokenizer, prepared, config, binding, 
                     del result, ids, attention
                 except BaseException as error:
                     if not row_written:
-                        append_row(streams[arm], dict(**case, arm=arm, **binding,
+                        append_row(streams[arm], dict(**case, arm=arm, **binding, **seed_record,
                             adapter_weights_sha256=None if arm == 'base' else E.ADAPTER_SHA,
-                            generation=dict(E.GENERATION), generation_config=config.to_dict(),
+                            generation=dict(generation), generation_config=config.to_dict(),
                             output_token_ids=tokens, generated_tokens=len(tokens), raw_output=None,
                             response_text=None, termination_reason='error', terminal_stop_token_id=None,
                             context_truncated=False, skipped_context=False, truncated_output=False,
@@ -183,11 +193,14 @@ def child_stage(core, plan, base, phase):
             gpu_uuid=release['gpu']['uuid'], instance_id=release['instance_id'],
             torch_threads=torch.get_num_threads(), cpu_fallback=False, cuda_equivalence_claim=False)
         decoder = dict(profile='unconstrained', semantic_truth_guarantee=False)
+        profile = E.plan_decoder_profile(plan)
+        generation = E.generation_for_profile(profile)
+        profile_record = dict(generation_profile=profile) if profile == E.SAMPLING_PROFILE else {}
         shared = dict(schema=E.RUN_SCHEMA, model=model_identity,
             adapter=dict(step=150, files={Path(p['path']).name: p for p in plan['workload']['adapter_files']},
                          config=admitted['adapter_config']),
-            input=plan['workload']['evaluation_inputs'], generation=dict(E.GENERATION), decoder_profile=decoder,
-            runtime=runtime, code=code, arm_order=list(E.ARMS),
+            input=plan['workload']['evaluation_inputs'], generation=generation, decoder_profile=decoder,
+            runtime=runtime, code=code, arm_order=list(E.ARMS), **profile_record,
             paired_order='each input: base with adapter disabled, then registered adapter enabled',
             grading_access=False, retries=False, resume=False, plan=E.pin(root / 'plan.json', root),
             lineage_binding=E.pin(root / 'lineage-binding.json', root),
@@ -213,32 +226,35 @@ def child_stage(core, plan, base, phase):
         model.eval()
         inventory = parameter_inventory(model, torch)
         E.require(not any(getattr(m, 'merged', False) for m in model.modules()), 'Merged adapters forbidden')
-        config = GenerationConfig(do_sample=False, num_beams=1, max_new_tokens=768, use_cache=True,
+        parameters = E.SAMPLING_PARAMETERS if profile == E.SAMPLING_PROFILE else dict(do_sample=False, num_beams=1)
+        config = GenerationConfig(**parameters, max_new_tokens=768, use_cache=True,
             eos_token_id=model.generation_config.eos_token_id,
             pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
             bos_token_id=tokenizer.bos_token_id, return_dict_in_generate=True)
         requested = config.to_dict()
-        config, policy = helper.resolve_generation_policy(model, config)
+        config, policy = helper.resolve_generation_policy(model, config, profile)
         loaded = dict(loader=dict(implementation='transformers.AutoModelForCausalLM.from_pretrained',
             local_files_only=True, trust_remote_code=False), elapsed_seconds=time.perf_counter() - load_started,
             attention_implementation=model.config._attn_implementation,
             generation_config=config.to_dict(), requested_generation_config=requested, generation_policy=policy,
             cuda_memory=cuda_memory(torch), parameter_dtypes=sorted({str(p.dtype) for p in model.parameters()}),
             parameter_inventory=inventory, buffer_dtypes=sorted({str(b.dtype) for b in model.buffers()}),
-            code=code, frozen=True, adapter_merged=False, model_loads=1, gpu_uuid=release['gpu']['uuid'])
+            code=code, frozen=True, adapter_merged=False, model_loads=1, gpu_uuid=release['gpu']['uuid'],
+            **profile_record)
         for mode in ('smoke', 'evaluation'):
             active = root / mode
             selected = selections[mode]
             save_new(active / 'loaded-runtime.json', loaded)
             binding = generation_binding(active, policy, mode)
-            run_pairs(core, helper, torch, model, tokenizer, selected, config, binding, active)
+            run_pairs(core, helper, torch, model, tokenizer, selected, config, binding, active,
+                      decoder_profile=profile)
             save_new(active / 'completion.json', dict(status='complete', mode=mode,
                 elapsed_seconds=time.perf_counter() - started, rows_per_arm=len(selected),
                 outputs={arm: E.pin(active / (arm + '-outputs.jsonl'), active) for arm in E.ARMS},
                 cuda_memory=cuda_memory(torch), run_manifest_sha256=binding['run_manifest_sha256']))
             E.validate_mode(root, mode, plan)
         save_new(folder / 'evaluation-worker.json', dict(schema=E.WORKER_SCHEMA, status='complete',
-            run_id=E.RUN_ID, plan_sha256=core.digest(base / 'plan.json'), evaluation_success=True,
+            run_id=E.run_id_for_plan(plan), plan_sha256=core.digest(base / 'plan.json'), evaluation_success=True,
             completion_scope=E.COMPLETION_SCOPE, quality_accepted=False, rows_per_arm=200,
             smoke_rows_per_arm=1, generation_calls=402, model_loads=1,
             smoke=E.pin(root / 'smoke/completion.json', root), evaluation=E.pin(folder / 'completion.json', root)))
@@ -280,7 +296,7 @@ def run_experiment(core, plan, base, report, gpu, account, work_deadline,
     report['stages'].append(unit)
     E.validate_completion(root, plan)
     save_new(root / 'evaluation/supervisor-result.json', dict(schema=E.SUPERVISION_SCHEMA,
-        phase='evaluation', status='accepted', cleanup_verified=True, run_id=E.RUN_ID,
+        phase='evaluation', status='accepted', cleanup_verified=True, run_id=E.run_id_for_plan(plan),
         plan_sha256=core.digest(base / 'plan.json'),
         worker_result=E.pin(root / 'evaluation/evaluation-worker.json', root), unit=unit))
     for name in ('smoke', 'evaluation'):
