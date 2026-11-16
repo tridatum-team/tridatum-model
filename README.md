@@ -497,8 +497,26 @@ Mac의 메모리 한도를 낮추거나 같은 로드를 반복하지 않고, �
 - **증거 복구:** SHA-256 `af75b62050e505458748ff99bf5c933062a5d64d552fbfb04f8ad42ca18d3224`의 8,161,280바이트 archive를 인증했습니다. 원래 실행 소스, 402개 출력, runtime·모델 본문 해시, 정확한 후처리 오류, 실패한 unit 상태와 자원 정리를 다시 검증한 별도 메타데이터 복구가 수락됐습니다. `failure.json`을 포함한 26개 파일의 본문을 그대로 보존했으며 답변 재생성·추가 GPU 실행·복구 중 AWS 요청은 없었습니다. `native_pipeline_success=false`, `complete_answers_authenticated=true`, `quality_accepted=false`를 구분합니다.
 - **자원 정리:** 인스턴스 `i-0acc7c0208d7121d4` 종료, root `vol-02404094c7979dcd4` 삭제와 전용 역할·profile·보안 그룹·종료 예약 group 정리를 확인했습니다. 공유 bucket의 기존 규칙과 해당 실행의 보존 규칙은 유지했습니다.
 - **수정 후 검증:** 통합 604건 중 603건 통과·1건 skip. 실제 파일 읽기 거부를 이용한 자식/부모 권한 경계, 부모 증거 변조 거부, macOS 임시 경로의 symlink 처리와 외부 symlink 거부를 검증했습니다. 실제 archive의 복구와 보존된 복구 소스를 이용한 재인증도 통과했고, 400답변 익명 채점 packet을 생성했습니다. 합성 모델을 쓴 권한 회귀는 CUDA 재실행 검증으로 표시하지 않습니다.
-- **수락 경계:** 당시 학습·최종화 소스는 보존 archive로 인증하고 새 실행 소스와 구분합니다. CUDA runtime·모델 본문 해시·원본/후보 출력·독립 export·정확한 인스턴스와 root 삭제·소유 사전 자원 정리를 인증한 뒤 기존 블라인드 두 패널, 쌍 단위 독립 재심, 여섯 개발 기준으로 판정합니다. 보호 최종 자료와 `test.tridatum.co` 배포는 변경하지 않습니다.
-- **복구 근거:** 위 실행 디렉터리의 `postgeneration-failure-analysis.json`, `recovery-tests.log`, `cloud-state/{export.tar,controller-result.json,owned-cleanup-complete.json,evaluation-recovery-sources.tar,evaluation-recovery-registration.json,evaluation-recovery-receipt.json,cuda-evaluation-export/}`에 보존합니다. 블라인드 판정이 끝나기 전에는 품질 개선을 주장하지 않습니다.
+- **수락 경계:** 당시 학습·최종화 소스는 보존 archive로 인증하고 새 실행 소스와 구분합니다. CUDA runtime·모델 본문 해시·원본/후보 출력·독립 export·정확한 인스턴스와 root 삭제·소유 사전 자원 정리를 인증한 뒤 블라인드 채점을 완료했습니다. 보호 최종 자료와 `test.tridatum.co` 배포는 변경하지 않았습니다.
+- **복구 근거:** 위 실행 디렉터리의 `postgeneration-failure-analysis.json`, `recovery-tests.log`, `cloud-state/{export.tar,controller-result.json,owned-cleanup-complete.json,evaluation-recovery-sources.tar,evaluation-recovery-registration.json,evaluation-recovery-receipt.json,cuda-evaluation-export/}`에 보존합니다. 복구 수락은 품질 수락이나 원래 native 실행 성공을 뜻하지 않습니다.
+
+**개발 200문항의 실제 비교:** 행정안전부 160문항과 일반 40문항을 모두 유지했습니다. 서로 답변 판정을 공유하지 않은 두 패널의 16개 세션이 각 400답변을 채점했고, 불일치가 있는 48쌍·96답변은 별도 2개 세션에서 쌍 전체를 재심했습니다. 최종 400판정을 동결한 뒤에만 원본/후보 식별 정보를 결합했습니다. 이는 분리된 LLM 채점 세션이지 사람 평가나 서로 독립적인 모델 편향을 보장하는 절차가 아닙니다.
+
+| 지표 | Qwen3-8B 원본 | 학습 후 최종 150단계 |
+| --- | ---: | ---: |
+| 전체 의미 통과 | 60/200 (30.0%) | 68/200 (34.0%) |
+| 행정안전부 의미 통과 | 36/160 (22.5%) | 43/160 (26.9%) |
+| 일반 의미 통과 | 24/40 (60.0%) | 25/40 (62.5%) |
+| 구조·의미·형식·오류 없음 모두 통과 | 36/200 (18.0%) | 38/200 (19.0%) |
+| 구조 통과 | 188/200 (94.0%) | 165/200 (82.5%) |
+| 요청 형식 통과 | 91/200 (45.5%) | 117/200 (58.5%) |
+| 중대 오류가 있는 문항 · 낮을수록 좋음 | 101/200 (50.5%) | 74/200 (37.0%) |
+| 답변 생성 평균 시간 | 10.74초 | 18.00초 |
+| 답변 생성 p95 시간 | 22.11초 | 50.79초 |
+
+- **판정:** 사전 고정한 상대 비교 여섯 개발 기준은 모두 통과했지만, 완전 통과율이 낮고 구조 통과·응답 시간이 악화됐으므로 배포 자격을 부여하지 않습니다. 의미 판정은 23문항 개선·15문항 퇴행, 완전 통과는 12문항 개선·10문항 퇴행입니다. 중대 오류 41문항을 해소했으나 14문항에 새 중대 오류가 생겼습니다. 단순히 “학습 후 모델이 월등히 좋아졌다”고 해석할 결과가 아닙니다.
+- **불확실성:** 자료군 60개를 같은 가중치로 집계하면 완전 통과 변화는 −1.04%p입니다. 문항 가중치의 +1.0%p와 다르며, 관련 문항 200개를 독립 표본처럼 취급한 신뢰구간은 제시하지 않습니다. 현행 법령 인증·일반적인 정확도·미사용 최종 자료 성능을 주장하지 않습니다.
+- **보존:** `blind-assessment/{collected/,collected-third/,adjudication/,frozen-judgments.json,assessment.json}`에 원 판정·재심·최종 집계를 보존합니다. 기존 점수나 단계 선택을 소급 변경하지 않았으며, `candidate_step=150`, `selected_step=null`, `deployment_qualified=false`입니다.
 
 
 ### Packed-head 학습 엔진
