@@ -297,7 +297,7 @@ class WorkspaceTests(TestCase):
         finally:
             self.rt.gen_lock.release()
         self.assertEqual((r.status_code, r.json()), (503, {'error': BUSY_ASK}))
-        self.assertGreaterEqual(waited, 0.1)
+        self.assertGreaterEqual(waited, 0.05)  # waited for lock_wait=0.1; Windows clock ticks ~15.6ms
         self.assertEqual(self.calls, [])
         self.assertEqual(details('ask')[0], {'status': 'error', 'error': 'busy',
                                              'seconds': details('ask')[0]['seconds']})
