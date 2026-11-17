@@ -234,3 +234,34 @@ class SweepTests(unittest.TestCase):
         self.assertTrue(rt.registry.admit('gone-key', 'bob'))
         sweep(rt.registry)
         self.assertEqual(rt.registry.keys(), {live.session_key})
+
+
+class WaitressTests(unittest.TestCase):
+    def test_upload_body_never_spills_to_a_temp_file(self):
+        """waitress buffers bodies over inbuf_overflow (default 512 KB) in a TemporaryFile; uploads must stay in memory."""
+        import dataclasses
+        import http.client
+        from unittest import mock
+        from onprem_web.__main__ import make_waitress
+        from trid.onprem.config import load_config
+        config = dataclasses.replace(load_config(S.CONFIG_PATH), port=0)
+        seen = []
+
+        def app(environ, start_response):
+            seen.append(len(environ['wsgi.input'].read()))
+            start_response('200 OK', [('Content-Type', 'text/plain')])
+            return [b'ok']
+
+        server = make_waitress(app, config, '127.0.0.1')
+        threading.Thread(target=server.run, daemon=True).start()
+        self.addCleanup(server.close)
+        body = b'%PDF' + b'x' * (int(config.pdf.max_bytes) - 4)
+        real = tempfile.TemporaryFile
+        with mock.patch('tempfile.TemporaryFile', side_effect=real) as spill:
+            conn = http.client.HTTPConnection('127.0.0.1', server.effective_port, timeout=30)
+            conn.request('POST', '/api/load', body=body, headers={'Content-Type': 'application/pdf'})
+            r = conn.getresponse()
+            r.read()
+            conn.close()
+        self.assertEqual((r.status, seen), (200, [len(body)]))
+        spill.assert_not_called()

@@ -18,7 +18,6 @@ from django.utils.crypto import constant_time_compare
 
 from onprem_web import runtime
 from onprem_web.accounts import middleware as mw
-from onprem_web.accounts import services as accounts
 from onprem_web.accounts.models import User
 from onprem_web.web import json_response
 from trid.onprem.server import SMALL_BODY
@@ -88,7 +87,7 @@ def _still_valid(request, key, entry) -> bool:
     if runtime.get().registry.get(key) is not entry:
         return False
     user = User.objects.filter(pk=request.user.pk).first()
-    if user is None or not user.is_active or user.locked_until > accounts._clock():
+    if user is None or not user.is_active:
         return False
     if not constant_time_compare(request.session.get(HASH_SESSION_KEY, ''), user.get_session_auth_hash()):
         return False

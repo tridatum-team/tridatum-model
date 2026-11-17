@@ -114,6 +114,19 @@ def _background(config, registry, stop: threading.Event) -> None:
             close_old_connections()
 
 
+def make_waitress(application, config, host: str):
+    """The WSGI server: one thread per slot, request bodies capped at the PDF limit plus framing.
+
+    inbuf_overflow = the same cap, so waitress keeps every accepted body in memory: above its
+    default (512 KB) it would buffer the upload in a TemporaryFile on disk.
+    """
+    from waitress import create_server
+    limit = int(config.pdf.max_bytes) + UPLOAD_SLACK
+    return create_server(application, host=host, port=config.port, threads=config.slots,
+                         max_request_body_size=limit, inbuf_overflow=limit, ident=None,
+                         clear_untrusted_proxy_headers=True)
+
+
 def cmd_serve(args) -> int:
     config = load_config(args.config)
     try:
@@ -136,7 +149,6 @@ def cmd_serve(args) -> int:
     config = _setup(args.config, dev=args.insecure_dev)
 
     from django.core.wsgi import get_wsgi_application
-    from waitress import create_server
 
     from onprem_web import runtime
     from onprem_web.accounts.registry import SessionRegistry
@@ -145,9 +157,7 @@ def cmd_serve(args) -> int:
     run_purge(config)
     host = '127.0.0.1' if args.insecure_dev else '0.0.0.0'
     application = get_wsgi_application()
-    server = create_server(application, host=host, port=config.port, threads=config.slots,
-                           max_request_body_size=int(config.pdf.max_bytes) + UPLOAD_SLACK, ident=None,
-                           clear_untrusted_proxy_headers=True)
+    server = make_waitress(application, config, host)
     port = server.effective_port
     registry = SessionRegistry(config.max_sessions, config.idle_seconds, config.per_minute)
     runtime.install(runtime.Runtime(

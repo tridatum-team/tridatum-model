@@ -16,7 +16,7 @@ from django.contrib.sessions.models import Session
 from django.utils import timezone
 
 from onprem_web import runtime
-from onprem_web.accounts import services, sessions
+from onprem_web.accounts import sessions
 from onprem_web.audit.services import log
 from onprem_web.web import json_response
 from trid.onprem.server import MUST_CHANGE
@@ -87,12 +87,9 @@ class TridSessionMiddleware:
         request.trid_ip = client_ip(request)
         request.trid_entry = None
         key = request.session.session_key  # read before request.user: a revoked session is flushed on load
+        # A failed-login lock only blocks new logins (as the old Auth.session()); the wrong-current-password
+        # lock in change_password ends the user's sessions itself.
         user = request.user
-
-        if user.is_authenticated and user.locked_until > services._clock():
-            # A lock (e.g. from wrong current passwords) ends the user's sessions.
-            self._end(request, key)
-            user = request.user
 
         if user.is_authenticated:
             if registry.get(key) is None:

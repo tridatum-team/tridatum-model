@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from onprem_web.accounts import services
+from onprem_web.accounts.models import User
 from onprem_web.audit.models import Event
 from trid.onprem.server import BAD_LOGIN, CSRF_FAIL, MUST_CHANGE
 
@@ -246,6 +247,19 @@ class SessionTests(TestCase):
         self.assertEqual(self.rt.registry.keys(), set())
         self.assertEqual(Session.objects.count(), 0)
         self.assertEqual(other.post('/api/password', {}).status_code, 401)
+
+    def test_failed_login_lock_leaves_live_session_working(self):
+        # As the old Auth.session(): a lock from someone else's wrong passwords only blocks new logins.
+        b = self.logged_in()
+        entry = self.rt.registry.get(b.key)
+        entry.document = object()
+        stranger = Browser()
+        for _ in range(5):
+            self.assertEqual(stranger.login('alice', 'wrong password 9').status_code, 401)
+        self.assertGreater(User.objects.get(username='alice').locked_until, services._clock())
+        self.assertEqual(b.post('/api/clear').status_code, 200)
+        self.assertIs(self.rt.registry.get(b.key), entry)
+        self.assertEqual(Browser().login('alice').status_code, 401)  # new logins stay locked
 
     def test_password_change_ends_other_sessions_and_their_documents(self):
         b, other, bob = self.logged_in(), self.logged_in(), self.logged_in('bob')
