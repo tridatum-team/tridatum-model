@@ -119,6 +119,8 @@ LOGGING = {
     'handlers': {'stderr': {'class': 'logging.StreamHandler', 'formatter': 'type_only'}},
     'loggers': {name: dict(_LOG_LOGGER)
                 for name in ('django', 'django.request', 'django.server', 'django.security', 'waitress')},
+    # Everything else (py.warnings via captureWarnings, library loggers) also goes through type_only.
+    'root': {'handlers': ['stderr'], 'level': 'WARNING'},
 }
 
 APPEND_SLASH = False

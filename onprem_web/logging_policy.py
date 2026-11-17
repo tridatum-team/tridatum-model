@@ -17,3 +17,16 @@ class TypeOnlyFormatter(logging.Formatter):
             status = getattr(record, 'status_code', None)
             detail = str(status) if isinstance(status, int) else '-'
         return f'{record.name} {record.levelname} {detail}'
+
+
+def _print_type(exc_type) -> None:
+    import sys
+    print(getattr(exc_type, '__name__', 'Exception'), file=sys.stderr, flush=True)
+
+
+def install_excepthooks() -> None:
+    """Uncaught exceptions (main thread and worker threads) print only their type name, never a traceback."""
+    import sys
+    import threading
+    sys.excepthook = lambda exc_type, exc, tb: _print_type(exc_type)
+    threading.excepthook = lambda args: _print_type(args.exc_type)
