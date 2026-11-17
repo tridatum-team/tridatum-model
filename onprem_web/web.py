@@ -16,6 +16,8 @@ FONT_DIR = Path(trid.__file__).resolve().parent / 'onprem_ui' / 'fonts'
 # Only these names are ever served (name -> content type); nothing is resolved from the request path.
 STATIC = {
     'common.css': 'text/css; charset=utf-8',
+    'app.js': 'text/javascript; charset=utf-8',
+    'login.js': 'text/javascript; charset=utf-8',
     'vendor/htmx.min.js': 'text/javascript; charset=utf-8',
 }
 FONTS = {'PretendardVariable.woff2': 'font/woff2'}

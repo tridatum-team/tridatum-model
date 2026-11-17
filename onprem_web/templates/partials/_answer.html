@@ -1,0 +1,15 @@
+<div class="answer">
+<div class="text">{{ answer }}</div>
+<div class="tags"><span class="tag{% if tag_bad %} bad{% endif %}">{{ tag }}</span></div>
+{% for text in limits %}<div class="note warn">{{ text }}</div>
+{% endfor %}{% for text in warn_notes %}<div class="note warn">{{ text }}</div>
+{% endfor %}{% for q in quotes %}<div class="block"><span class="label">확인된 인용{% if q.place %} · {{ q.place }}{% endif %}</span><mark>{{ q.mark }}</mark></div>
+{% endfor %}{% if quotes %}<details class="card">
+<summary>인용 앞뒤 원문 보기 ({{ quotes|length }}개)</summary>
+{% for q in quotes %}<div class="block"><span class="label">{{ q.context }}</span>{{ q.before }}<mark>{{ q.mark }}</mark>{{ q.after }}</div>
+{% endfor %}</details>
+{% endif %}{% if commentary %}<div class="block"><span class="label">검증되지 않은 해설 — 원문과 대조하세요</span>{{ commentary }}</div>
+{% endif %}{% if table_warning %}<div class="block"><span class="label">자료 한계 · 표</span>{{ table_warning }}</div>
+{% endif %}{% if info %}<div class="note">{% for line in info %}{{ line }}{% if not forloop.last %}
+{% endif %}{% endfor %}</div>
+{% endif %}</div>

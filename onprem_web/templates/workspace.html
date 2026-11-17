@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block meta %}<meta name="trid-max-bytes" content="{{ max_bytes }}">
+<meta name="role" content="{{ role }}">
+{% endblock %}
+{% block body %}<header class="topbar">
+<div class="topbar-inner">
+<h1>TRID 문서 확인</h1>
+<div class="top-actions">
+<span id="who" class="who"></span>
+<a id="admin-link" class="btn small" href="/admin" hidden>관리자 화면</a>
+<button id="logout" class="btn small" type="button">로그아웃</button>
+</div>
+</div>
+</header>
+<main>
+<div class="status-strip">
+<p id="model-status" class="notice">{{ status_text }}</p>
+<details id="model-card">
+<summary>모델 정보</summary>
+<div class="model-card">{{ model_card|safe }}</div>
+</details>
+</div>
+
+{% include "partials/_password.html" %}
+
+<div id="work-view" class="workspace"{% if must_change %} hidden{% endif %}>
+<section class="card plain doc-panel" aria-labelledby="doc-title">
+<div class="panel-head"><h2 id="doc-title"><span class="step">1</span>문서 넣기</h2></div>
+<label for="file">PDF 파일 선택 (텍스트 PDF)</label>
+<div class="file-drop">
+<input id="file" type="file" accept=".pdf,application/pdf">
+<div class="actions">
+<button id="load" class="btn primary" type="button">문서 읽기</button>
+<button id="clear" class="btn" type="button" disabled hx-post="/ui/clear" hx-swap="none">자료 지우기</button>
+</div>
+</div>
+<p id="doc-status" class="msg" role="status"></p>
+<details id="doc-view" hidden>
+<summary id="doc-summary">추출 문서 보기</summary>
+<div id="doc-pages"></div>
+</details>
+</section>
+
+<section class="card plain" aria-labelledby="ask-title">
+<div class="panel-head"><h2 id="ask-title"><span class="step">2</span>질문하기</h2></div>
+<p class="notice">질문마다 완전한 문장으로 써 주세요. 이전 질문은 이어서 해석하지 않습니다.</p>
+<label for="question">질문 (2,000자 이하)</label>
+<textarea id="question" name="question" maxlength="2000" spellcheck="false"></textarea>
+<input id="document_id" name="document_id" type="hidden" value="">
+<div class="ask-bar">
+<div class="counter"><span id="count">0</span> / 2,000</div>
+<button id="ask" class="btn primary" type="button" disabled hx-post="/ui/ask" hx-include="#question, #document_id" hx-target="#result" hx-swap="innerHTML">질문하기</button>
+</div>
+<p id="ask-status" class="msg" role="status"></p>
+<div id="result" aria-live="polite"></div>
+</section>
+</div>
+</main>{% endblock %}
+{% block script %}/static/app.js{% endblock %}

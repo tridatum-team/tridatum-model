@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true}'>
+{% if logged_in %}<meta name="csrf-token" content="{{ csrf_token }}">
+{% if must_change %}<meta name="must-change" content="1">
+{% endif %}{% block meta %}{% endblock %}<meta name="username" content="{{ username }}">
+{% endif %}<title>{% block title %}TRID 문서 확인{% endblock %}</title>
+<link rel="stylesheet" href="/static/common.css">
+</head>
+<body{% if logged_in %} hx-headers='{"X-Trid-Token": "{{ csrf_token }}"}'{% endif %}>
+{% block body %}{% endblock %}
+<script src="/static/vendor/htmx.min.js"></script>
+<script src="{% block script %}{% endblock %}"></script>
+</body>
+</html>

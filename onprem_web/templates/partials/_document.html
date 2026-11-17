@@ -1,0 +1,3 @@
+{% if pages %}<summary id="doc-summary">추출 문서 보기 ({{ pages|length }}쪽)</summary>
+<div id="doc-pages">{% for text in pages %}<div class="block"><span class="label">{{ forloop.counter }}쪽</span>{{ text }}</div>{% endfor %}</div>
+{% endif %}

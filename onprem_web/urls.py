@@ -4,12 +4,13 @@ from django.urls import path
 from onprem_web import web
 from onprem_web.accounts import views as accounts
 from onprem_web.workspace import api as workspace
+from onprem_web.workspace import ui
 
 handler404 = 'onprem_web.web.not_found'
 handler500 = 'onprem_web.web.server_error'
 
 urlpatterns = [
-    path('', accounts.home, name='home'),
+    path('', ui.home, name='home'),
     path('healthz', web.healthz),
     path('api/login', accounts.api_login),
     path('api/logout', accounts.api_logout),
@@ -17,6 +18,10 @@ urlpatterns = [
     path('api/load', workspace.load),
     path('api/ask', workspace.ask),
     path('api/clear', workspace.clear),
+    path('ui/ask', ui.ask),
+    path('ui/document', ui.document),
+    path('ui/clear', ui.clear),
+    path('ui/password', ui.password),
     path('static/<path:name>', web.static_file),
     path('fonts/<str:name>', web.font_file),
 ]

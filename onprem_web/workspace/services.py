@@ -117,8 +117,12 @@ def ask(entry: Entry, question, document_id, username: str, ip,
     return Result(200, {k: v for k, v in result.items() if k not in ('checked', 'raw_output')})
 
 
-def clear(entry: Entry, username: str, ip) -> Result:
+def clear(entry: Entry, username: str, ip, session=None) -> Result:
+    """Drop the document; with `session`, also forget that this browser uploaded one, so a later
+    question gets NO_DOCUMENT (REUPLOAD is only for documents lost to a restart)."""
     entry.document = None
     entry.document_id = None
+    if session is not None:
+        session.pop('had_document', None)
     log('clear', username, ip, 'ok')
     return Result(200, {'cleared': True})

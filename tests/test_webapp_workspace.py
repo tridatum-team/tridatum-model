@@ -334,8 +334,19 @@ class WorkspaceTests(TestCase):
         self.assertIsNone(entry.document)
         self.assertIsNone(entry.document_id)
         self.assertEqual(Event.objects.get(event='clear').result, 'ok')
+        self.assertNotIn('had_document', b.c.session)
+        # An explicit clear is not a restart: the first-upload message, not the re-upload one.
         r = b.ask('q', document_id)
-        self.assertEqual((r.status_code, r.json()), (409, {'error': REUPLOAD}))
+        self.assertEqual((r.status_code, r.json()), (409, {'error': FIRST}))
+
+    def test_clear_then_ask_without_document_id_match_says_upload_first(self):
+        b, _ = self.uploaded()
+        self.assertEqual(b.post('/api/clear').status_code, 200)
+        r = b.ask('q', 'any-id')
+        self.assertEqual((r.status_code, r.json()), (409, {'error': FIRST}))
+        r = b.upload()
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(b.c.session.get('had_document'))
 
     def test_revoked_during_generation_returns_401_and_drops_document(self):
         b, document_id = self.uploaded()

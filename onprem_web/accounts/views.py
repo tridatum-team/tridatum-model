@@ -1,4 +1,4 @@
-"""Auth JSON API (/api/login, /api/logout, /api/password) and a placeholder home page.
+"""Auth JSON API (/api/login, /api/logout, /api/password).
 
 Statuses and messages are those of trid.onprem.server login()/password()/post().
 """
@@ -8,9 +8,6 @@ from __future__ import annotations
 import json
 
 from django.contrib import auth
-from django.http import HttpResponse
-from django.middleware.csrf import get_token
-from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 
 from onprem_web import runtime
@@ -85,11 +82,19 @@ def api_password(request):
     body = _json_body(request)
     if body is None or not isinstance(body.get('current'), str) or not isinstance(body.get('new'), str):
         return json_response(400, {'error': '현재 비밀번호와 새 비밀번호를 입력해 주세요.'})
+    outcome = change_password(request, body['current'], body['new'])
+    if isinstance(outcome, str):
+        return json_response(400, {'error': outcome})
+    return outcome or json_response(200, {'ok': True})
+
+
+def change_password(request, current: str, new: str):
+    """Shared by /api/password and /ui/password: None on success, the error text, or a 401 response."""
     registry = runtime.get().registry
     user = request.user
     old_key = request.session.session_key
     try:
-        services.change_password(user, body['current'], body['new'], request.trid_ip)
+        services.change_password(user, current, new, request.trid_ip)
     except PermissionError:
         request.session.flush()
         registry.drop(old_key)
@@ -100,25 +105,10 @@ def api_password(request):
             # As in Auth.change_password: a lock from wrong current passwords ends all the user's sessions.
             end_user_sessions(user.username)
             request.session.flush()
-        return json_response(400, {'error': str(e)})
+        return str(e)
     auth.update_session_auth_hash(request, user)  # cycles the session key
     request.session['pv'] = user.password_version
     key = request.session.session_key
     registry.rekey(old_key, key)
     end_user_sessions(user.username, keep=key)
-    return json_response(200, {'ok': True})
-
-
-def home(request):
-    """Placeholder for GET / until Task 7 builds the real page; keeps the meta tags release_check reads."""
-    user = request.user
-    if not user.is_authenticated:
-        text = ('<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>로그인</title></head>'
-                '<body><form id="login" action="/api/login" method="post"></form></body></html>')
-    else:
-        must = '<meta name="must-change" content="1">' if user.must_change else ''
-        text = ('<!doctype html><html lang="ko"><head><meta charset="utf-8">'
-                f'<meta name="csrf-token" content="{escape(get_token(request))}">'
-                f'<meta name="username" content="{escape(user.username)}">{must}'
-                '<title>문서 근거 찾기</title></head><body></body></html>')
-    return HttpResponse(text.encode('utf-8'), content_type='text/html; charset=utf-8')
+    return None

@@ -95,12 +95,10 @@ def _still_valid(request, key, entry) -> bool:
     return Session.objects.filter(session_key=key, expire_date__gt=timezone.now()).exists()
 
 
-def _end_login(request, key, entry):
+def _end_login(request, key):
     """The login was revoked or expired meanwhile: drop its document and send 401 with a cleared cookie."""
     request.session.flush()
     runtime.get().registry.drop(key)
-    entry.document = None  # idempotent: the entry may already be out of the registry
-    entry.document_id = None
     return mw.login_required_response()
 
 
@@ -114,7 +112,7 @@ def load(request):
     result = services.load_pdf(entry, body, request.user.username, request.trid_ip,
                                attach=lambda doc, doc_id: registry.attach(key, entry, doc, doc_id))
     if result.status == 401:
-        return _end_login(request, key, entry)
+        return _end_login(request, key)
     if result.status == 200:
         request.session['had_document'] = True
     return json_response(result.status, result.data)
@@ -131,7 +129,7 @@ def ask(request):
                           still_valid=lambda: _still_valid(request, key, entry),
                           had_document=request.session.get('had_document') is True)
     if result.status == 401:
-        return _end_login(request, key, entry)
+        return _end_login(request, key)
     return json_response(result.status, result.data)
 
 
@@ -139,5 +137,5 @@ def clear(request):
     entry, body = _gate(request, SMALL_BODY)
     if entry is None:
         return body
-    result = services.clear(entry, request.user.username, request.trid_ip)
+    result = services.clear(entry, request.user.username, request.trid_ip, session=request.session)
     return json_response(result.status, result.data)
