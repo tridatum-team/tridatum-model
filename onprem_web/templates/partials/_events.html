@@ -1,0 +1,13 @@
+<div id="events-area">
+<div class="table-wrap spaced">
+<table>
+<thead><tr><th>시각</th><th>이벤트</th><th>계정</th><th>결과</th><th>IP</th><th>상세</th></tr></thead>
+<tbody id="events">{% for e in events %}<tr><td class="nowrap" data-ts="{{ e.ts }}">{{ e.time }}</td><td class="nowrap">{{ e.event }}</td><td class="nowrap">{{ e.username }}</td><td class="nowrap">{{ e.result }}</td><td class="nowrap">{{ e.ip }}</td><td class="detail"{% if e.title %} title="{{ e.title }}"{% endif %}>{{ e.detail }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+<div class="pager">
+<span id="page-info" class="notice">{{ page_info }}</span>
+<button id="prev" class="btn small" type="button" hx-get="/ui/admin/events" hx-include="#filter-form" hx-vals='{"offset": "{{ prev_offset }}"}' hx-target="#events-area" hx-swap="outerHTML"{% if not has_prev %} disabled{% endif %}>이전</button>
+<button id="next" class="btn small" type="button" hx-get="/ui/admin/events" hx-include="#filter-form" hx-vals='{"offset": "{{ next_offset }}"}' hx-target="#events-area" hx-swap="outerHTML"{% if not has_next %} disabled{% endif %}>다음</button>
+</div>
+</div>

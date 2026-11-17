@@ -1,0 +1,14 @@
+<div id="users-area">
+<div class="table-wrap">
+<table>
+<thead><tr><th>아이디</th><th>역할</th><th>상태</th><th>작업</th></tr></thead>
+<tbody id="users">{% for u in users %}<tr><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ u.status }}</td><td><div class="cell-actions">
+{% if u.can_unlock %}<button class="btn small" type="button" hx-post="/ui/admin/users/{{ u.username|urlencode }}" hx-vals='{"disabled": "0", "unlock": "1"}' hx-target="#users-area" hx-swap="outerHTML">잠금 해제</button>
+{% endif %}{% if u.can_disable %}<button class="btn small" type="button" hx-post="/ui/admin/users/{{ u.username|urlencode }}" hx-vals='{"disabled": "1"}' hx-target="#users-area" hx-swap="outerHTML">잠금</button>
+{% endif %}<button class="btn small" type="button" data-reset="{{ u.username }}" hx-post="/ui/admin/users/{{ u.username|urlencode }}" hx-target="#users-area" hx-swap="outerHTML">비밀번호 초기화</button>
+<button class="btn small" type="button" hx-post="/ui/admin/users/{{ u.username|urlencode }}" hx-vals='{"role": "{{ u.next_role }}"}' hx-confirm="{{ u.username }}의 역할을 {{ u.next_role_label }}(으)로 바꿀까요?" hx-target="#users-area" hx-swap="outerHTML">{{ u.next_role_label }}로 변경</button>
+</div></td></tr>{% endfor %}</tbody>
+</table>
+</div>
+<p id="users-message" class="msg" role="alert">{{ users_message }}</p>
+</div>

@@ -3,6 +3,7 @@ from django.urls import path
 
 from onprem_web import web
 from onprem_web.accounts import views as accounts
+from onprem_web.staffadmin import views as staffadmin
 from onprem_web.workspace import api as workspace
 from onprem_web.workspace import ui
 
@@ -22,6 +23,11 @@ urlpatterns = [
     path('ui/document', ui.document),
     path('ui/clear', ui.clear),
     path('ui/password', ui.password),
+    path('admin', staffadmin.admin_page),
+    path('ui/admin/users', staffadmin.create_user),
+    path('ui/admin/users/<str:username>', staffadmin.update_user),
+    path('ui/admin/events', staffadmin.events),
+    path('api/admin/events.csv', staffadmin.events_csv),
     path('static/<path:name>', web.static_file),
     path('fonts/<str:name>', web.font_file),
 ]

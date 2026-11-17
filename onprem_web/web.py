@@ -18,6 +18,7 @@ STATIC = {
     'common.css': 'text/css; charset=utf-8',
     'app.js': 'text/javascript; charset=utf-8',
     'login.js': 'text/javascript; charset=utf-8',
+    'admin.js': 'text/javascript; charset=utf-8',
     'vendor/htmx.min.js': 'text/javascript; charset=utf-8',
 }
 FONTS = {'PretendardVariable.woff2': 'font/woff2'}

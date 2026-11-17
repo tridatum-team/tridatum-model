@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}TRID 관리자{% endblock %}
+{% block body %}<header class="topbar">
+<div class="topbar-inner">
+<h1>TRID 관리자</h1>
+<div class="top-actions">
+<a class="btn small" href="/">직원 화면으로</a>
+<button id="logout" class="btn small" type="button">로그아웃</button>
+</div>
+</div>
+</header>
+<main>
+<section class="card plain" aria-labelledby="users-title" data-messages="users-message">
+<div class="section-head"><h2 id="users-title">계정</h2></div>
+{% include "partials/_users.html" %}
+<div class="subhead">
+<div class="section-head"><h2 id="create-title">계정 만들기</h2></div>
+<form id="create-form" class="create-form" aria-labelledby="create-title" method="post" action="/ui/admin/users" hx-post="/ui/admin/users" hx-target="#users-area" hx-swap="outerHTML">
+<div><label for="new-username">아이디</label><input id="new-username" name="username" type="text" autocomplete="off" required></div>
+<div><label for="new-password">임시 비밀번호 (10자 이상)</label><input id="new-password" name="password" type="text" autocomplete="off" minlength="10" required></div>
+<div><label for="new-role">역할</label><select id="new-role" name="role"><option value="user">직원</option><option value="admin">관리자</option></select></div>
+<div class="form-actions"><button class="btn primary" type="submit">만들기</button></div>
+</form>
+<p class="notice">새 계정과 초기화된 계정은 첫 로그인 때 비밀번호를 바꿔야 합니다.</p>
+</div>
+</section>
+
+<section class="card plain" aria-labelledby="events-title" data-messages="events-message">
+<div class="section-head">
+<h2 id="events-title">이용 기록</h2>
+<form id="csv-form" method="post" action="/api/admin/events.csv">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+<input type="hidden" name="since" value="">
+<input type="hidden" name="until" value="">
+<input type="hidden" name="username" value="">
+<input type="hidden" name="event" value="">
+<button id="csv" class="btn small" type="submit">CSV 내려받기</button>
+</form>
+</div>
+<form id="filter-form" class="filters" hx-get="/ui/admin/events" hx-target="#events-area" hx-swap="outerHTML">
+<div><label for="f-since">시작일</label><input id="f-since" type="date"></div>
+<div><label for="f-until">종료일</label><input id="f-until" type="date"></div>
+<div><label for="f-username">계정</label><input id="f-username" name="username" type="text" autocomplete="off"></div>
+<div><label for="f-event">이벤트</label><select id="f-event" name="event"><option value="">전체</option>{% for value, label in event_labels %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+<div class="form-actions"><button class="btn primary" type="submit">조회</button></div>
+</form>
+<p id="events-message" class="msg" role="alert"></p>
+{% include "partials/_events.html" %}
+</section>
+</main>{% endblock %}
+{% block script %}/static/admin.js{% endblock %}
