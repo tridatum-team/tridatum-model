@@ -26,7 +26,15 @@ from grounded_hf_lifecycle import (LIMITS, MAX_EXPORT, Client, authenticate_arch
     remaining, require, save, timestamp, validate_data, validate_cost_admission, validate_bootstrap_admission,
     verify_termination_ticket, verify_release, verify_gpu_observation, gpu_minor_from_xml,
     inference_mode, followup_mode, eight_mode as is_eight, fresh_mode, evaluation_mode,
-    lifetime_seconds, reserve_seconds)
+    public_evidence_mode, public_evidence_module as public_profile,
+    lifetime_seconds, reserve_seconds, work_deadline as lease_deadline, success_field)
+
+
+def public_evidence_module(plan):
+    if public_evidence_mode(plan):
+        import public_evidence_worker
+        return public_evidence_worker
+    return None
 
 
 def evaluation_module(plan):
@@ -38,7 +46,7 @@ def evaluation_module(plan):
 
 def require_known_profile(plan):
     require(plan.get('schema') == 'trid-grounded-hf-v1' or inference_mode(plan)
-            or is_eight(plan) or fresh_mode(plan) or evaluation_mode(plan),
+            or is_eight(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan),
             'Unknown worker profile; training fallback forbidden')
 
 
@@ -166,7 +174,7 @@ def stage_argv(plan, base, phase, seconds, gpu, uid, gid):
         'TasksMax=128', 'OOMPolicy=kill', 'NoNewPrivileges=yes', 'ProtectSystem=strict',
         'ProtectHome=yes', 'PrivateNetwork=yes', 'RestrictAddressFamilies=AF_UNIX',
         'DevicePolicy=closed', 'PrivateDevices=no', 'RestrictSUIDSGID=yes', 'UMask=0077',
-        'LimitCORE=0', f'LimitFSIZE={plan["limits"]["output_bytes"] if fresh or evaluation else LIMITS["output_bytes"]}', 'LimitNOFILE=256',
+        'LimitCORE=0', f'LimitFSIZE={plan["limits"]["output_bytes"] if fresh or evaluation or public_evidence_mode(plan) else LIMITS["output_bytes"]}', 'LimitNOFILE=256',
         f'WorkingDirectory={base / "code"}', f'ReadWritePaths={base / "output"}',
         'InaccessiblePaths=/root /home /run/credentials /var/lib/cloud',
         f'StandardOutput=append:{base / "output" / (phase + ".log")}',
@@ -289,14 +297,14 @@ def supervise_phase(plan, base, phase, gpu, uid, gid, deadline, owned_units, *, 
                 require(cgroup_empty(state) and state['Result'] == 'success' and state['ExecMainStatus'] == '0',
                         'Native stage failed: ' + phase + ': ' + str(state))
                 receipt = dict(phase=phase, state='complete', unit=unit, invocation=state['InvocationID'], gpu=observed)
-                if followup_mode(plan) or is_eight(plan) or fresh_mode(plan) or evaluation_mode(plan):
+                if followup_mode(plan) or is_eight(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
                     receipt.update(run_id=run, plan_sha256=digest(Path(base) / 'plan.json'),
                                    instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
                 return receipt
             time.sleep(0.5)
     finally:
         stopped = stop_unit(unit, run, min(deadline + 15, time.time() + 30))
-        if (fresh_mode(plan) or evaluation_mode(plan)) and 'receipt' in locals():
+        if (fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan)) and 'receipt' in locals():
             receipt.update(cleanup_verified=True, stopped_state=stopped)
         owned_units.remove(unit)
 
@@ -322,8 +330,10 @@ def export_inventory(root, maximum):
 
 def export_outputs(base, plan, report, deadline):
     base = Path(base)
-    output_limit = plan['limits']['output_bytes'] if fresh_mode(plan) or evaluation_mode(plan) else LIMITS['output_bytes']
-    archive_limit = min(plan['cost']['export_bytes'], 512 * 1024**2) if fresh_mode(plan) or evaluation_mode(plan) else MAX_EXPORT
+    output_limit = plan['limits']['output_bytes'] if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else LIMITS['output_bytes']
+    archive_limit = min(plan['cost']['export_bytes'], 512 * 1024**2) if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else MAX_EXPORT
+    if public_evidence_mode(plan) and report.get(success_field(plan)) is True:
+        public_profile(plan).validate_export(base / 'output', plan)
     inventory = export_inventory(base / 'output', output_limit)
     # Exact output membership is registered, not just an extension allowlist.
     permitted = set(plan['output_allowlist'])
@@ -362,7 +372,7 @@ def publish_outputs(base, plan, report, client, deadline, *, training_complete=F
         status['training_success'] = True
     export = export_outputs(base, plan, status, deadline)
     ident = plan['identity']
-    bounded_client = (fresh_mode(plan) or evaluation_mode(plan)) and hasattr(client, 'deadline')
+    bounded_client = (fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan)) and hasattr(client, 'deadline')
     if bounded_client:
         previous_deadline = client.deadline
         client.deadline = min(previous_deadline, deadline) if previous_deadline is not None else deadline
@@ -396,7 +406,7 @@ def cleanup_fresh_scratch(base, units, deadline):
 
 def replacement_egress_allowance(plan):
     cap = plan['network']['egress_byte_cap']
-    if fresh_mode(plan) or evaluation_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
         # Bootstrap's independent counter is deleted during handoff. Reserve
         # its entire possible consumption, even when actual traffic was lower.
         bootstrap_reservation = 16 * 1024**2
@@ -544,6 +554,7 @@ def install_pinned_runtime(plan, base, deadline):
 def bootstrap(plan, plan_sha, base):
     require_known_profile(plan)
     evaluation = evaluation_module(plan)
+    public = public_evidence_module(plan)
     require(os.geteuid() == 0 and platform.machine() == 'x86_64', 'Root x86_64 supervisor required')
     ordered = ordered_module(plan)
     eight = eight_module(plan)
@@ -559,18 +570,21 @@ def bootstrap(plan, plan_sha, base):
             and identity['availabilityZone'] == plan['network']['availability_zone'], 'IMDS instance identity mismatch')
     # Pending time is only an early, conservative local timer; release replaces
     # it with the controller's observed EC2 LaunchTime deadline.
-    deadline = timestamp(identity['pendingTime']) + lifetime_seconds(plan)
+    pending_time = timestamp(identity['pendingTime'])
+    deadline = lease_deadline(plan, pending_time) if public else pending_time + lifetime_seconds(plan)
     require(time.time() < deadline - reserve_seconds(plan), 'Bootstrap already outside workload window')
     shutdown_at = dt.datetime.fromtimestamp(deadline - 60).strftime('%H:%M')
     command(['/sbin/shutdown', '-c'], initial_deadline)
     command(['/sbin/shutdown', '-h', shutdown_at], initial_deadline)
-    success_key = 'evaluation_success' if evaluation else ('experimental_success' if eight else ('inference_success' if ordered else 'training_success'))
+    success_key = success_field(plan)
     report = {success_key: False}
     training_accepted = False
     if fresh:
         report.update(completion_scope=fresh.E.COMPLETION_SCOPE, quality_accepted=False, cloud_evaluation=False)
     if evaluation:
         report.update(completion_scope=evaluation.E.COMPLETION_SCOPE, quality_accepted=False)
+    if public:
+        report.update(completion_scope=public_profile(plan).COMPLETION_SCOPE, quality_accepted=False)
     report.update(stages=[], run_id=ident['run_id'],
                   instance_id=identity['instanceId'], plan_sha256=plan_sha)
     units, export, client = [], None, Client(ident, deadline=deadline - 30, request_limit=plan['cost']['get_requests'] + 8)
@@ -667,7 +681,7 @@ def bootstrap(plan, plan_sha, base):
         (base / 'output').mkdir(mode=0o700)
         # Fresh scratch shares the historical 2GiB/4096-inode host envelope,
         # but never the exported namespace. Neither mount can grow unbounded.
-        output_mount = 'size=512M,nr_inodes=2048' if fresh or evaluation else 'size=2G,nr_inodes=4096'
+        output_mount = 'size=512M,nr_inodes=2048' if fresh or evaluation or public else 'size=2G,nr_inodes=4096'
         command(['mount', '-t', 'tmpfs', '-o', output_mount + ',nosuid,nodev,noexec,mode=0700',
                  'trid-output', str(base / 'output')], acquisition_deadline)
         if fresh or evaluation:
@@ -686,7 +700,7 @@ def bootstrap(plan, plan_sha, base):
             os.chown(scratch_root / name, account.pw_uid, account.pw_gid)
         report['runtime_unit'] = supervise_phase(plan, base, 'runtime', gpu, account.pw_uid, account.pw_gid,
                                                  acquisition_deadline, units,
-                                                 attempt=report.setdefault('phase_attempt', {}) if fresh or evaluation else None)
+                                                 attempt=report.setdefault('phase_attempt', {}) if fresh or evaluation or public else None)
         report['runtime'] = json.loads((base / 'output/runtime.json').read_text())
         if ordered:
             ordered.run_ordered(sys.modules[__name__], plan, base, report, client, gpu, account,
@@ -700,6 +714,9 @@ def bootstrap(plan, plan_sha, base):
         elif evaluation:
             evaluation.run_experiment(sys.modules[__name__], plan, base, report, gpu, account,
                                       work_deadline, acquisition_deadline, budget, hosts, units)
+        elif public:
+            public.run_experiment(sys.modules[__name__], plan, base, report, gpu, account,
+                                  work_deadline, acquisition_deadline, budget, hosts, units)
         else:
             for row in plan['model']['files']:
                 download(row, base / 'model', hosts, acquisition_deadline, budget)
@@ -737,6 +754,12 @@ def bootstrap(plan, plan_sha, base):
             if not fresh and not evaluation and (base / 'output/capacity').exists():
                 require(not (base / 'output/capacity').is_symlink(), 'Synthetic scratch ownership differs')
                 shutil.rmtree(base / 'output/capacity')
+            if public:
+                for name in ('tmp', 'cache'):
+                    scratch = base / 'output' / name
+                    if scratch.exists():
+                        require(not scratch.is_symlink(), 'Public evidence scratch ownership differs')
+                        shutil.rmtree(scratch)
             if fresh or evaluation:
                 cleanup_fresh_scratch(base, units, deadline - 60)
             if (base / 'output').exists():
@@ -745,7 +768,7 @@ def bootstrap(plan, plan_sha, base):
                                          training_complete=training_accepted)
         except Exception as exc:
             report['export_error'] = str(exc)
-            if fresh or evaluation:
+            if fresh or evaluation or public:
                 report[success_key] = False
         try:
             save(base / 'completion.json', report)
@@ -810,7 +833,7 @@ def runtime_stage(plan, base):
     torch = native_runtime(plan, base)
     receipt = dict(packages=actual, torch=torch.__version__, cuda=torch.version.cuda,
         count=torch.cuda.device_count(), bf16=torch.cuda.is_bf16_supported(), name=torch.cuda.get_device_name(0))
-    if followup_mode(plan) or is_eight(plan) or fresh_mode(plan) or evaluation_mode(plan):
+    if followup_mode(plan) or is_eight(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
         receipt.update(run_id=plan['identity']['run_id'], plan_sha256=digest(Path(base) / 'plan.json'),
                        instance_id=json.loads((Path(base) / 'release.json').read_text())['instance_id'])
     save(Path(base) / 'output/runtime.json', receipt)
@@ -883,6 +906,8 @@ def capacity_stage(plan, base, torch):
     tokenized_rows = len(items)
     del items
     cases = validate_data(Path(base) / 'code', plan)
+    if public_evidence_mode(plan):
+        cases = cases['evaluation_inputs']
     if is_eight(plan):
         cases = cases['development_inputs']
         valid, valid_dropped = trainer['build_items'](tok, manifest['valid'], manifest_path.parent,
@@ -1044,7 +1069,7 @@ def main():
         return
     expected_limits = dict(LIMITS, lifetime_seconds=lifetime_seconds(plan), reserve_seconds=reserve_seconds(plan),
                            output_bytes=512 * 1024**2)
-    require(plan['limits'] == (expected_limits if fresh_mode(plan) or evaluation_mode(plan) else LIMITS), 'Native fixed resource policy differs')
+    require(plan['limits'] == (expected_limits if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else LIMITS), 'Native fixed resource policy differs')
     if args.phase == 'runtime':
         runtime_stage(plan, args.base)
         return
@@ -1063,6 +1088,10 @@ def main():
     evaluation = evaluation_module(plan)
     if evaluation:
         evaluation.child_stage(sys.modules[__name__], plan, args.base, args.phase)
+        return
+    public = public_evidence_module(plan)
+    if public:
+        public.child_stage(sys.modules[__name__], plan, args.base, args.phase)
         return
     require(args.phase in ('capacity', 'baseline', 'train', 'adapter'), 'Unknown training stage')
     validate_model(args.base / 'model', plan)

@@ -54,6 +54,14 @@ Approval schema is trid-fresh-eight-training-approval-v2 with exactly:
 Success means authenticated CUDA capacity/training/export plus positive compute
 cleanup only: training_success, never quality acceptance or CUDA evaluation.
 
+Public-evidence training/evaluation uses the same commands with the distinct
+trid-public-evidence-prerequisites-v1 registration and
+trid-public-evidence-gpu-plan-v1 plan. It requires a new run-bound authorization,
+approved cost/resource envelope, future absolute UTC deadline and current
+prerequisite observations. No historical authorization or fixed-dollar receipt
+is reused. Public projection preparation is available offline through
+public_evidence_experiment.py; private references never enter the bundle.
+
 Sampling evaluation uses the same commands with a fresh registration/run/state:
   schema:trid-cuda-evaluation-prerequisites-v1,
   decoder_profile:qwen3_nonthinking_sampling,
@@ -110,6 +118,7 @@ else:
 require = lifecycle.require
 SCHEMA = 'trid-fresh-eight-prerequisites-v2'
 EVALUATION_SCHEMA = 'trid-cuda-evaluation-prerequisites-v1'
+PUBLIC_EVIDENCE_SCHEMA = 'trid-public-evidence-prerequisites-v1'
 HELPERS = {'scripts/aws_eval/fresh_eight_launch.py', 'scripts/aws_eval/grounded_hf_lifecycle.py'}
 ROLE_KEYS = ('instance_role', 'scheduler_role')
 
@@ -173,6 +182,16 @@ def evaluation_registration(reg):
     return reg.get('schema') == EVALUATION_SCHEMA
 
 
+def public_evidence_registration(reg):
+    return reg.get('schema') == PUBLIC_EVIDENCE_SCHEMA
+
+
+def registration_plan_schema(reg):
+    if public_evidence_registration(reg):
+        return lifecycle.PUBLIC_EVIDENCE_SCHEMA
+    return lifecycle.EVALUATION_SCHEMA if evaluation_registration(reg) else lifecycle.FRESH_SCHEMA
+
+
 def validate_lineage(root, pin):
     """Only the controller opens the original full recovery evidence closure."""
     import sys
@@ -192,7 +211,16 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
               'resource_envelope', 'aggregate_ledger', 'sources', 'iam', 'network', 'bucket_lifecycle_before',
               'retention_days', 'lifecycle_rule_ids', 'bundle'}
     evaluation = evaluation_registration(reg)
-    require(active or evaluation, 'Historical prerequisite admission is CUDA-evaluation-only')
+    public = public_evidence_registration(reg)
+    require(active or evaluation or public, 'Historical prerequisite admission requires a bounded profile')
+    if public:
+        fields = (fields - {'aggregate_ledger'}) | {
+            'workload', 'recipe', 'limits', 'lifetime', 'cost', 'absolute_termination_deadline',
+            'data', 'phase_seconds', 'ancillary_evidence', 'bootstrap_admission'}
+        shell = dict(reg, schema=lifecycle.PUBLIC_EVIDENCE_SCHEMA)
+        lifecycle.absolute_deadline(shell)
+        if active and launch_window:
+            lifecycle.validate_launch_window(shell, time.time())
     if evaluation:
         fields = (fields - {'aggregate_ledger'}) | {'lineage_binding'}
         if reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE:
@@ -203,7 +231,7 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
             lifecycle.absolute_deadline(shell)
             if active and launch_window:
                 lifecycle.validate_launch_window(shell, time.time())
-    require(set(reg) == fields and reg['schema'] in (SCHEMA, EVALUATION_SCHEMA) and reg['approved'] is True
+    require(set(reg) == fields and reg['schema'] in (SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA) and reg['approved'] is True
             and reg['automatic_retry'] is False, 'Exact parent prerequisite registration required')
     ident = reg['identity']
     run = ident['run_id']
@@ -232,16 +260,18 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
         pin_bytes(root, reg['lineage_binding'])
         if active:
             validate_lineage(root, reg['lineage_binding'])
-    else:
+    elif not public:
         pin_bytes(root, reg['aggregate_ledger'])
     envelope = bound_json(root, reg['resource_envelope'])
     pin_bytes(root, envelope['cost_evidence'])
-    validator = lifecycle.validate_evaluation_resources if evaluation else lifecycle.validate_fresh_resources
-    resource_plan = dict(reg, instance_type='g6e.2xlarge')
-    if evaluation and reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE:
-        resource_plan.update(schema=lifecycle.EVALUATION_SCHEMA,
-                             workload={'decoder_profile': reg['decoder_profile']})
-    validator(root, resource_plan)
+    resource_plan = dict(reg, schema=registration_plan_schema(reg), instance_type='g6e.2xlarge')
+    if public:
+        lifecycle.public_evidence_module(resource_plan).validate_resources(root, resource_plan, active=active and launch_window)
+    else:
+        validator = lifecycle.validate_evaluation_resources if evaluation else lifecycle.validate_fresh_resources
+        if evaluation and reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE:
+            resource_plan['workload'] = {'decoder_profile': reg['decoder_profile']}
+        validator(root, resource_plan)
     require(envelope['billing_hard_cap'] is False, 'Resource budget is conditional, not a billing hard cap')
     require(reg['retention_days'] == envelope['s3_expiration_days']
             and envelope['multipart_abort_days'] == 1, 'Envelope retention differs')
@@ -259,7 +289,7 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
         require(set(policy) == {'arn', 'trust', 'inline'} and policy['arn'] ==
                 f"arn:aws:iam::{ident['account']}:role/{ident[key]}" and policy['inline'], 'Exact fresh role ARN/policies required')
         require(all(re.fullmatch(r'[\w+=,.@-]{1,128}', n) for n in policy['inline']), 'Invalid inline policy name')
-    shell = dict(schema=lifecycle.EVALUATION_SCHEMA if evaluation else lifecycle.FRESH_SCHEMA, identity=ident, iam=reg['iam'])
+    shell = dict(schema=registration_plan_schema(reg), identity=ident, iam=reg['iam'])
     lifecycle.validate_worker_policy(shell)
     lifecycle.verify_scheduler_trust(reg['iam']['scheduler_role'], ident)
     require(reg['iam']['instance_role']['trust'] == {'Version': '2012-10-17', 'Statement': [
@@ -273,6 +303,14 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
     require(set(reg['bundle']) == {'local_path', 'files'}, 'Explicit bundle files only')
     safe_path(root, reg['bundle']['local_path'])
     lifecycle.pins(reg['bundle']['files'], 256 * 1024**2)
+    if public:
+        files = {row['path']: row for row in reg['bundle']['files']}
+        require(all(files.get(reg[key]['path']) == reg[key] for key in ('authorization', 'resource_envelope'))
+                and all(files.get(name) == pin for name, pin in source_pins.items()),
+                'Public evidence bundle must bind fresh authorization and current source closure')
+        require(not any(name.endswith(('.tar', '.tar.gz', '.zip')) for name in files),
+                'Historical archives must not enter the public evidence bundle')
+        lifecycle.public_evidence_module(resource_plan).validate_registration_bundle(root, reg, files)
     if evaluation:
         files = {row['path']: row for row in reg['bundle']['files']}
         require(all(files.get(reg[key]['path']) == reg[key]
@@ -306,6 +344,9 @@ def lifecycle_merge(reg):
 def prepare_bundle(reg, root, state):
     """No recursive collection, symlinks, credentials, implicit pins or wall clock."""
     files = lifecycle.pins(reg['bundle']['files'], 256 * 1024**2)
+    if public_evidence_registration(reg):
+        shell = dict(reg, schema=lifecycle.PUBLIC_EVIDENCE_SCHEMA)
+        lifecycle.public_evidence_module(shell).validate_registration_bundle(root, reg, files)
     target = safe_path(root, reg['bundle']['local_path'])
     require(reg['bundle']['local_path'] not in files, 'Bundle cannot contain itself')
     for name in files:
@@ -329,7 +370,7 @@ def prepare_bundle(reg, root, state):
     bundle = dict(reg['bundle'], bytes=target.stat().st_size, sha256=lifecycle.digest(target),
                   unpacked_bytes=sum(p['bytes'] for p in files.values()))
     envelope = bound_json(root, reg['resource_envelope'])
-    cap = 128 * 1024**2 if evaluation_registration(reg) else 32 * 1024**2
+    cap = 128 * 1024**2 if evaluation_registration(reg) or public_evidence_registration(reg) else 32 * 1024**2
     require(bundle['bytes'] <= envelope['bundle_bytes_max'] <= cap, 'Bundle too large')
     lifecycle.authenticate_archive(target, bundle)
     return record(Path(state) / 'bundle-prepared.json', bundle)
@@ -544,12 +585,19 @@ def prepare_prerequisites(reg, registration_sha, state, client):
 
 def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha, *, active=True):
     evaluation = evaluation_registration(reg)
-    require(active or evaluation, 'Historical final-plan admission is CUDA-evaluation-only')
-    require((lifecycle.evaluation_mode(plan) if evaluation else lifecycle.fresh_mode(plan))
+    public = public_evidence_registration(reg)
+    require(active or evaluation or public, 'Historical final-plan admission requires a bounded profile')
+    require(plan.get('schema') == registration_plan_schema(reg)
             and plan['identity'] == reg['identity'] and plan['iam'] == reg['iam']
             and plan['controller_arn'] == reg['controller_arn'] and plan['authorization'] == reg['authorization']
             and plan['resource_envelope'] == reg['resource_envelope'],
             'Final plan not bound to parent registration')
+    if public:
+        require(all(plan[key] == reg[key] for key in
+                    ('workload', 'recipe', 'limits', 'lifetime', 'cost', 'absolute_termination_deadline',
+                     'data', 'phase_seconds', 'ancillary_evidence'))
+                and plan['runtime']['bootstrap']['admission'] == reg['bootstrap_admission'],
+                'Final public evidence workload, budget or deadline differs from registration')
     if evaluation:
         require(plan['workload']['lineage_binding'] == reg['lineage_binding'],
                 'Final CUDA lineage differs from parent registration')
@@ -560,7 +608,7 @@ def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha,
                     'Final absolute deadline differs from parent registration')
         if active:
             validate_lineage(root, reg['lineage_binding'])
-    else:
+    elif not public:
         require(plan['aggregate_ledger'] == reg['aggregate_ledger'], 'Final aggregate ledger differs')
     envelope = bound_json(root, reg['resource_envelope'])
     require(plan['bundle']['bytes'] <= envelope['bundle_bytes_max']
@@ -916,7 +964,7 @@ def main():
         plan = lifecycle.read_bound(args.plan, args.plan_sha256) if args.plan else None
         if plan is not None:
             require(plan['identity'] == reg['identity']
-                    and (lifecycle.evaluation_mode(plan) if evaluation_registration(reg) else lifecycle.fresh_mode(plan)),
+                    and plan.get('schema') == registration_plan_schema(reg),
                     'Wrong final plan identity')
         needs_final = args.action in ('validate', 'stage', 'launch')
         if needs_final:
@@ -934,7 +982,7 @@ def main():
             result = stage(reg, args.registration_sha256, args.root, args.state, plan, args.plan_sha256, args.plan, client)
         elif args.action == 'launch':
             client.deadline = time.time() + lifecycle.lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
-            if lifecycle.sampling_mode(plan):
+            if lifecycle.sampling_mode(plan) or lifecycle.public_evidence_mode(plan):
                 client.deadline = min(client.deadline, lifecycle.absolute_deadline(plan))
             client.request_limit = plan['cost']['control_requests']
             result = lifecycle.launch(plan, approval, args.plan_sha256, args.root, args.state, client)

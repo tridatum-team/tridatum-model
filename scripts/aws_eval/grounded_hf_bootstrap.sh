@@ -49,7 +49,8 @@ p = json.loads(pathlib.Path('plan.json').read_text())
 b = p['bundle']
 assert p.get('schema') in ('trid-grounded-hf-v1', 'trid-ordered-hf-inference-v1',
     'trid-hf14-followup-v1', 'trid-eight-sft-experiment-v1',
-    'trid-fresh-eight-training-experiment-v2', 'trid-fresh-eight-cuda-evaluation-v1')
+    'trid-fresh-eight-training-experiment-v2', 'trid-fresh-eight-cuda-evaluation-v1',
+    'trid-public-evidence-gpu-plan-v1')
 assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= 128 * 1024**2
 if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
@@ -81,6 +82,21 @@ if p.get('schema') == 'trid-fresh-eight-cuda-evaluation-v1':
     assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
     assert p['network']['egress_byte_cap'] <= 2 * 1024**3
     assert not {'recipe', 'data', 'aggregate_ledger', 'evaluation'} & set(p)
+if p.get('schema') == 'trid-public-evidence-gpu-plan-v1':
+    lease, limits, cost = p['lifetime'], p['limits'], p['cost']
+    assert type(lease['total_seconds']) is int and 1200 < lease['total_seconds'] <= 28800
+    assert lease == dict(total_seconds=limits['lifetime_seconds'] + 900,
+                         termination_grace_seconds=900, automatic_extension=False)
+    assert limits['reserve_seconds'] == 300 and cost['termination_grace_seconds'] == 900
+    assert p['absolute_termination_deadline'].endswith('Z')
+    deadline = datetime.datetime.fromisoformat(p['absolute_termination_deadline'].replace('Z', '+00:00')).timestamp()
+    assert int(sys.argv[2]) == deadline - 900 and time.time() < deadline - 900
+    assert limits['output_bytes'] == 512 * 1024**2
+    assert 0 < cost['export_bytes'] <= limits['output_bytes']
+    assert type(cost['cap_usd']) in (int, float) and 0 < cost['cap_usd'] < float('inf')
+    assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
+    assert p['network']['egress_byte_cap'] <= 2 * 1024**3
+    assert not {'aggregate_ledger', 'evaluation'} & set(p)
 assert len(b['files']) <= 4096
 files = {r['path']: r for r in b['files']}
 assert len(files) == len(b['files']) and sum(r['bytes'] for r in files.values()) <= b['unpacked_bytes'] <= 256 * 1024**2

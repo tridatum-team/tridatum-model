@@ -1,0 +1,3113 @@
+{
+  "schema": "trid-evidence-annotations-v1",
+  "author_identity": "EvidenceCurator",
+  "facts": [
+    {
+      "parent_id": "expanded-train-mois-001",
+      "parent_case_sha256": "6966c26066c54d5137f5d8314cda29b907735c188e74d192be6480f144a5c7d6",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "사업지원국장",
+          "predicate": "관장한다",
+          "object": "지방우정청 당직근무에 대한 전반적인 지휘감독",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 지방우정청 당직근무에 대한 전반적인 지휘감독은 사업지원국장이 관장한다."
+        },
+        {
+          "id": "F2",
+          "subject": "총괄국장",
+          "predicate": "관장한다",
+          "object": "각급 관내관서 당직근무에 대한 전반적인 지휘감독",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "② 각급 관내관서 당직근무에 대한 전반적인 지휘감독은 총괄국장이 관장한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-033",
+      "parent_case_sha256": "e8a83e8b22e4e0078a98c42298432feea84de473899c42ce931d762b048b3064",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "공소청기록관리위원회",
+          "predicate": "둔다",
+          "object": "공소청 본청 소속",
+          "qualifiers": {
+            "purpose": "공소청 기록물관리에 관한 다음 각 호의 사항을 심의"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "공소청 기록물관리에 관한 다음 각 호의 사항을 심의하기 위하여 공소청 본청 소속으로 공소청기록관리위원회(이하 \"위원회\"라 한다)를 둔다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-065",
+      "parent_case_sha256": "7d89fa8f6e1537766788de356f0571c42989296932192ef54ac2fb597b094dbb",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "기금지출관",
+          "predicate": "한다",
+          "object": "기금담당부서의 5급 이상 공무원",
+          "qualifiers": {
+            "scope": "과학기술진흥기금"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 과학기술진흥기금의 기금수입징수관, 기금재무관, 기금채권관리관 및 기금재산관리관은 과학기술정보통신부 사무분장규정에서 정하는 기금담당부서의 장으로 하고, 기금지출관은 기금담당부서의 5급 이상 공무원으로 한다."
+        },
+        {
+          "id": "F2",
+          "subject": "과학기술정보통신부장관",
+          "predicate": "수행하게 할 수 있다",
+          "object": "제1항의 업무",
+          "qualifiers": {
+            "actor_delegated_to": "수탁기관"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "② 과학기술정보통신부장관은 수탁기관에 제1항의 업무를 수행하게 할 수 있다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-097",
+      "parent_case_sha256": "4e0df16b3267cf190ffa476bf107eb65b8d3f416fdd2a35afcdfd85e426343d8",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "근무성적평정의 평가자",
+          "predicate": "정한다",
+          "object": "평가대상 공무원의 업무수행 과정 및 성과를 관찰할 수 있는 상급 또는 상위 감독자 중에서",
+          "qualifiers": {
+            "scope": "「공무원 성과평가 등에 관한 규정」 제8조 및 제13조에 의한 근무성적평정",
+            "implementation": "근무성적평정계획 수립 시 직급단위별로 세부사항을 정하여 운영"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "「공무원 성과평가 등에 관한 규정」 제8조 및 제13조에 의한 근무성적평정의 평가자는 평가대상 공무원의 업무수행 과정 및 성과를 관찰할 수 있는 상급 또는 상위 감독자 중에서, 확인자는 평가자의 상급 또는 상위 감독자 중에서 정하되, 근무성적평정계획 수립 시 직급단위별로 세부사항을 정하여 운영한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-129",
+      "parent_case_sha256": "0ec87b1ac96cf1cecb24b464b35a95d844346a4d42d52c43dee53e1e757b8891",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "순자산",
+          "predicate": "말한다",
+          "object": "자산에서 부채를 뺀 금액",
+          "qualifiers": {
+            "categories": "기본순자산, 적립금 및 잉여금, 순자산조정"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "①순자산은 자산에서 부채를 뺀 금액을 말하며, 기본순자산, 적립금 및 잉여금, 순자산조정으로 구분한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-161",
+      "parent_case_sha256": "79901cab82a38108acdd8ed6f9a859852f11b645061a6c5cbde44dc64c6c7033",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "임용권자 또는 임용제청권자",
+          "predicate": "말한다",
+          "object": "국립수산과학원장 및 원장으로부터 임용권의 전부 또는 일부를 재위임받은 부장 및 소속기관의 장",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "1. \"임용권자 또는 임용제청권자\"란 국립수산과학원장(이하 \"원장\"이라 한다) 및 원장으로부터 임용권의 전부 또는 일부를 재위임받은 부장 및 소속기관의 장을 말한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-193",
+      "parent_case_sha256": "bfab15bcddea5825c7f5dc4bdc71ee3f04c0ae62ab160af7aa21d8604baa47ec",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "청원경찰에게 지급된 가스분사기 등의 정 관리책임자",
+          "predicate": "같다",
+          "object": "사용부서의 장",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 청원경찰에게 지급된 가스분사기 등에 대한 관리책임자는 다음 각 호와 같다.\n  1. 정: 사용부서의 장"
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-225",
+      "parent_case_sha256": "a3cbe3d12c5469c77a0945837307899ade8d63171147c0a93eea81fa1017c3a2",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "국방부장관",
+          "predicate": "임용한다",
+          "object": "예비전력관리 군무원 5급 이상",
+          "qualifiers": {
+            "prerequisite": "각군 참모총장의 임용건의"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 예비전력관리 군무원 5급 이상은 각군 참모총장의 임용건의에 의하여 국방부장관이 임용하고, 군무원 6급 이하는 각군 참모총장이 임용한다."
+        },
+        {
+          "id": "F2",
+          "subject": "각군 참모총장",
+          "predicate": "임용한다",
+          "object": "예비전력관리 군무원 6급 이하",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 예비전력관리 군무원 5급 이상은 각군 참모총장의 임용건의에 의하여 국방부장관이 임용하고, 군무원 6급 이하는 각군 참모총장이 임용한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-257",
+      "parent_case_sha256": "0ec44c919fa058a25825d05600a208575313c520e158f34470f61f4f9b92816c",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "조합등",
+          "predicate": "말한다",
+          "object": "조합(청산인을 포함한다) 추진위원장 또는 사업시행자인 토지등소유자",
+          "qualifiers": {
+            "scope": "이 기준에서 정하는 용어"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "1. \"조합등\"이란 조합(청산인을 포함한다) 추진위원장 또는 사업시행자인 토지등소유자를 말한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-289",
+      "parent_case_sha256": "8db0e57f4c98c342d76ed3570bf1dbf3701002db9097267efc7a6b081775354a",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "직전 사업연도말 자산총액이 1천억원 미만인 주권상장법인",
+          "predicate": "통보할 수 있다",
+          "object": "해당 내용을 거래소에",
+          "qualifiers": {
+            "condition": "감사인이 가치평가 등에 관한 자료를 외부기관이 작성하도록 회사에 요구하는 경우"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 직전 사업연도말 자산총액이 1천억원 미만인 주권상장법인(이하 이 조에서 \"소규모 주권상장법인\"이라 한다)은 감사인이 가치평가 등에 관한 자료를 외부기관이 작성하도록 회사에 요구하는 경우 해당 내용을 거래소에 통보할 수 있다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-321",
+      "parent_case_sha256": "d6f0084b9b0b9f868503b7220744a49a4ac4892c4dfe798fa03562082fb7273a",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "지도ㆍ감독책임자",
+          "predicate": "말한다",
+          "object": "청원경찰의 관리 및 운영을 주관하는 부서의 장",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "1의2. \"지도ㆍ감독책임자\"란 청원경찰의 관리 및 운영을 주관하는 부서(이하 \"운영부서\")의 장을 말한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-train-mois-353",
+      "parent_case_sha256": "13aff933bfc63722b45bb3a808cb1478aeb8d6412b3a4147d00f48c56d517159",
+      "split": "train",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "인사위원회",
+          "predicate": "구성한다",
+          "object": "위원장 1명을 포함하여 5명 이상 7명 이하의 위원",
+          "qualifiers": {},
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 인사위원회는 위원장 1명을 포함하여 5명 이상 7명 이하의 위원으로 구성한다."
+        },
+        {
+          "id": "F2",
+          "subject": "위원 중에서 최상위 계급 또는 선임의 공무원",
+          "predicate": "대행한다",
+          "object": "위원장의 직무",
+          "qualifiers": {
+            "condition": "위원장이 부득이한 사유로 직무를 수행할 수 없을 때"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "③ 위원장이 부득이한 사유로 직무를 수행할 수 없을 때에는 위원 중에서 최상위 계급 또는 선임의 공무원이 그 직무를 대행한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-eval-mois-001",
+      "parent_case_sha256": "1bf134baab053c27e4c1c9d0bd511b01d835ac551ac6856c46a76d54fb64dea1",
+      "split": "development",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "안전특별사법경찰관",
+          "predicate": "보고하여야 한다",
+          "object": "소속관서의 장에게",
+          "qualifiers": {
+            "condition": "구속영장을 신청할 때"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "② 안전특별사법경찰관이 구속영장을 신청할 때에는 소속관서의 장에게 보고하여야 한다."
+        },
+        {
+          "id": "F2",
+          "subject": "소속관서의 장",
+          "predicate": "즉시 보고하여야 한다",
+          "object": "행정안전부장관에게",
+          "qualifiers": {
+            "condition": "자치단체의 장 등 사회적 관심이 큰 인사에 대한 구속영장 신청 등 중요한 사건인 경우"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "③ 소속관서의 장은 자치단체의 장 등 사회적 관심이 큰 인사에 대한 구속영장 신청 등 중요한 사건인 경우 행정안전부장관에게 즉시 보고하여야 한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-eval-mois-017",
+      "parent_case_sha256": "55c40e2db5a62e1b648030b616fe9be2114b763d33743696ab745858751df65e",
+      "split": "development",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "자원관리 데이터베이스",
+          "predicate": "포함한다",
+          "object": "자원의 종류, 수량 및 유효기간",
+          "qualifiers": {
+            "purpose": "재난관리 업무별 자원을 정형화하고, 자원을 관리할 수 있도록"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "재난관리 업무별 자원을 정형화하고, 자원을 관리할 수 있도록 다음 각호의 사항을 포함한 자원관리 데이터베이스를 구축한다. \n  1. 자원의 종류, 수량 및 유효기간"
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-eval-mois-033",
+      "parent_case_sha256": "9b19c11847b52ad09a41d24c7ee1f5b02040abfa68c5d8af44699cf9f29834fc",
+      "split": "development",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "신청기관의 장",
+          "predicate": "이의를 제기할 수 있다",
+          "object": "협의기관의 장에게",
+          "qualifiers": {
+            "condition": "사전협의 결과에 이의가 있는 때",
+            "deadline": "그 결과를 통보받은 날부터 15일 이내",
+            "required_attachment": "소명자료"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "① 신청기관의 장은 사전협의 결과에 이의가 있는 때에는 그 결과를 통보받은 날부터 15일 이내에 소명자료를 첨부하여 협의기관의 장에게 이의를 제기할 수 있다."
+        },
+        {
+          "id": "F2",
+          "subject": "협의기관의 장",
+          "predicate": "통보하여야 한다",
+          "object": "재검토한 결과를 신청기관의 장에게",
+          "qualifiers": {
+            "condition": "특별한 사정이 없는 한",
+            "deadline": "이의가 제기 된 날로부터 15일 이내",
+            "exception": "기한 내에 이의제기 결과를 통보할 수 없는 불가피한 사유가 있을 경우, 그 사유 및 결과통보예정일을 지체 없이 신청기관의 장에게 통보"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "② 협의기관의 장은 특별한 사정이 없는 한 이의가 제기 된 날로부터 15일 이내에 재검토한 결과를 신청기관의 장에게 통보하여야 하며 기한 내에 이의제기 결과를 통보할 수 없는 불가피한 사유가 있을 경우, 그 사유 및 결과통보예정일을 지체 없이 신청기관의 장에게 통보하여야 한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    },
+    {
+      "parent_id": "expanded-eval-mois-049",
+      "parent_case_sha256": "a33335bc987d8778ffd0030897afcbd50594ea2ae05532776a724ecbf9a56f92",
+      "split": "development",
+      "facts": [
+        {
+          "id": "F1",
+          "subject": "특성화대학원으로 선정된 신청기관의 장",
+          "predicate": "제출하여야 한다",
+          "object": "사업계획서 및 협약관련 서류",
+          "qualifiers": {
+            "deadline": "제12조제2항에 따라 특성화대학원 선정 통보를 받은 날로부터 15일 이내",
+            "non_submission": "특별한 사유 없이 제출기한 내에 협약서류를 제출하지 않은 경우 협약을 포기한 것으로 간주"
+          },
+          "supporting_sources": [
+            "E1"
+          ],
+          "support_quote": "② 특성화대학원으로 선정된 신청기관의 장은 제12조제2항에 따라 특성화대학원 선정 통보를 받은 날로부터 15일 이내에 사업계획서 및 협약관련 서류(이하 \"협약서류\"라 한다)를 제출하여야 하며, 특별한 사유 없이 제출기한 내에 협약서류를 제출하지 않은 경우 협약을 포기한 것으로 간주한다."
+        }
+      ],
+      "review_status": "needs_independent_review"
+    }
+  ],
+  "synthetic": [
+    {
+      "family_id": "fictional-train-moon-copy-loan",
+      "split": "train",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 달무리 기록실에서 교육을 마친 이용자에게 종이 복제본을 빌려줄 때 담당자와 반납기한은 무엇이며, 원본도 빌릴 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 달무리 기록실",
+                "title": "가상 달무리 기록실 복제본 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 달무리 기록실 복제본 대여 절차",
+                "quote": "대여담당자는 이용교육을 마친 이용자에게 종이 복제본을 대여할 수 있고, 이용자는 대여일로부터 7일 이내에 반납하여야 한다. 원본은 교육 이수 여부와 관계없이 관내 열람만 가능하며 관외 대여는 금지한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "이용교육을 마친 이용자의 종이 복제본 대여는 대여담당자가 허용할 수 있으며, 이용자는 대여일로부터 7일 이내에 반납해야 합니다. 원본은 교육을 마쳤더라도 관내 열람만 가능하고 관외로 빌릴 수 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "복제본 대여 권한과 이용자의 반납 의무를 구별한다.",
+            "교육 이수가 원본 관외 대여까지 허용하는 것으로 확대하지 않는다.",
+            "반납기한의 기산점은 대여일이며 임의로 달력 날짜를 계산하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 달무리 기록실에서 교육을 마친 이용자에게 종이 복제본을 빌려줄 때 담당자와 반납기한은 무엇이며, 원본도 빌릴 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 달무리 기록실",
+                "title": "가상 달무리 기록실 복제본 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 달무리 기록실 복제본 대여 절차",
+                "quote": "대여담당자는 이용교육을 마친 이용자에게 종이 복제본을 대여할 수 있고, 이용자는 대여일로부터 3일 이내에 반납하여야 한다. 원본은 교육 이수 여부와 관계없이 관내 열람만 가능하며 관외 대여는 금지한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "이용교육을 마친 이용자의 종이 복제본 대여는 대여담당자가 허용할 수 있으며, 이용자는 대여일로부터 3일 이내에 반납해야 합니다. 원본은 교육을 마쳤더라도 관내 열람만 가능하고 관외로 빌릴 수 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "복제본 대여 권한과 이용자의 반납 의무를 구별한다.",
+            "교육 이수가 원본 관외 대여까지 허용하는 것으로 확대하지 않는다.",
+            "반납기한의 기산점은 대여일이며 임의로 달력 날짜를 계산하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "반납기한 7일이 3일로 바뀌며 대여담당자와 원본 제한은 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 달무리 기록실에서 교육을 마친 이용자에게 종이 복제본을 빌려줄 때 담당자와 반납기한은 무엇이며, 원본도 빌릴 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 달무리 기록실",
+                "title": "가상 달무리 기록실 복제본 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 잎새 안내소",
+                "title": "가상 잎새 안내소 화분표찰 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 달무리 기록실 복제본 대여 절차",
+                "quote": "대여담당자는 이용교육을 마친 이용자에게 종이 복제본을 대여할 수 있고, 이용자는 대여일로부터 7일 이내에 반납하여야 한다. 원본은 교육 이수 여부와 관계없이 관내 열람만 가능하며 관외 대여는 금지한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 잎새 안내소 화분표찰 절차",
+                "quote": "화분담당자는 전시 화분에 초록 표찰을 붙인다. 종이 표찰이 젖으면 목재 표찰로 교체한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "이용교육을 마친 이용자의 종이 복제본 대여는 대여담당자가 허용할 수 있으며, 이용자는 대여일로부터 7일 이내에 반납해야 합니다. 원본은 교육을 마쳤더라도 관내 열람만 가능하고 관외로 빌릴 수 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "복제본 대여 권한과 이용자의 반납 의무를 구별한다.",
+            "교육 이수가 원본 관외 대여까지 허용하는 것으로 확대하지 않는다.",
+            "반납기한의 기산점은 대여일이며 임의로 달력 날짜를 계산하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 달무리 기록실에서 교육을 마친 이용자에게 종이 복제본을 빌려줄 때 담당자와 반납기한은 무엇이며, 원본도 빌릴 수 있나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 달무리 기록실에서 교육을 마친 이용자에게 종이 복제본을 빌려줄 때 담당자와 반납기한은 무엇이며, 원본도 빌릴 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 달무리 기록실",
+                "title": "가상 달무리 기록실 복제본 대여 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 달무리 기록실",
+                "title": "가상 달무리 기록실 복제본 대여 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 달무리 기록실 복제본 대여 절차 안내문 가",
+                "quote": "대여담당자는 이용교육을 마친 이용자에게 종이 복제본을 대여할 수 있고, 이용자는 대여일로부터 7일 이내에 반납하여야 한다. 이용자는 대여일로부터 4일째에도 빌린 종이 복제본을 반납하지 않고 계속 보관할 수 있다. 원본은 교육 이수 여부와 관계없이 관내 열람만 가능하며 관외 대여는 금지한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 달무리 기록실 복제본 대여 절차 안내문 나",
+                "quote": "대여담당자는 이용교육을 마친 이용자에게 종이 복제본을 대여할 수 있고, 이용자는 대여일로부터 3일 이내에 반납하여야 한다. 이용자는 대여일로부터 4일째에는 빌린 종이 복제본을 반납하지 않고 계속 보관할 수 없다. 원본은 교육 이수 여부와 관계없이 관내 열람만 가능하며 관외 대여는 금지한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "반납기한은 안내문 가가 대여일로부터 7일 이내, 안내문 나가 3일 이내로 정합니다. 특히 같은 이용자가 빌린 종이 복제본을 대여일로부터 4일째에 반납하지 않고 계속 보관하는 행위를 안내문 가는 허용하고 안내문 나는 금지합니다. 명시적인 허용과 금지가 충돌하고 우선관계도 없어 이 상황의 계속 보관 가능 여부를 확정할 수 없습니다. 두 안내문 모두 대여담당자가 이용교육을 마친 이용자에게 복제본을 대여할 수 있도록 하며, 원본은 관내 열람만 허용하고 관외 대여는 금지합니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "복제본 대여 권한과 이용자의 반납 의무를 구별한다.",
+            "교육 이수가 원본 관외 대여까지 허용하는 것으로 확대하지 않는다.",
+            "반납기한의 기산점은 대여일이며 임의로 달력 날짜를 계산하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "동일한 이용자가 빌린 종이 복제본을 대여일로부터 4일째에 반납하지 않고 계속 보관하는 행위에 대한 명시적 허용과 금지의 충돌을 설명한다. 7일 이내와 3일 이내라는 함께 충족 가능한 반납 의무의 차이만으로 충돌을 주장하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 달무리 기록실에서 교육을 마친 이용자에게 종이 복제본을 빌려줄 때 담당자와 반납기한은 무엇이며, 원본도 빌릴 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 달무리 기록실",
+                "title": "가상 달무리 기록실 복제본 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 달무리 기록실 복제본 대여 절차",
+                "quote": "대여담당자는 이용교육을 마친 이용자에게 종이 복제본을 대여할 수 있고, 이용자는 대여일로부터 7일 이내에 반납하여야 한다. 원본은 교육 이수 여부와 관계없이 관내 열람만 가능하며 관외 대여는 금지한다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "대여담당자",
+                "predicate": "대여할 수 있다",
+                "object": "종이 복제본",
+                "qualifiers": {
+                  "condition": "이용교육을 마친 이용자",
+                  "return_actor": "이용자",
+                  "return_deadline": "대여일로부터 7일 이내"
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "원본",
+                "predicate": "관외 대여를 금지한다",
+                "object": "관내 열람만 가능",
+                "qualifiers": {
+                  "condition": "교육 이수 여부와 관계없이"
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "이용교육을 마친 이용자의 종이 복제본 대여는 대여담당자가 허용할 수 있으며, 이용자는 대여일로부터 7일 이내에 반납해야 합니다. 원본은 교육을 마쳤더라도 관내 열람만 가능하고 관외로 빌릴 수 없습니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "복제본 대여 권한과 이용자의 반납 의무를 구별한다.",
+            "교육 이수가 원본 관외 대여까지 허용하는 것으로 확대하지 않는다.",
+            "반납기한의 기산점은 대여일이며 임의로 달력 날짜를 계산하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "복제본 대여와 원본 열람은 대상이 서로 다른 규칙이다. 원본 금지를 복제본 대여 허용 자체의 예외로 잘못 연결하지 않는다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-train-bluebay-sample-handover",
+      "split": "train",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 푸른만 표본센터에서 냉장표본 인계를 진행할 수 있는 담당자와 요건은 무엇이며, 봉인이 손상되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 푸른만 표본센터",
+                "title": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "quote": "채집담당자는 냉장표본의 봉인이 온전하고 수령담당자의 서명이 있을 때에만 표본을 인계할 수 있다. 봉인이 손상된 표본은 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "채집담당자는 봉인이 온전하고 수령담당자의 서명이 있을 때에만 냉장표본을 인계할 수 있습니다. 봉인이 손상되었다면 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "인계 권한을 가진 담당자와 수령 서명 담당자 및 격리 요청 상대를 구분한다.",
+            "봉인의 온전함과 수령 서명을 모두 요구한다.",
+            "봉인 손상 시 서명만으로 인계를 허용하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 푸른만 표본센터에서 냉장표본 인계를 진행할 수 있는 담당자와 요건은 무엇이며, 봉인이 손상되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 푸른만 표본센터",
+                "title": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "quote": "보관담당자는 냉장표본의 봉인이 온전하고 수령담당자의 서명이 있을 때에만 표본을 인계할 수 있다. 봉인이 손상된 표본은 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "보관담당자는 봉인이 온전하고 수령담당자의 서명이 있을 때에만 냉장표본을 인계할 수 있습니다. 봉인이 손상되었다면 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "인계 권한을 가진 담당자와 수령 서명 담당자 및 격리 요청 상대를 구분한다.",
+            "봉인의 온전함과 수령 서명을 모두 요구한다.",
+            "봉인 손상 시 서명만으로 인계를 허용하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "인계 권한 주체가 채집담당자에서 보관담당자로 바뀌며 요건과 격리 절차는 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 푸른만 표본센터에서 냉장표본 인계를 진행할 수 있는 담당자와 요건은 무엇이며, 봉인이 손상되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 푸른만 표본센터",
+                "title": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 종달 공작실",
+                "title": "가상 종달 공작실 실 보관 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "quote": "채집담당자는 냉장표본의 봉인이 온전하고 수령담당자의 서명이 있을 때에만 표본을 인계할 수 있다. 봉인이 손상된 표본은 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 종달 공작실 실 보관 절차",
+                "quote": "재료담당자는 붉은 실과 푸른 실을 다른 서랍에 넣는다. 남은 실은 길이를 재지 않고 색깔별로 돌려놓는다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "채집담당자는 봉인이 온전하고 수령담당자의 서명이 있을 때에만 냉장표본을 인계할 수 있습니다. 봉인이 손상되었다면 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "인계 권한을 가진 담당자와 수령 서명 담당자 및 격리 요청 상대를 구분한다.",
+            "봉인의 온전함과 수령 서명을 모두 요구한다.",
+            "봉인 손상 시 서명만으로 인계를 허용하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 푸른만 표본센터에서 냉장표본 인계를 진행할 수 있는 담당자와 요건은 무엇이며, 봉인이 손상되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 푸른만 표본센터에서 냉장표본 인계를 진행할 수 있는 담당자와 요건은 무엇이며, 봉인이 손상되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 푸른만 표본센터",
+                "title": "가상 푸른만 표본센터 냉장표본 인계 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 푸른만 표본센터",
+                "title": "가상 푸른만 표본센터 냉장표본 인계 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 푸른만 표본센터 냉장표본 인계 절차 안내문 가",
+                "quote": "봉인이 온전하고 수령담당자의 서명이 있는 냉장표본은 채집담당자만 인계할 수 있다. 두 요건 중 하나라도 충족하지 않으면 인계할 수 없으며, 보관담당자는 두 요건을 모두 충족해도 인계할 수 없다. 봉인이 손상된 표본은 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 푸른만 표본센터 냉장표본 인계 절차 안내문 나",
+                "quote": "봉인이 온전하고 수령담당자의 서명이 있는 냉장표본은 보관담당자만 인계할 수 있다. 두 요건 중 하나라도 충족하지 않으면 인계할 수 없으며, 채집담당자는 두 요건을 모두 충족해도 인계할 수 없다. 봉인이 손상된 표본은 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "봉인이 온전하고 수령담당자의 서명이 있는 동일한 상황에서 안내문 가는 채집담당자의 인계를 허용하고 보관담당자의 인계를 금지하지만, 안내문 나는 반대로 정하고 있습니다. 명시적인 허용과 금지가 충돌하며 우선관계도 제시되지 않아 인계 권한을 확정할 수 없습니다. 두 안내문 모두 봉인이 손상되면 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하도록 합니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "인계 권한을 가진 담당자와 수령 서명 담당자 및 격리 요청 상대를 구분한다.",
+            "봉인의 온전함과 수령 서명을 모두 요구한다.",
+            "봉인 손상 시 서명만으로 인계를 허용하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "봉인과 서명 요건을 충족한 같은 상황에서 각 담당자의 인계가 한 안내문에서는 허용되고 다른 안내문에서는 금지됨을 설명한다. 단순한 병존 가능한 권한 차이로 축소하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 푸른만 표본센터에서 냉장표본 인계를 진행할 수 있는 담당자와 요건은 무엇이며, 봉인이 손상되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 푸른만 표본센터",
+                "title": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 푸른만 표본센터 냉장표본 인계 절차",
+                "quote": "채집담당자는 냉장표본의 봉인이 온전하고 수령담당자의 서명이 있을 때에만 표본을 인계할 수 있다. 봉인이 손상된 표본은 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "채집담당자",
+                "predicate": "인계할 수 있다",
+                "object": "냉장표본",
+                "qualifiers": {
+                  "condition": [
+                    "봉인이 온전함",
+                    "수령담당자의 서명이 있음"
+                  ]
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "봉인이 손상된 표본",
+                "predicate": "인계하지 않고 요청하여야 한다",
+                "object": "안전담당자에게 격리",
+                "qualifiers": {
+                  "condition": "서명이 있어도"
+                },
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "채집담당자는 봉인이 온전하고 수령담당자의 서명이 있을 때에만 냉장표본을 인계할 수 있습니다. 봉인이 손상되었다면 서명이 있어도 인계하지 않고 안전담당자에게 격리를 요청해야 합니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "인계 권한을 가진 담당자와 수령 서명 담당자 및 격리 요청 상대를 구분한다.",
+            "봉인의 온전함과 수령 서명을 모두 요구한다.",
+            "봉인 손상 시 서명만으로 인계를 허용하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-train-pine-mobility-dispatch",
+      "split": "train",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 솔바람 이동지원실은 휠체어 이용 신청자를 어떻게 배차하며, 어떤 경보가 나면 그 배차도 중단하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 솔바람 이동지원실",
+                "title": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "quote": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차하여야 한다. 운행구역에 강풍 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차해야 합니다. 다만 운행구역에 강풍 경보가 발령되면 휠체어 이용 신청자에 대한 배차도 중단해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "우선 배차 담당자와 대상을 정확히 밝힌다.",
+            "경보 조건은 운행구역에 발령된 경보에 한정한다.",
+            "우선 배차를 중단 예외보다 우선하는 권리로 설명하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 솔바람 이동지원실은 휠체어 이용 신청자를 어떻게 배차하며, 어떤 경보가 나면 그 배차도 중단하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 솔바람 이동지원실",
+                "title": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "quote": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차하여야 한다. 운행구역에 결빙 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차해야 합니다. 다만 운행구역에 결빙 경보가 발령되면 휠체어 이용 신청자에 대한 배차도 중단해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "우선 배차 담당자와 대상을 정확히 밝힌다.",
+            "경보 조건은 운행구역에 발령된 경보에 한정한다.",
+            "우선 배차를 중단 예외보다 우선하는 권리로 설명하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "중단 조건의 경보 종류가 강풍에서 결빙으로 바뀌며 우선 배차 원칙은 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 솔바람 이동지원실은 휠체어 이용 신청자를 어떻게 배차하며, 어떤 경보가 나면 그 배차도 중단하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 솔바람 이동지원실",
+                "title": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 모래 우편방",
+                "title": "가상 모래 우편방 엽서 접수 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "quote": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차하여야 한다. 운행구역에 강풍 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 모래 우편방 엽서 접수 절차",
+                "quote": "접수담당자는 장식용 엽서를 창구에서 받는다. 봉투가 없는 엽서는 투명 주머니에 넣어 보관한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차해야 합니다. 다만 운행구역에 강풍 경보가 발령되면 휠체어 이용 신청자에 대한 배차도 중단해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "우선 배차 담당자와 대상을 정확히 밝힌다.",
+            "경보 조건은 운행구역에 발령된 경보에 한정한다.",
+            "우선 배차를 중단 예외보다 우선하는 권리로 설명하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 솔바람 이동지원실은 휠체어 이용 신청자를 어떻게 배차하며, 어떤 경보가 나면 그 배차도 중단하나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 솔바람 이동지원실은 휠체어 이용 신청자를 어떻게 배차하며, 어떤 경보가 나면 그 배차도 중단하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 솔바람 이동지원실",
+                "title": "가상 솔바람 이동지원실 동행차 배차 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 솔바람 이동지원실",
+                "title": "가상 솔바람 이동지원실 동행차 배차 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 솔바람 이동지원실 동행차 배차 절차 안내문 가",
+                "quote": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차하여야 한다. 운행구역에 강풍 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 솔바람 이동지원실 동행차 배차 절차 안내문 나",
+                "quote": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차하여야 한다. 운행구역에 결빙 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하여야 한다. 운행구역에 강풍 경보만 발령되고 결빙 경보가 없으면 예약담당자는 휠체어 이용 신청자의 우선 배차를 포함하여 배차를 계속하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "예약담당자의 휠체어 이용 신청자 우선 배차 원칙은 공통입니다. 그러나 운행구역에 강풍 경보만 있고 결빙 경보가 없는 상황에서 안내문 가는 배차 중단을 요구하고 안내문 나는 우선 배차를 포함한 배차 계속을 요구합니다. 같은 상황에 대한 의무가 충돌하므로 주어진 자료만으로 적용할 지침을 확정할 수 없습니다. 안내문 나는 결빙 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하도록 정합니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "우선 배차 담당자와 대상을 정확히 밝힌다.",
+            "경보 조건은 운행구역에 발령된 경보에 한정한다.",
+            "우선 배차를 중단 예외보다 우선하는 권리로 설명하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "운행구역에 강풍 경보만 있고 결빙 경보가 없는 동일한 상황에서 배차 중단 의무와 계속 의무가 충돌함을 설명한다. 서로 다른 경보에 대한 중단 조건만을 비교하여 충돌이라고 하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 솔바람 이동지원실은 휠체어 이용 신청자를 어떻게 배차하며, 어떤 경보가 나면 그 배차도 중단하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 솔바람 이동지원실",
+                "title": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 솔바람 이동지원실 동행차 배차 절차",
+                "quote": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차하여야 한다. 운행구역에 강풍 경보가 발령되면 휠체어 이용 여부와 관계없이 배차를 중단하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "예약담당자",
+                "predicate": "우선 배차하여야 한다",
+                "object": "휠체어 이용 신청자를 동행차에",
+                "qualifiers": {},
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "예약담당자",
+                "predicate": "배차를 중단하여야 한다",
+                "object": "동행차",
+                "qualifiers": {
+                  "condition": "운행구역에 강풍 경보가 발령됨",
+                  "scope": "휠체어 이용 여부와 관계없이"
+                },
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "예약담당자는 휠체어 이용 신청자를 동행차에 우선 배차해야 합니다. 다만 운행구역에 강풍 경보가 발령되면 휠체어 이용 신청자에 대한 배차도 중단해야 합니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "우선 배차 담당자와 대상을 정확히 밝힌다.",
+            "경보 조건은 운행구역에 발령된 경보에 한정한다.",
+            "우선 배차를 중단 예외보다 우선하는 권리로 설명하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-train-starseed-storage-entry",
+      "split": "train",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 별씨앗 보관소의 교육이수자가 저장구역에 들어가려면 무엇이 필요하며, 격리 표시 구역에도 들어갈 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 별씨앗 보관소",
+                "title": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "quote": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있다. 격리 표시가 있는 구역에는 교육이수자도 출입할 수 없다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있습니다. 격리 표시 구역에는 교육을 마쳤더라도 출입할 수 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "교육 이수만으로 일반 저장구역 출입을 허용하지 않는다.",
+            "동행과 서면 승인을 같은 요건으로 취급하지 않는다.",
+            "일반 구역 출입 요건 충족을 격리 구역 출입 허가로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 별씨앗 보관소의 교육이수자가 저장구역에 들어가려면 무엇이 필요하며, 격리 표시 구역에도 들어갈 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 별씨앗 보관소",
+                "title": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "quote": "교육이수자는 관리자의 서면 승인이 있는 경우에만 저장구역에 출입할 수 있다. 격리 표시가 있는 구역에는 교육이수자도 출입할 수 없다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "교육이수자는 관리자의 서면 승인이 있는 경우에만 저장구역에 출입할 수 있습니다. 격리 표시 구역에는 교육을 마쳤더라도 출입할 수 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "교육 이수만으로 일반 저장구역 출입을 허용하지 않는다.",
+            "동행과 서면 승인을 같은 요건으로 취급하지 않는다.",
+            "일반 구역 출입 요건 충족을 격리 구역 출입 허가로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "일반 저장구역 출입 요건이 관리자 동행에서 관리자 서면 승인으로 바뀌며 격리 구역 금지는 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 별씨앗 보관소의 교육이수자가 저장구역에 들어가려면 무엇이 필요하며, 격리 표시 구역에도 들어갈 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 별씨앗 보관소",
+                "title": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 돌담 지도실",
+                "title": "가상 돌담 지도실 지도게시 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "quote": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있다. 격리 표시가 있는 구역에는 교육이수자도 출입할 수 없다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 돌담 지도실 지도게시 절차",
+                "quote": "게시담당자는 안내지도를 입구 게시판에 붙인다. 찢어진 지도는 게시하지 않고 복원담당자에게 전달한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있습니다. 격리 표시 구역에는 교육을 마쳤더라도 출입할 수 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "교육 이수만으로 일반 저장구역 출입을 허용하지 않는다.",
+            "동행과 서면 승인을 같은 요건으로 취급하지 않는다.",
+            "일반 구역 출입 요건 충족을 격리 구역 출입 허가로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 별씨앗 보관소의 교육이수자가 저장구역에 들어가려면 무엇이 필요하며, 격리 표시 구역에도 들어갈 수 있나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 별씨앗 보관소의 교육이수자가 저장구역에 들어가려면 무엇이 필요하며, 격리 표시 구역에도 들어갈 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 별씨앗 보관소",
+                "title": "가상 별씨앗 보관소 저장구역 출입 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 별씨앗 보관소",
+                "title": "가상 별씨앗 보관소 저장구역 출입 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 별씨앗 보관소 저장구역 출입 절차 안내문 가",
+                "quote": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있다. 관리자의 서면 승인이 있어도 관리자가 동행하지 않으면 저장구역에 출입할 수 없다. 격리 표시가 있는 구역에는 교육이수자도 출입할 수 없다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 별씨앗 보관소 저장구역 출입 절차 안내문 나",
+                "quote": "교육이수자는 관리자의 서면 승인이 있는 경우에만 저장구역에 출입할 수 있다. 격리 표시가 없는 저장구역에서는 관리자의 서면 승인이 있으면 관리자가 동행하지 않아도 출입할 수 있다. 격리 표시가 있는 구역에는 교육이수자도 출입할 수 없다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "교육이수자에게 관리자의 서면 승인은 있지만 동행은 없는 경우, 안내문 가는 저장구역 출입을 금지하는 반면 안내문 나는 격리 표시가 없는 저장구역 출입을 명시적으로 허용합니다. 그 구역에서의 같은 상황에 대한 허용과 금지가 충돌하고 우선관계가 없어 출입 가능 여부를 확정할 수 없습니다. 격리 표시 구역에는 두 안내문 모두 교육이수자의 출입을 금지합니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "교육 이수만으로 일반 저장구역 출입을 허용하지 않는다.",
+            "동행과 서면 승인을 같은 요건으로 취급하지 않는다.",
+            "일반 구역 출입 요건 충족을 격리 구역 출입 허가로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "교육이수자에게 서면 승인은 있고 관리자 동행은 없는 동일한 상황에서 격리 표시 없는 저장구역의 출입 허용과 금지가 충돌함을 설명한다. 양립 가능한 누적 필요조건의 차이만으로 충돌을 주장하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 별씨앗 보관소의 교육이수자가 저장구역에 들어가려면 무엇이 필요하며, 격리 표시 구역에도 들어갈 수 있나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 별씨앗 보관소",
+                "title": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 별씨앗 보관소 저장구역 출입 절차",
+                "quote": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있다. 격리 표시가 있는 구역에는 교육이수자도 출입할 수 없다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "교육이수자",
+                "predicate": "출입할 수 있다",
+                "object": "저장구역",
+                "qualifiers": {
+                  "condition": "관리자가 동행하는 경우에만"
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "교육이수자",
+                "predicate": "출입할 수 없다",
+                "object": "격리 표시가 있는 구역",
+                "qualifiers": {},
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "교육이수자는 관리자가 동행하는 경우에만 저장구역에 출입할 수 있습니다. 격리 표시 구역에는 교육을 마쳤더라도 출입할 수 없습니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "교육 이수만으로 일반 저장구역 출입을 허용하지 않는다.",
+            "동행과 서면 승인을 같은 요건으로 취급하지 않는다.",
+            "일반 구역 출입 요건 충족을 격리 구역 출입 허가로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-dev-wave-audio-transcript",
+      "split": "development",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 물결 소리자료실에서 기록담당자가 녹취문을 외부에 제공하려면 어떤 요건이 필요하며, 동의가 철회되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 물결 소리자료실",
+                "title": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "quote": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 녹취문을 외부에 제공할 수 있다. 구술자가 외부제공 동의를 철회하면 이름을 삭제했어도 외부제공을 중단하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 외부에 제공할 수 있습니다. 동의가 철회되면 이름 삭제를 마쳤어도 외부제공을 중단해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "외부제공 동의와 정보 삭제를 모두 필요한 요건으로 설명한다.",
+            "동의 철회 시 정보 삭제만으로 제공을 계속할 수 있다고 하지 않는다.",
+            "실제 개인정보 법령의 요건을 이 허구 절차에 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 물결 소리자료실에서 기록담당자가 녹취문을 외부에 제공하려면 어떤 요건이 필요하며, 동의가 철회되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 물결 소리자료실",
+                "title": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "quote": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름과 주소를 삭제한 경우에만 녹취문을 외부에 제공할 수 있다. 구술자가 외부제공 동의를 철회하면 이름과 주소를 삭제했어도 외부제공을 중단하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름과 주소를 삭제한 경우에만 외부에 제공할 수 있습니다. 동의가 철회되면 이름과 주소 삭제를 마쳤어도 외부제공을 중단해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "외부제공 동의와 정보 삭제를 모두 필요한 요건으로 설명한다.",
+            "동의 철회 시 정보 삭제만으로 제공을 계속할 수 있다고 하지 않는다.",
+            "실제 개인정보 법령의 요건을 이 허구 절차에 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "삭제 대상이 이름에서 이름과 주소로 확대되며 동의 및 철회 효과는 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 물결 소리자료실에서 기록담당자가 녹취문을 외부에 제공하려면 어떤 요건이 필요하며, 동의가 철회되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 물결 소리자료실",
+                "title": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 풀잎 악기실",
+                "title": "가상 풀잎 악기실 북 보관 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "quote": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 녹취문을 외부에 제공할 수 있다. 구술자가 외부제공 동의를 철회하면 이름을 삭제했어도 외부제공을 중단하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 풀잎 악기실 북 보관 절차",
+                "quote": "악기담당자는 연습용 북을 천 덮개로 덮어 보관한다. 덮개가 없으면 임시 상자에 넣는다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 외부에 제공할 수 있습니다. 동의가 철회되면 이름 삭제를 마쳤어도 외부제공을 중단해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "외부제공 동의와 정보 삭제를 모두 필요한 요건으로 설명한다.",
+            "동의 철회 시 정보 삭제만으로 제공을 계속할 수 있다고 하지 않는다.",
+            "실제 개인정보 법령의 요건을 이 허구 절차에 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 물결 소리자료실에서 기록담당자가 녹취문을 외부에 제공하려면 어떤 요건이 필요하며, 동의가 철회되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 물결 소리자료실에서 기록담당자가 녹취문을 외부에 제공하려면 어떤 요건이 필요하며, 동의가 철회되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 물결 소리자료실",
+                "title": "가상 물결 소리자료실 녹취문 외부제공 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 물결 소리자료실",
+                "title": "가상 물결 소리자료실 녹취문 외부제공 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 물결 소리자료실 녹취문 외부제공 절차 안내문 가",
+                "quote": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 녹취문을 외부에 제공할 수 있다. 그 동의가 유지되고 이름을 삭제했다면 주소가 남아 있어도 녹취문을 외부에 제공할 수 있다. 구술자가 외부제공 동의를 철회하면 이름을 삭제했어도 외부제공을 중단하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 물결 소리자료실 녹취문 외부제공 절차 안내문 나",
+                "quote": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름과 주소를 삭제한 경우에만 녹취문을 외부에 제공할 수 있다. 그 동의가 유지되고 이름을 삭제했어도 주소가 남아 있으면 녹취문을 외부에 제공할 수 없다. 구술자가 외부제공 동의를 철회하면 이름과 주소를 삭제했어도 외부제공을 중단하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "구술자의 외부제공 동의가 유지되고 이름은 삭제했지만 주소는 남아 있는 같은 녹취문에 대해, 안내문 가는 외부제공을 허용하고 안내문 나는 금지합니다. 명시적인 허용과 금지가 충돌하며 우선관계가 없어 이 상황의 제공 가능 여부를 확정할 수 없습니다. 두 안내문 모두 기록담당자의 외부제공에는 구술자의 동의가 필요하고, 동의가 철회되면 정보를 삭제했더라도 외부제공을 중단하도록 합니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "외부제공 동의와 정보 삭제를 모두 필요한 요건으로 설명한다.",
+            "동의 철회 시 정보 삭제만으로 제공을 계속할 수 있다고 하지 않는다.",
+            "실제 개인정보 법령의 요건을 이 허구 절차에 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "동의가 유지되고 이름은 삭제했지만 주소는 남아 있는 동일한 상황에서 외부제공의 명시적 허용과 금지가 충돌함을 설명한다. 이름 삭제와 이름·주소 삭제라는 양립 가능한 필요조건 차이만으로 충돌을 주장하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 물결 소리자료실에서 기록담당자가 녹취문을 외부에 제공하려면 어떤 요건이 필요하며, 동의가 철회되면 어떻게 하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 물결 소리자료실",
+                "title": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 물결 소리자료실 녹취문 외부제공 절차",
+                "quote": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 녹취문을 외부에 제공할 수 있다. 구술자가 외부제공 동의를 철회하면 이름을 삭제했어도 외부제공을 중단하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "기록담당자",
+                "predicate": "외부에 제공할 수 있다",
+                "object": "녹취문",
+                "qualifiers": {
+                  "condition": [
+                    "구술자의 외부제공 동의가 있음",
+                    "녹취문에서 이름을 삭제함"
+                  ]
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "기록담당자",
+                "predicate": "중단하여야 한다",
+                "object": "녹취문 외부제공",
+                "qualifiers": {
+                  "condition": "구술자가 외부제공 동의를 철회함",
+                  "scope": "이름을 삭제했어도"
+                },
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "기록담당자는 구술자의 외부제공 동의가 있고 녹취문에서 이름을 삭제한 경우에만 외부에 제공할 수 있습니다. 동의가 철회되면 이름 삭제를 마쳤어도 외부제공을 중단해야 합니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "외부제공 동의와 정보 삭제를 모두 필요한 요건으로 설명한다.",
+            "동의 철회 시 정보 삭제만으로 제공을 계속할 수 있다고 하지 않는다.",
+            "실제 개인정보 법령의 요건을 이 허구 절차에 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-dev-gear-workshop-tool-loan",
+      "split": "development",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 톱니 수리공방은 절단공구 대여를 누가 승인하며, 교육수료자가 빌릴 수 있는 수량과 점검 표찰이 붙은 공구의 취급은 무엇인가요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 톱니 수리공방",
+                "title": "가상 톱니 수리공방 절단공구 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 톱니 수리공방 절단공구 대여 절차",
+                "quote": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있다. 점검 표찰이 붙은 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있습니다. 점검 표찰이 붙은 공구는 그 수량 범위 안에 있어도 빌려주지 않고 정비담당자에게 인계해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "대여 승인 권한과 정비 인계 상대를 구별한다.",
+            "수량 상한 이하라는 포함 관계를 보존한다.",
+            "점검 표찰 공구를 수량 한도 이내라는 이유로 대여하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 톱니 수리공방은 절단공구 대여를 누가 승인하며, 교육수료자가 빌릴 수 있는 수량과 점검 표찰이 붙은 공구의 취급은 무엇인가요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 톱니 수리공방",
+                "title": "가상 톱니 수리공방 절단공구 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 톱니 수리공방 절단공구 대여 절차",
+                "quote": "공구담당자는 안전교육 수료자에게 절단공구를 1개 이하로 대여 승인할 수 있다. 점검 표찰이 붙은 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "공구담당자는 안전교육 수료자에게 절단공구를 1개 이하로 대여 승인할 수 있습니다. 점검 표찰이 붙은 공구는 그 수량 범위 안에 있어도 빌려주지 않고 정비담당자에게 인계해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "대여 승인 권한과 정비 인계 상대를 구별한다.",
+            "수량 상한 이하라는 포함 관계를 보존한다.",
+            "점검 표찰 공구를 수량 한도 이내라는 이유로 대여하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "대여 수량 상한이 2개에서 1개로 바뀌며 교육 요건과 점검 표찰 예외는 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 톱니 수리공방은 절단공구 대여를 누가 승인하며, 교육수료자가 빌릴 수 있는 수량과 점검 표찰이 붙은 공구의 취급은 무엇인가요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 톱니 수리공방",
+                "title": "가상 톱니 수리공방 절단공구 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 은방울 서가실",
+                "title": "가상 은방울 서가실 책받침 정리 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 톱니 수리공방 절단공구 대여 절차",
+                "quote": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있다. 점검 표찰이 붙은 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 은방울 서가실 책받침 정리 절차",
+                "quote": "정리담당자는 금속 책받침을 오른쪽 선반에 둔다. 부식 표시는 왼쪽이 아니라 별도 상자로 옮기는 사유이다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있습니다. 점검 표찰이 붙은 공구는 그 수량 범위 안에 있어도 빌려주지 않고 정비담당자에게 인계해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "대여 승인 권한과 정비 인계 상대를 구별한다.",
+            "수량 상한 이하라는 포함 관계를 보존한다.",
+            "점검 표찰 공구를 수량 한도 이내라는 이유로 대여하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 톱니 수리공방은 절단공구 대여를 누가 승인하며, 교육수료자가 빌릴 수 있는 수량과 점검 표찰이 붙은 공구의 취급은 무엇인가요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 톱니 수리공방은 절단공구 대여를 누가 승인하며, 교육수료자가 빌릴 수 있는 수량과 점검 표찰이 붙은 공구의 취급은 무엇인가요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 톱니 수리공방",
+                "title": "가상 톱니 수리공방 절단공구 대여 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 톱니 수리공방",
+                "title": "가상 톱니 수리공방 절단공구 대여 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 톱니 수리공방 절단공구 대여 절차 안내문 가",
+                "quote": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있다. 공구담당자는 점검 표찰이 없는 절단공구 2개를 안전교육 수료자에게 한 번에 대여 승인할 수 있다. 점검 표찰이 붙은 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 톱니 수리공방 절단공구 대여 절차 안내문 나",
+                "quote": "공구담당자는 안전교육 수료자에게 절단공구를 1개 이하로 대여 승인할 수 있다. 공구담당자는 점검 표찰이 없는 절단공구라도 2개를 안전교육 수료자에게 한 번에 대여 승인할 수 없다. 점검 표찰이 붙은 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "안내문 가는 2개 이하의 대여 승인을 허용하고 안내문 나는 1개 이하의 대여 승인을 허용합니다. 점검 표찰이 없는 절단공구 2개를 같은 안전교육 수료자에게 공구담당자가 한 번에 대여 승인하는 행위는 안내문 가가 명시적으로 허용하고 안내문 나는 명시적으로 금지합니다. 우선관계가 주어지지 않아 이 상황의 승인 가능 여부를 확정할 수 없습니다. 점검 표찰 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계해야 한다는 점은 두 안내문에 공통됩니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "대여 승인 권한과 정비 인계 상대를 구별한다.",
+            "수량 상한 이하라는 포함 관계를 보존한다.",
+            "점검 표찰 공구를 수량 한도 이내라는 이유로 대여하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "공구담당자가 같은 안전교육 수료자에게 점검 표찰 없는 절단공구 2개를 한 번에 대여 승인하는 행위에 대한 명시적 허용과 금지의 충돌을 설명한다. 더 적은 수량의 승인도 허용된다는 사실만으로 더 많은 수량의 승인 금지를 추론하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 톱니 수리공방은 절단공구 대여를 누가 승인하며, 교육수료자가 빌릴 수 있는 수량과 점검 표찰이 붙은 공구의 취급은 무엇인가요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 톱니 수리공방",
+                "title": "가상 톱니 수리공방 절단공구 대여 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 톱니 수리공방 절단공구 대여 절차",
+                "quote": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있다. 점검 표찰이 붙은 공구는 수량과 관계없이 대여하지 않고 정비담당자에게 인계하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "공구담당자",
+                "predicate": "대여 승인할 수 있다",
+                "object": "절단공구 2개 이하",
+                "qualifiers": {
+                  "condition": "안전교육 수료자에게"
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "공구담당자",
+                "predicate": "대여하지 않고 인계하여야 한다",
+                "object": "점검 표찰이 붙은 공구를 정비담당자에게",
+                "qualifiers": {
+                  "scope": "수량과 관계없이"
+                },
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "공구담당자는 안전교육 수료자에게 절단공구를 2개 이하로 대여 승인할 수 있습니다. 점검 표찰이 붙은 공구는 그 수량 범위 안에 있어도 빌려주지 않고 정비담당자에게 인계해야 합니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "대여 승인 권한과 정비 인계 상대를 구별한다.",
+            "수량 상한 이하라는 포함 관계를 보존한다.",
+            "점검 표찰 공구를 수량 한도 이내라는 이유로 대여하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-dev-cloud-gallery-afterhours",
+      "split": "development",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 구름빛 전시관의 폐관 후 촬영은 누구의 어떤 조치가 있어야 가능하며, 빛민감 표찰 작품은 어떻게 취급하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 구름빛 전시관",
+                "title": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "quote": "전시담당자가 현장에 입회하는 경우에만 폐관 후 촬영을 할 수 있다. 빛민감 표찰이 있는 작품은 전시담당자가 입회하더라도 조명을 켜고 촬영할 수 없다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "폐관 후 촬영은 전시담당자가 현장에 입회하는 경우에만 가능합니다. 빛민감 표찰 작품은 담당자가 입회해도 조명을 켜고 촬영할 수 없으며, 이 제한을 모든 촬영의 전면 금지로 넓힐 수는 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "현장 입회와 사전 서면 승인을 구별한다.",
+            "빛민감 표찰 예외는 조명을 켠 촬영에만 붙인다.",
+            "조명 사용 금지를 모든 촬영의 전면 금지로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 구름빛 전시관의 폐관 후 촬영은 누구의 어떤 조치가 있어야 가능하며, 빛민감 표찰 작품은 어떻게 취급하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 구름빛 전시관",
+                "title": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "quote": "전시담당자가 사전에 서면 승인한 경우에만 폐관 후 촬영을 할 수 있다. 빛민감 표찰이 있는 작품은 전시담당자가 사전에 서면 승인하더라도 조명을 켜고 촬영할 수 없다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "폐관 후 촬영은 전시담당자가 사전에 서면 승인한 경우에만 가능합니다. 빛민감 표찰 작품은 사전 서면 승인을 받아도 조명을 켜고 촬영할 수 없으며, 이 제한을 모든 촬영의 전면 금지로 넓힐 수는 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "현장 입회와 사전 서면 승인을 구별한다.",
+            "빛민감 표찰 예외는 조명을 켠 촬영에만 붙인다.",
+            "조명 사용 금지를 모든 촬영의 전면 금지로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "폐관 후 촬영 요건이 현장 입회에서 사전 서면 승인으로 바뀌며 빛민감 작품의 조명 촬영 금지는 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 구름빛 전시관의 폐관 후 촬영은 누구의 어떤 조치가 있어야 가능하며, 빛민감 표찰 작품은 어떻게 취급하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 구름빛 전시관",
+                "title": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 산호 분류실",
+                "title": "가상 산호 분류실 색종이 분류 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "quote": "전시담당자가 현장에 입회하는 경우에만 폐관 후 촬영을 할 수 있다. 빛민감 표찰이 있는 작품은 전시담당자가 입회하더라도 조명을 켜고 촬영할 수 없다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 산호 분류실 색종이 분류 절차",
+                "quote": "분류담당자는 색종이를 크기별로 정리한다. 접힌 색종이는 펴지 않고 재사용 상자에 둔다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "폐관 후 촬영은 전시담당자가 현장에 입회하는 경우에만 가능합니다. 빛민감 표찰 작품은 담당자가 입회해도 조명을 켜고 촬영할 수 없으며, 이 제한을 모든 촬영의 전면 금지로 넓힐 수는 없습니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "현장 입회와 사전 서면 승인을 구별한다.",
+            "빛민감 표찰 예외는 조명을 켠 촬영에만 붙인다.",
+            "조명 사용 금지를 모든 촬영의 전면 금지로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 구름빛 전시관의 폐관 후 촬영은 누구의 어떤 조치가 있어야 가능하며, 빛민감 표찰 작품은 어떻게 취급하나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 구름빛 전시관의 폐관 후 촬영은 누구의 어떤 조치가 있어야 가능하며, 빛민감 표찰 작품은 어떻게 취급하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 구름빛 전시관",
+                "title": "가상 구름빛 전시관 폐관후 촬영 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 구름빛 전시관",
+                "title": "가상 구름빛 전시관 폐관후 촬영 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 구름빛 전시관 폐관후 촬영 절차 안내문 가",
+                "quote": "전시담당자가 현장에 입회하는 경우에만 폐관 후 촬영을 할 수 있다. 전시담당자의 사전 서면 승인이 있어도 현장 입회가 없으면 폐관 후 촬영을 할 수 없다. 빛민감 표찰이 있는 작품은 전시담당자가 입회하더라도 조명을 켜고 촬영할 수 없다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 구름빛 전시관 폐관후 촬영 절차 안내문 나",
+                "quote": "전시담당자가 사전에 서면 승인한 경우에만 폐관 후 촬영을 할 수 있다. 사전 서면 승인이 있으면 전시담당자의 현장 입회 없이도 폐관 후 촬영을 할 수 있다. 빛민감 표찰이 있는 작품은 전시담당자가 사전에 서면 승인하더라도 조명을 켜고 촬영할 수 없다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "빛민감 표찰이 없는 작품을 폐관 후 촬영하려는데 전시담당자의 사전 서면 승인은 있지만 현장 입회는 없는 경우, 안내문 가는 촬영을 금지하고 안내문 나는 허용합니다. 같은 상황에 대한 허용과 금지가 충돌하므로 우선관계가 없는 자료만으로 촬영 가능 여부를 확정할 수 없습니다. 빛민감 표찰 작품의 조명 촬영 금지는 두 안내문에 공통되며, 이를 그 작품의 모든 촬영에 대한 공통된 전면 금지로 확대할 수는 없습니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "현장 입회와 사전 서면 승인을 구별한다.",
+            "빛민감 표찰 예외는 조명을 켠 촬영에만 붙인다.",
+            "조명 사용 금지를 모든 촬영의 전면 금지로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "사전 서면 승인은 있지만 현장 입회는 없고 빛민감 표찰이 없는 작품을 촬영하는 동일한 상황에서 허용과 금지가 충돌함을 설명한다. 양립 가능한 입회·승인 필요조건의 차이만으로 충돌을 주장하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 구름빛 전시관의 폐관 후 촬영은 누구의 어떤 조치가 있어야 가능하며, 빛민감 표찰 작품은 어떻게 취급하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 구름빛 전시관",
+                "title": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 구름빛 전시관 폐관후 촬영 절차",
+                "quote": "전시담당자가 현장에 입회하는 경우에만 폐관 후 촬영을 할 수 있다. 빛민감 표찰이 있는 작품은 전시담당자가 입회하더라도 조명을 켜고 촬영할 수 없다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "폐관 후 촬영",
+                "predicate": "할 수 있다",
+                "object": "촬영",
+                "qualifiers": {
+                  "condition": "전시담당자가 현장에 입회하는 경우에만"
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "빛민감 표찰이 있는 작품",
+                "predicate": "할 수 없다",
+                "object": "조명을 켜고 촬영",
+                "qualifiers": {
+                  "condition": "전시담당자가 입회하더라도"
+                },
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "폐관 후 촬영은 전시담당자가 현장에 입회하는 경우에만 가능합니다. 빛민감 표찰 작품은 담당자가 입회해도 조명을 켜고 촬영할 수 없으며, 이 제한을 모든 촬영의 전면 금지로 넓힐 수는 없습니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "현장 입회와 사전 서면 승인을 구별한다.",
+            "빛민감 표찰 예외는 조명을 켠 촬영에만 붙인다.",
+            "조명 사용 금지를 모든 촬영의 전면 금지로 확대하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    },
+    {
+      "family_id": "fictional-dev-stream-survey-release",
+      "split": "development",
+      "fictional": true,
+      "review_status": "needs_independent_review",
+      "variants": [
+        {
+          "condition": "clean",
+          "question": "가상 여울 조사실은 관측좌표를 공개하기 전에 누가 어느 단위로 가공하며, 번식지 표시 지점은 어떻게 처리하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 여울 조사실",
+                "title": "가상 여울 조사실 관측좌표 공개 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 여울 조사실 관측좌표 공개 절차",
+                "quote": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있다. 번식지 표시가 있는 지점의 좌표는 격자로 묶었어도 공개하지 않고 내부보관하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있습니다. 번식지 표시 지점의 좌표는 격자 처리 후에도 공개하지 않고 내부보관해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "공개 담당자와 격자 단위를 보존한다.",
+            "격자 처리를 번식지 표시 지점 공개 허가로 설명하지 않는다.",
+            "격자 처리 알고리즘이나 실제 생태 관련 법령을 임의로 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "changed_value_or_condition",
+          "question": "가상 여울 조사실은 관측좌표를 공개하기 전에 누가 어느 단위로 가공하며, 번식지 표시 지점은 어떻게 처리하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 여울 조사실",
+                "title": "가상 여울 조사실 관측좌표 공개 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 여울 조사실 관측좌표 공개 절차",
+                "quote": "분석담당자는 관측좌표를 500미터 격자 단위로 묶은 뒤에만 공개할 수 있다. 번식지 표시가 있는 지점의 좌표는 격자로 묶었어도 공개하지 않고 내부보관하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "분석담당자는 관측좌표를 500미터 격자 단위로 묶은 뒤에만 공개할 수 있습니다. 번식지 표시 지점의 좌표는 격자 처리 후에도 공개하지 않고 내부보관해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "공개 담당자와 격자 단위를 보존한다.",
+            "격자 처리를 번식지 표시 지점 공개 허가로 설명하지 않는다.",
+            "격자 처리 알고리즘이나 실제 생태 관련 법령을 임의로 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "격자 처리 단위가 100미터에서 500미터로 바뀌며 번식지 공개 금지는 유지된다.",
+            "기존 조건이나 수치를 기억으로 고집하지 않고 변경된 제공 자료를 따른다."
+          ],
+          "expected_relation": "changed_value_or_condition",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "distractor",
+          "question": "가상 여울 조사실은 관측좌표를 공개하기 전에 누가 어느 단위로 가공하며, 번식지 표시 지점은 어떻게 처리하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 여울 조사실",
+                "title": "가상 여울 조사실 관측좌표 공개 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 아침별 접견실",
+                "title": "가상 아침별 접견실 이름표 반환 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 여울 조사실 관측좌표 공개 절차",
+                "quote": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있다. 번식지 표시가 있는 지점의 좌표는 격자로 묶었어도 공개하지 않고 내부보관하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 아침별 접견실 이름표 반환 절차",
+                "quote": "안내담당자는 방문자의 임시 이름표를 퇴실 때 회수한다. 끈이 끊어진 이름표는 회수 후 수선 상자에 둔다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "문서는 각기 표시된 허구 기관과 업무에 한정된다. 다른 기관의 절차를 질문의 대상 기관에 적용하지 않는다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있습니다. 번식지 표시 지점의 좌표는 격자 처리 후에도 공개하지 않고 내부보관해야 합니다.",
+                "sources": [
+                  "E1"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "공개 담당자와 격자 단위를 보존한다.",
+            "격자 처리를 번식지 표시 지점 공개 허가로 설명하지 않는다.",
+            "격자 처리 알고리즘이나 실제 생태 관련 법령을 임의로 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "질문에 명시된 기관·업무가 아닌 별도 문서의 규칙을 섞거나 그 자료만으로 답을 바꾸지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "missing",
+          "question": "가상 여울 조사실은 관측좌표를 공개하기 전에 누가 어느 단위로 가공하며, 번식지 표시 지점은 어떻게 처리하나요?",
+          "source_data": {
+            "documents": [],
+            "evidence": [],
+            "scope": "허구 시나리오에 대한 자료가 제공되지 않은 상태",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "제공된 자료가 없어 질문하신 담당자, 요건 또는 제한을 확인할 수 없습니다. 해당 허구 절차의 안내문이 필요하며, 근거 없이 적용 내용을 정할 수 없습니다.",
+                "sources": []
+              }
+            ]
+          },
+          "rubric": [
+            "자료가 전혀 없음을 밝히고 구체적인 담당자·기한·조건·금지 여부를 추측하지 않는다.",
+            "다른 조건에서 본 답을 기억하여 사실인 것처럼 제시하지 않는다.",
+            "근거가 없으므로 출처 목록은 비워 두며 가짜 출처를 만들지 않는다."
+          ],
+          "expected_relation": "support_removed",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "conflict",
+          "question": "가상 여울 조사실은 관측좌표를 공개하기 전에 누가 어느 단위로 가공하며, 번식지 표시 지점은 어떻게 처리하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 여울 조사실",
+                "title": "가상 여울 조사실 관측좌표 공개 절차 안내문 가",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              },
+              {
+                "doc_id": "D2",
+                "institution": "가상 여울 조사실",
+                "title": "가상 여울 조사실 관측좌표 공개 절차 안내문 나",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 여울 조사실 관측좌표 공개 절차 안내문 가",
+                "quote": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있다. 번식지 표시가 없는 지점의 좌표를 100미터 격자로 묶고 최종 공개자료의 격자 단위를 100미터로 유지한 경우에는, 500미터 격자로 추가 처리하지 않아도 분석담당자가 그 자료를 공개할 수 있다. 번식지 표시가 있는 지점의 좌표는 격자로 묶었어도 공개하지 않고 내부보관하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "quotation",
+                "doc_id": "D2",
+                "subject": "가상 여울 조사실 관측좌표 공개 절차 안내문 나",
+                "quote": "분석담당자는 관측좌표를 500미터 격자 단위로 묶은 뒤에만 공개할 수 있다. 번식지 표시가 없는 지점의 좌표라도 100미터 격자로 묶고 최종 공개자료의 격자 단위를 100미터로 유지한 채 500미터 격자로 추가 처리하지 않은 경우에는 분석담당자가 그 자료를 공개할 수 없다. 번식지 표시가 있는 지점의 좌표는 격자로 묶었어도 공개하지 않고 내부보관하여야 한다."
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다.",
+              "두 안내문은 동일한 허구 기관의 같은 업무에 관한 자료이다. 작성 시점, 시행 시점, 대체 여부 및 우선순위 정보는 제공되지 않았다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "번식지 표시가 없는 지점의 좌표를 100미터 격자로 묶고 최종 공개자료도 100미터 격자로 유지하며 500미터 격자로 추가 처리하지 않은 같은 상황에서, 안내문 가는 분석담당자의 공개를 허용하고 안내문 나는 금지합니다. 명시적인 허용과 금지가 충돌하며 우선관계가 없어 그 자료의 공개 가능 여부를 확정할 수 없습니다. 번식지 표시 지점의 좌표는 격자 처리 후에도 공개하지 않고 내부보관해야 한다는 점은 두 안내문에 공통됩니다.",
+                "sources": [
+                  "E1",
+                  "E2"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "공개 담당자와 격자 단위를 보존한다.",
+            "격자 처리를 번식지 표시 지점 공개 허가로 설명하지 않는다.",
+            "격자 처리 알고리즘이나 실제 생태 관련 법령을 임의로 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "두 안내문의 다른 내용을 모두 출처와 함께 설명하고 우선관계를 확정하지 않는다.",
+            "문서 순서, 이름 또는 더 엄격한 규칙이라는 이유만으로 우선순위를 만들지 않는다.",
+            "번식지 표시 없는 지점의 좌표를 100미터 격자로 처리하고 최종 공개자료도 100미터로 유지하며 500미터 추가 처리를 하지 않은 동일한 상황에서 분석담당자의 공개 허용과 금지가 충돌함을 설명한다. 서로 다른 처리 선행조건만으로 충돌을 주장하거나 순차 처리가 불가능하다고 추론하지 않는다."
+          ],
+          "expected_relation": "conflict",
+          "review_status": "needs_independent_review"
+        },
+        {
+          "condition": "structured",
+          "question": "가상 여울 조사실은 관측좌표를 공개하기 전에 누가 어느 단위로 가공하며, 번식지 표시 지점은 어떻게 처리하나요?",
+          "source_data": {
+            "documents": [
+              {
+                "doc_id": "D1",
+                "institution": "가상 여울 조사실",
+                "title": "가상 여울 조사실 관측좌표 공개 절차",
+                "currency": "FICTIONAL_TRAINING_SCENARIO",
+                "scope": "명시적으로 창작된 허구 교육 시나리오의 제공된 문장만"
+              }
+            ],
+            "evidence": [
+              {
+                "id": "E1",
+                "kind": "quotation",
+                "doc_id": "D1",
+                "subject": "가상 여울 조사실 관측좌표 공개 절차",
+                "quote": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있다. 번식지 표시가 있는 지점의 좌표는 격자로 묶었어도 공개하지 않고 내부보관하여야 한다."
+              },
+              {
+                "id": "E2",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "분석담당자",
+                "predicate": "공개할 수 있다",
+                "object": "관측좌표",
+                "qualifiers": {
+                  "condition": "100미터 격자 단위로 묶은 뒤에만"
+                },
+                "supporting_sources": [
+                  "E1"
+                ]
+              },
+              {
+                "id": "E3",
+                "kind": "fact",
+                "doc_id": "D1",
+                "subject": "분석담당자",
+                "predicate": "공개하지 않고 내부보관하여야 한다",
+                "object": "번식지 표시가 있는 지점의 좌표",
+                "qualifiers": {
+                  "condition": "격자로 묶었어도"
+                },
+                "supporting_sources": [
+                  "E1"
+                ],
+                "exception_to": [
+                  "E2"
+                ]
+              }
+            ],
+            "scope": "허구 시나리오의 제공된 자료에 한정하며 실제 규칙의 적용 여부를 다루지 않음",
+            "warnings": [
+              "이 자료의 기관·절차·규칙은 모두 학습용으로 창작한 허구이며 실제 기관의 법령이나 현재 적용되는 규칙이 아니다."
+            ]
+          },
+          "target": {
+            "paragraphs": [
+              {
+                "text": "분석담당자는 관측좌표를 100미터 격자 단위로 묶은 뒤에만 공개할 수 있습니다. 번식지 표시 지점의 좌표는 격자 처리 후에도 공개하지 않고 내부보관해야 합니다.",
+                "sources": [
+                  "E1",
+                  "E2",
+                  "E3"
+                ]
+              }
+            ]
+          },
+          "rubric": [
+            "공개 담당자와 격자 단위를 보존한다.",
+            "격자 처리를 번식지 표시 지점 공개 허가로 설명하지 않는다.",
+            "격자 처리 알고리즘이나 실제 생태 관련 법령을 임의로 추가하지 않는다.",
+            "공개 입력에 명시된 허구 상황에 한정하고 실제 기관의 규칙이나 현행성을 주장하지 않는다.",
+            "구조화된 일반 사실과 예외 사실의 연결을 읽어 해당 행위에만 예외를 붙인다.",
+            "구조화된 사실의 supporting_sources는 원문 인용을 가리키며 그래프가 별도의 우선적 규범인 것처럼 취급하지 않는다."
+          ],
+          "expected_relation": "invariant",
+          "review_status": "needs_independent_review"
+        }
+      ]
+    }
+  ]
+}

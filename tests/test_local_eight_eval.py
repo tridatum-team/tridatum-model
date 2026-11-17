@@ -394,8 +394,12 @@ class SchemaTokenizerContracts(unittest.TestCase):
         import importlib.util
         if importlib.util.find_spec('lmformatenforcer') is None:
             raise unittest.SkipTest('Optional profile requires lm-format-enforcer==0.11.3; not a compatibility pass')
-        from transformers import AutoTokenizer, GenerationConfig
         directory = ROOT / 'runs/mois-ordered-models-20261113T062501Z/qwen8-native-metadata'
+        if not directory.exists() and not directory.is_symlink():
+            raise unittest.SkipTest(
+                'Optional schema tokenizer integration requires existing official Qwen3-8B '
+                f'tokenizer metadata at {directory}; no download attempted; not a compatibility pass')
+        from transformers import AutoTokenizer, GenerationConfig
         cls.tokenizer = AutoTokenizer.from_pretrained(directory, local_files_only=True, trust_remote_code=False)
         cls.row = mois_row(['E1', 'E2', 'admrul:83472:제2조제1항 자문단 정의'])
         cls.decoder = E.SchemaDecoder(cls.tokenizer, [cls.row])

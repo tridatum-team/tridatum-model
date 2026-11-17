@@ -19,6 +19,58 @@ import grounded_hf_worker as W
 import grounded_hf_lifecycle as L
 
 
+class PublicEvidenceSandboxTests(unittest.TestCase):
+    def plan(self):
+        return dict(schema=L.PUBLIC_EVIDENCE_SCHEMA, identity={'run_id': 'public-evidence-fixture'},
+            limits=dict(L.LIMITS, lifetime_seconds=13500, reserve_seconds=300, output_bytes=512 * 1024**2),
+            network={'egress_byte_cap': 2 * L.GIB})
+
+    def test_all_four_stages_use_bounded_nonroot_offline_sandbox(self):
+        plan = self.plan()
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'plan.json').write_text(json.dumps(plan))
+            for phase in ('runtime', 'capacity', 'baseline', 'train', 'adapter'):
+                argv = W.stage_argv(plan, base, phase, 60, {'uuid': 'GPU-owned', 'minor': 0}, 1001, 1001)
+                self.assertIn('PrivateNetwork=yes', argv)
+                self.assertIn('NoNewPrivileges=yes', argv)
+                self.assertIn('LimitFSIZE=536870912', argv)
+                self.assertIn('ProtectSystem=strict', argv)
+                self.assertEqual(argv[argv.index('--uid') + 1], '1001')
+                self.assertIn('ReadWritePaths=' + str(base / 'output'), argv)
+            with self.assertRaises(RuntimeError):
+                W.stage_argv(plan, base, 'evaluation', 60, {}, 1001, 1001)
+        self.assertEqual(W.replacement_egress_allowance(plan), 2 * L.GIB - 16 * 1024**2)
+
+    def test_unregistered_partial_output_is_not_exported(self):
+        plan = self.plan()
+        plan.update(cost={'export_bytes': 400 * 1024**2}, output_allowlist=['runtime.json'])
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            (base / 'output').mkdir()
+            (base / 'output/private-references.json').write_text('{}')
+            with self.assertRaisesRegex(RuntimeError, 'Unregistered output member'):
+                W.export_outputs(base, plan, {'public_evidence_success': False}, 1000)
+            self.assertFalse((base / 'export.tar').exists())
+
+
+class PublicEvidenceTrainingCommandTests(unittest.TestCase):
+    def test_exact_630_exposures_reach_the_real_trainer_as_315_updates(self):
+        plan = dict(schema=L.PUBLIC_EVIDENCE_SCHEMA,
+            model=dict(id='Qwen/Qwen3-8B', revision=L.ORDERED_MODELS['qwen8'][1]),
+            data={'manifest': {'path': 'prepared/manifest.json'}},
+            recipe=dict(rows=630, epochs=1, steps=315, batch_size=2, micro_batch_size=1,
+                lr=1e-5, rank=8, alpha=16, dropout=0.0, context_tokens=4096, answer_tokens=768, seed=14))
+        argv = W.train_argv(plan, '/owned')
+        for option, value in (('--steps', '315'), ('--batch-size', '2'), ('--micro-batch-size', '1'),
+                              ('--max-tokens', '4096'), ('--max-answer-tokens', '768'),
+                              ('--model-id', 'Qwen/Qwen3-8B'), ('--device', 'cuda')):
+            self.assertEqual(argv[argv.index(option) + 1], value)
+        self.assertEqual(argv[0], '/owned/code/scripts/train_open_weight_lora.py')
+        self.assertNotIn('--init-adapter', argv)
+        self.assertNotIn('--checkpoint-every', argv)
+
+
 class CudaEvaluationDispatchTests(unittest.TestCase):
     def plan(self):
         return dict(schema=L.EVALUATION_SCHEMA, identity={'run_id': 'cuda-evaluation-fixture'},

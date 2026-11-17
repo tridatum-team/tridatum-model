@@ -17,6 +17,42 @@ import grounded_hf_lifecycle as L
 import grounded_hf_worker as W
 
 
+class PublicEvidenceLeaseTests(unittest.TestCase):
+    def plan(self):
+        return dict(schema=L.PUBLIC_EVIDENCE_SCHEMA, identity=identity(),
+            absolute_termination_deadline='2030-01-02T00:00:00Z',
+            limits=dict(L.LIMITS, lifetime_seconds=13500, reserve_seconds=300,
+                        output_bytes=512 * 1024**2),
+            lifetime=dict(total_seconds=14400, termination_grace_seconds=900, automatic_extension=False),
+            cost=dict(termination_grace_seconds=900, export_bytes=400 * 1024**2),
+            iam={'scheduler_role': {'arn': 'arn:aws:iam::148761639313:role/synthetic-scheduler'}})
+
+    def test_dynamic_deadline_clamps_work_and_exact_instance_schedule(self):
+        plan = self.plan()
+        deadline = L.timestamp(plan['absolute_termination_deadline'])
+        self.assertEqual(L.work_deadline(plan, deadline - 1000), deadline - 900)
+        self.assertEqual(L.work_deadline(plan, deadline - 20000), deadline - 6500)
+        spec = L.schedule_spec(plan, 'i-public-fixture', deadline - 1000)
+        self.assertEqual(json.loads(spec['Target']['Input']), {'InstanceIds': ['i-public-fixture']})
+        self.assertEqual(spec['Target']['RetryPolicy']['MaximumRetryAttempts'], 0)
+        scheduled = spec['ScheduleExpression'][3:-1] + 'Z'
+        self.assertEqual(L.timestamp(scheduled), deadline - 960)
+        for invalid in ('2030-01-02T00:00:00', '2030-01-02T00:00:00+09:00', None):
+            plan['absolute_termination_deadline'] = invalid
+            with self.assertRaises(RuntimeError):
+                L.absolute_deadline(plan)
+
+    def test_cleanup_preserves_expired_absolute_cutoff(self):
+        plan = self.plan()
+        deadline = L.absolute_deadline(plan)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            L.save(root / 'approval-consumed.json', dict(run_id=plan['identity']['run_id'], plan_sha256='a' * 64))
+            L.save(root / 'launch-dispatched.json', dict(run_id=plan['identity']['run_id'],
+                plan_sha256='a' * 64, request_sha256='b' * 64, at=deadline - 1000))
+            self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, root), deadline)
+
+
 class Clock:
     def __init__(self):
         self.now = 1000.0

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tarfile
 import tempfile
+from types import FunctionType
 import unittest
 from unittest.mock import Mock, patch
 
@@ -13,6 +14,44 @@ from scripts.aws_eval import fresh_eight_launch as fresh
 
 SHA = 'a' * 64
 
+# Synthetic unit-test inputs, not operator approvals. Production trust anchors
+# deliberately reject these bytes; tests substitute only their expected digests.
+TRAINING_AUTHORIZATION = dict(
+    synthetic_unit_test=True, schema='trid-eight-training-recovery-authorization-v2',
+    aggregate_budget_usd='10.00', additional_gpu_executions=1,
+    previous_authorization_consumed=True, execution_started=False,
+    automatic_retry=False, automatic_extension=False,
+    previous_run_id='mois-fresh-eight-gpu-20261115-094150')
+EVALUATION_AUTHORIZATION = dict(
+    synthetic_unit_test=True, schema='trid-cuda-evaluation-authorization-v1',
+    run_id='mois-eight-cuda-eval-20261116-134815', cap_usd='20',
+    additional_to_prior_spending=True, maximum_instance_executions=1,
+    maximum_total_lifetime_seconds_including_shutdown_grace=19800,
+    work_lease_seconds=18900, shutdown_grace_seconds=900, evaluation_only=True,
+    retraining_allowed=False, automatic_instance_retry_allowed=False,
+    prior_training_authorization_reused=False)
+SAMPLING_AUTHORIZATION = dict(
+    synthetic_unit_test=True, schema='trid-overnight-gpu-authorization-v1',
+    maximum_concurrent_instances=1, instance_type='g6e.2xlarge', gpu='NVIDIA L40S',
+    fixed_dollar_cap_explicitly_selected_by_user=False,
+    conservative_operational_deadline=fresh.lifecycle.SAMPLING_DEADLINE)
+
+
+def patch_authorization_digest(test, validator, original_sha, fixture_sha):
+    """Replace one literal trust anchor, retaining every real validation check."""
+    code = validator.__code__
+    test.assertEqual(code.co_consts.count(original_sha), 1)
+    replacement = code.replace(co_consts=tuple(
+        fixture_sha if value == original_sha else value for value in code.co_consts))
+    # Historical digests are literals, not patchable module constants. Clone
+    # only the validator so its original code stays intact through test cleanup.
+    synthetic_validator = FunctionType(replacement, validator.__globals__,
+        validator.__name__, validator.__defaults__, validator.__closure__)
+    synthetic_validator.__kwdefaults__ = validator.__kwdefaults__
+    patcher = patch.object(fresh.lifecycle, validator.__name__, synthetic_validator)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
 
 def pin(root, name, content):
     path = root / name
@@ -20,6 +59,26 @@ def pin(root, name, content):
     raw = content if isinstance(content, bytes) else json.dumps(content).encode()
     path.write_bytes(raw)
     return dict(path=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+
+
+class PublicEvidenceRegistrationBindingTests(unittest.TestCase):
+    def test_final_plan_cannot_change_registered_deadline_cost_or_inputs(self):
+        reg = dict(schema=fresh.PUBLIC_EVIDENCE_SCHEMA, identity={'run_id': 'public-evidence-fixture'},
+            iam={}, controller_arn='synthetic-controller', authorization={'sha256': 'a' * 64},
+            resource_envelope={'sha256': 'b' * 64}, workload={'evaluation_inputs': {'sha256': 'c' * 64}},
+            recipe={'steps': 315}, limits={'lifetime_seconds': 27900},
+            lifetime={'total_seconds': 28800}, cost={'cap_usd': 42},
+            absolute_termination_deadline='2030-01-02T00:00:00Z',
+            data={'train': {'sha256': 'd' * 64}}, phase_seconds={'train': 3600},
+            ancillary_evidence={'sha256': 'e' * 64}, bootstrap_admission={'sha256': 'f' * 64})
+        for field in ('workload', 'recipe', 'limits', 'lifetime', 'cost', 'absolute_termination_deadline',
+                      'data', 'phase_seconds', 'ancillary_evidence'):
+            plan = copy.deepcopy(reg)
+            plan['schema'] = fresh.lifecycle.PUBLIC_EVIDENCE_SCHEMA
+            plan['runtime'] = {'bootstrap': {'admission': reg['bootstrap_admission']}}
+            plan[field] = {'unregistered': True} if field != 'absolute_termination_deadline' else '2030-01-03T00:00:00Z'
+            with self.subTest(field=field), self.assertRaisesRegex(RuntimeError, 'differs from registration'):
+                fresh.validate_final(reg, 'a' * 64, '/missing', '/missing', plan, {}, 'b' * 64)
 
 
 def registration(root):
@@ -49,8 +108,7 @@ def registration(root):
                      inline={'ExactRunOnly': {'Version': '2012-10-17', 'Statement': policy}})
            for key, trust, policy in (('instance_role', instance_trust, statements),
                                       ('scheduler_role', scheduler_trust, termination))}
-    authorization = Path(__file__).resolve().parents[1] / 'runs/mois-eight-training-recovery-20261116T014906Z/authorization.json'
-    auth = pin(root, 'authorization.json', authorization.read_bytes())
+    auth = pin(root, 'authorization.json', TRAINING_AUTHORIZATION)
     ledger = pin(root, 'aggregate-ledger.json', dict(schema='trid-fresh-eight-aggregate-budget-v2',
         run_id=run, authorization=auth, previous_run_id='mois-fresh-eight-gpu-20261115-094150',
         previous_authorization_consumed=True, prior_conditional_all_in_bound_usd='5.89',
@@ -96,7 +154,7 @@ def evaluation_registration(root):
     reg['schema'] = fresh.EVALUATION_SCHEMA
     del reg['aggregate_ledger']
     auth_name = 'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
-    reg['authorization'] = pin(root, auth_name, (Path(__file__).resolve().parents[1] / auth_name).read_bytes())
+    reg['authorization'] = pin(root, auth_name, EVALUATION_AUTHORIZATION)
     envelope = json.loads((root / reg['resource_envelope']['path']).read_bytes())
     for key in ('aggregate_ledger', 'prior_conditional_all_in_bound_usd', 'current_run_cap_usd'):
         del envelope[key]
@@ -119,7 +177,7 @@ def sampling_registration(root):
                absolute_termination_deadline=fresh.lifecycle.SAMPLING_DEADLINE)
     name = fresh.lifecycle.OVERNIGHT_AUTHORIZATION
     previous_pins = {reg[key]['path'] for key in ('authorization', 'resource_envelope')}
-    reg['authorization'] = pin(root, name, (Path(__file__).resolve().parents[1] / name).read_bytes())
+    reg['authorization'] = pin(root, name, SAMPLING_AUTHORIZATION)
     envelope = json.loads((root / reg['resource_envelope']['path']).read_bytes())
     envelope.update(schema='trid-cuda-evaluation-sampling-resource-envelope-v1',
         identity=reg['identity'], authorization=reg['authorization'],
@@ -138,6 +196,12 @@ class SamplingPreparationTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         self.reg = sampling_registration(self.root)
+        evaluation = fresh.lifecycle.evaluation_module({'schema': fresh.lifecycle.EVALUATION_SCHEMA})
+        for module, name in ((fresh.lifecycle, 'OVERNIGHT_AUTHORIZATION_SHA'),
+                             (evaluation, 'SAMPLING_AUTHORIZATION_SHA')):
+            patcher = patch.object(module, name, self.reg['authorization']['sha256'])
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.now = fresh.lifecycle.timestamp(fresh.lifecycle.SAMPLING_DEADLINE) - 20000
 
     def test_sampling_registration_binds_separate_grant_and_deadline(self):
@@ -151,7 +215,7 @@ class SamplingPreparationTests(unittest.TestCase):
 
     def test_sampling_cannot_reuse_consumed_greedy_authorization(self):
         name = 'runs/mois-eight-cuda-evaluation-20261116T134815Z/authorization.json'
-        self.reg['authorization'] = pin(self.root, name, (Path(__file__).resolve().parents[1] / name).read_bytes())
+        self.reg['authorization'] = pin(self.root, name, EVALUATION_AUTHORIZATION)
         with patch.object(fresh.time, 'time', return_value=self.now), patch.object(fresh, 'validate_lineage'):
             with self.assertRaisesRegex(RuntimeError, 'Separate overnight authorization'):
                 fresh.validate_registration(self.reg, self.root)
@@ -208,6 +272,9 @@ class CudaEvaluationPreparationTests(unittest.TestCase):
         self.state = self.root / 'state'
         self.state.mkdir()
         self.reg = evaluation_registration(self.root)
+        patch_authorization_digest(self, fresh.lifecycle.validate_evaluation_resources,
+            '4967ea79e40e1f5df25004460642d80f8832c190d8d785323250cf2428fafd98',
+            self.reg['authorization']['sha256'])
 
     def test_new_registration_reauthenticates_parent_lineage(self):
         with patch.object(fresh, 'validate_lineage') as authenticate:
@@ -266,6 +333,9 @@ class FreshPreparationTests(unittest.TestCase):
         self.state = self.root / 'state'
         self.state.mkdir()
         self.reg = registration(self.root)
+        patch_authorization_digest(self, fresh.lifecycle.validate_fresh_budget,
+            'a305a416c12f4038a78078cb5201d567c6e3d1d34b5dd44839e086b049e90967',
+            self.reg['authorization']['sha256'])
 
     def test_registration_authenticates_actual_inputs(self):
         self.assertIs(fresh.validate_registration(self.reg, self.root), self.reg)
