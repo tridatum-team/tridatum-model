@@ -40,3 +40,5 @@ reports/*.tmp
 # on-prem build outputs
 deploy/onprem/wheels/
 deploy/onprem/dist/
+deploy/onprem_web/wheels/
+deploy/onprem_web/dist/

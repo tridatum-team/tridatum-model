@@ -1,0 +1,9 @@
+# Exactly these wheels, no dependencies (installed with --no-deps --require-hashes).
+# tokenizers/pypdf: the same pins as deploy/onprem (hashes from uv.lock); the rest: PyPI wheel sha256.
+# Django's tzdata dependency applies to Windows only and is not needed in the Linux image.
+Django==5.2.19 --hash=sha256:5965d974a5218a2b68a11dd1276434707f23886525c23f0598eccedaf4f4ca00
+asgiref==3.13.0 --hash=sha256:f9596a2434512686473d50f96ff6207fbba49ae1a785dfac614df4aeb085674d
+sqlparse==0.6.1 --hash=sha256:3be5a72d04c873d690d7c6dedd33d6fae2ef82759881ceec02fc2efd0cba564f
+waitress==3.0.2 --hash=sha256:c56d67fd6e87c2ee598b76abdd4e96cfad1f24cacdea5078d382b1f9d7b5ed2e
+tokenizers==0.23.3 --hash=sha256:376851d22bcf9d650a5c3090bb83e6cf9e895fbf0595369fa4cd43c1f69b5f87
+pypdf==6.21.2 --hash=sha256:1d44d1a3a200f25062adff0085b02040e4646431ac2ccac22e42679e91466084

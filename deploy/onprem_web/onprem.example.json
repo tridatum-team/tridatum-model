@@ -1,0 +1,8 @@
+{
+  "hostname": "trid.example.internal",
+  "port": 8080,
+  "data_dir": "/data",
+  "llm_base": "http://llm:8080",
+  "tokenizer_path": "/opt/trid/tokenizer.json",
+  "retention_days": 365
+}
