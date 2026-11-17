@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HF_HUB_OFFLINE</key>
+		<string>1</string>
+		<key>PYTHONDONTWRITEBYTECODE</key>
+		<string>1</string>
+		<key>TOKENIZERS_PARALLELISM</key>
+		<string>false</string>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>co.tridatum.trid.onprem</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/eomgyuhyeon/Services/trid-onprem/releases/django-5f45934/venv/bin/python</string>
+		<string>-I</string>
+		<string>-m</string>
+		<string>onprem_web</string>
+		<string>serve</string>
+		<string>--config</string>
+		<string>/Users/eomgyuhyeon/Services/trid-onprem/data/onprem.json</string>
+		<string>--bind</string>
+		<string>127.0.0.1</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/eomgyuhyeon/Services/trid-onprem/logs/co.tridatum.trid.onprem.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/eomgyuhyeon/Services/trid-onprem/logs/co.tridatum.trid.onprem.log</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>Umask</key>
+	<integer>63</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/eomgyuhyeon/Services/trid-onprem</string>
+</dict>
+</plist>

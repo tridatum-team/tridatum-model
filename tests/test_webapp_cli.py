@@ -133,6 +133,41 @@ class CliTests(unittest.TestCase):
         self.assertEqual(rows, [('admin_create_user', {'target': 'root', 'action': 'create'}), ('logout', {}),
                                 ('retention_purge', {'count': 1})])
 
+    # -- import-legacy -----------------------------------------------------------
+
+    def test_import_legacy_cli_counts_only_and_rejects_second_import(self):
+        from trid.onprem.store import Store
+        source = self.root / 'native.db'
+        store = Store(source, clock=lambda: 123.0)
+        try:
+            store.create_user('legacy-root', PW, 'admin', must_change=False)
+            store.log('login_ok', 'legacy-root', '10.0.0.1', 'ok')
+            original = store._db.execute('SELECT * FROM users').fetchall()
+            argv = ('import-legacy', '--config', str(self.cfg), '--source', str(source))
+            code, out, err = self.run_cli(*argv)
+            self.assertEqual((code, out, err), (0, 'Imported accounts=1 audit_events=1\n', ''))
+            self.assertEqual(self.db().execute('SELECT password, created_at FROM accounts_user').fetchone(),
+                             (original[0][2], 123.0))
+            code, out, err = self.run_cli(*argv)
+            self.assertEqual(code, 1)
+            self.assertIn('not empty', err)
+            self.assertNotIn('legacy-root', out + err)
+            self.assertNotIn(PW, out + err)
+            self.assertNotIn(original[0][2], out + err)
+            self.assertNotIn('Traceback', err)
+            self.assertEqual(store._db.execute('SELECT * FROM users').fetchall(), original)
+            self.assertEqual(self.db().execute('SELECT COUNT(*) FROM audit_event').fetchone()[0], 1)
+        finally:
+            store.close()
+
+    def test_import_missing_source_does_not_create_database(self):
+        code, out, err = self.run_cli('import-legacy', '--config', str(self.cfg),
+                                      '--source', str(self.root / 'absent.db'))
+        self.assertEqual(code, 1)
+        self.assertNotIn('Traceback', err)
+        self.assertFalse((self.data / 'web.db').exists())
+        self.assertFalse((self.root / 'absent.db').exists())
+
     # -- serve -------------------------------------------------------------------
 
     def test_serve_refuses_wrong_tokenizer_in_prod(self):
@@ -143,11 +178,21 @@ class CliTests(unittest.TestCase):
         self.assertNotIn('서버를 시작합니다', out)
         self.assertFalse((self.data / 'web.db').exists())
 
-    def start_dev(self, port):
+    def start_dev(self, port, *, production=False):
         make_tokenizer(self.tok)
         self.write_config(port=port)
-        p = subprocess.Popen([sys.executable, '-I', '-X', 'utf8', '-m', 'onprem_web', 'serve', '--config', str(self.cfg),
-                              '--insecure-dev'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        if production:
+            # Only the tokenizer integrity fixture is replaced. Real production
+            # settings, CLI bind selection and Waitress handle the HTTP requests.
+            code = (
+                'import hashlib, sys\nfrom pathlib import Path\nimport onprem_web.__main__ as m\n'
+                f'm.TOKENIZER_SHA256 = hashlib.sha256(Path({str(self.tok)!r}).read_bytes()).hexdigest()\n'
+                f'sys.exit(m.main(["serve", "--config", {str(self.cfg)!r}, "--bind", "127.0.0.1"]))\n')
+            command = [sys.executable, '-I', '-X', 'utf8', '-c', code]
+        else:
+            command = [sys.executable, '-I', '-X', 'utf8', '-m', 'onprem_web', 'serve',
+                       '--config', str(self.cfg), '--insecure-dev']
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                              encoding='utf-8', env=self.env(), cwd=self.root)
 
         def stop():
@@ -193,6 +238,42 @@ class CliTests(unittest.TestCase):
             with self.assertRaises(OSError, msg=address):
                 socket.create_connection((address, port), timeout=1).close()
         socket.create_connection(('127.0.0.1', port), timeout=5).close()
+
+    def test_dev_rejects_non_loopback_override(self):
+        code, out, err = self.run_cli('serve', '--config', str(self.cfg),
+                                      '--insecure-dev', '--bind', '0.0.0.0')
+        self.assertEqual(code, 1)
+        self.assertIn('--bind 127.0.0.1', err)
+        self.assertNotIn('서버를 시작합니다', out)
+        self.assertFalse((self.data / 'web.db').exists())
+
+    def test_production_loopback_keeps_secure_cookie_and_origin_rules(self):
+        import http.client
+
+        code, _, err = self.run_cli('create-admin', '--config', str(self.cfg), '--username', 'root',
+                                    '--password-stdin', stdin=PW + '\n')
+        self.assertEqual(code, 0, err)
+        port = free_port()
+        _, first = self.start_dev(port, production=True)
+        self.assertIn(f'서버를 시작합니다: 127.0.0.1:{port}', first)
+
+        def login(host, origin):
+            conn = http.client.HTTPConnection('127.0.0.1', port, timeout=10)
+            try:
+                conn.request('POST', '/api/login', body=json.dumps({'username': 'root', 'password': PW}),
+                             headers={'Host': host, 'Origin': origin, 'Content-Type': 'application/json'})
+                response = conn.getresponse()
+                body = response.read()
+                return response.status, response.getheader('Set-Cookie', ''), body
+            finally:
+                conn.close()
+
+        status, cookie, body = login('x.example', 'https://x.example')
+        self.assertEqual(status, 200, body)
+        for attribute in ('__Host-trid=', 'Secure', 'HttpOnly', 'SameSite=Strict', 'Path=/'):
+            self.assertIn(attribute, cookie)
+        self.assertNotIn('trid-dev=', cookie)
+        self.assertEqual(login('x.example', 'http://x.example')[0], 403)
 
     def test_offline_env_is_forced(self):
         code = ('import os, onprem_web.__main__\n'
@@ -253,8 +334,7 @@ class WaitressTests(unittest.TestCase):
             return [b'ok']
 
         server = make_waitress(app, config, '127.0.0.1')
-        threading.Thread(target=server.run, daemon=True).start()
-        self.addCleanup(server.close)
+        self.addCleanup(S.start_waitress(server))
         body = b'%PDF' + b'x' * (int(config.pdf.max_bytes) - 4)
         real = tempfile.TemporaryFile
         with mock.patch('tempfile.TemporaryFile', side_effect=real) as spill:

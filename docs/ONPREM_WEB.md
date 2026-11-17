@@ -8,7 +8,7 @@
 
 **한 서버에는 한 판만 설치하십시오.** 두 판 모두 443 포트를 쓰므로 함께 띄울 수 없습니다. 기존 판에서 옮겨 오는 경우 기존 판을 `docker compose down`으로 내린 뒤 설치합니다.
 
-- 계정과 이용 기록은 옮겨지지 않습니다. 기존 판의 `data/onprem.db`와 Django판의 `data/web.db`는 서로 다른 파일입니다. 기존 판 이용 기록은 기존 판 관리 화면에서 CSV로 내려받아 보관한 뒤 옮기십시오.
+- 계정과 이용 기록은 자동 이전하지 않습니다. 기존 판의 `data/onprem.db`와 Django판의 `data/web.db`는 서로 다른 파일입니다. **기존 계정·비밀번호·이용 기록을 유지하려면 새 앱을 시작하거나 관리자를 만들기 전에 9절의 `import-legacy`를 실행하십시오.** 원본 DB는 변경하지 않습니다.
 - 이미지와 compose 프로젝트 이름이 다릅니다. 기존 판은 `trid-onprem`, `trid-onprem-app:latest`이고 Django판은 `trid-onprem-web`, `trid-onprem-web-app:latest`입니다. 모델 서버 이미지 `trid-onprem-llm:latest`와 Caddy 이미지는 같습니다.
 - 설정 파일 `onprem.json`의 키는 기존 판과 같습니다. 기존 판 설정을 그대로 복사해 써도 됩니다.
 
@@ -64,6 +64,8 @@ docker compose logs app       # "서버를 시작합니다"가 보이면 정상
 앱은 시작할 때 데이터베이스 마이그레이션을 자동으로 적용합니다. 처음 시작하면 빈 `data/`에 `web.db`가 만들어집니다. 로그에는 질문, 파일 이름, 답변, PDF 내용이 남지 않습니다(예외 종류 이름이나 상태 코드만 기록).
 
 ### 3-5. 첫 관리자 만들기
+
+기존 계정 이전을 완료했다면 이 절은 건너뛰고 기존 관리자 계정으로 로그인합니다. 새 설치에만 아래 명령을 사용합니다.
 
 ```sh
 docker compose exec app python -I -m onprem_web create-admin --config /data/onprem.json --username <계정이름>
@@ -164,3 +166,60 @@ docker compose up -d tls
 ```
 
 `test_webapp_parity.py`는 두 판에 같은 요청을 보내 응답이 같은지 확인하고, `release_check.py`를 고치지 않고 Django판에 대해 실행합니다. 이미지 빌드와 실제 설치본 점검은 Docker가 있는 빌드 머신에서 `deploy/onprem_web/build_bundle.sh`로 묶음을 만든 뒤 3-6절대로 합니다.
+
+## 9. 기존 계정과 이용 기록 이전
+
+원본 앱의 쓰기를 중단하고 SQLite 백업을 만든 뒤 진행합니다. 기존 `onprem.db`를 `web.db`로 이름만 바꾸거나 덮어쓰지 마십시오. 설정 파일의 `data_dir`는 새 Django DB를 만들 디렉터리이며, 원본 DB는 `--source`로 별도 지정합니다.
+
+```sh
+umask 077
+python -I -m onprem_web import-legacy \
+    --config /path/to/onprem.json \
+    --source /path/to/onprem.db
+```
+
+- 네이티브 스키마 버전 1의 계정·이용 기록을 읽기 전용 스냅샷으로 가져옵니다. 원본 파일은 수정하지 않습니다.
+- 계정 이름, 기존 비밀번호 해시, 역할, 비활성화·잠금·비밀번호 변경 요구 상태, 생성 시각을 보존합니다. 기존 비밀번호로 로그인하며, 정상 로그인 시 비밀번호 해시를 Django 형식으로 갱신합니다.
+- 이용 기록의 ID·시각·내용과 다음 ID의 기준값을 보존합니다. 원본의 계정·기록을 출력하지 않고 성공 시 `Imported accounts=N audit_events=N`만 표시합니다.
+- 대상에 계정·이용 기록 등이 있거나 원본 형식이 지원 범위를 벗어나면 거부합니다. 부분 이전과 기존 대상 덮어쓰기를 허용하지 않습니다. 실패한 경우 원인을 확인하며, 기존 DB를 임의로 삭제하지 마십시오.
+- 로그인 세션과 메모리의 PDF는 이전하지 않습니다. 사용자는 다시 로그인하고 PDF를 다시 올려야 합니다.
+- 기존 `retention_days` 정책은 바꾸지 않습니다. 가져온 모든 기록을 보존한 뒤에도 서버 시작 시와 매일 실행되는 기존 보관 기간 정리 정책은 적용됩니다.
+
+## 10. 맥미니 테스트 도메인용 네이티브 실행
+
+이 절은 `test.tridatum.co` 전용입니다. 기관 납품용 Linux Compose 배포와 구분하며, 운영 회사 홈페이지나 다른 서비스를 변경하지 않습니다.
+
+### 준비된 파일
+
+- `deploy/onprem_web/requirements-macos-arm64.txt`: Python 3.12 ARM64용 해시 고정 의존성. `pip install --no-deps --require-hashes -r ...`로 설치합니다.
+- 앱 wheel을 릴리스 전용 venv에 `--no-deps`로 설치합니다. `python -I`는 현재 폴더의 소스를 가져오지 않으므로 wheel 설치가 필요합니다.
+- `deploy/onprem_web/co.tridatum.trid.onprem.plist`: `releases/django-5f45934/venv/bin/python`으로 실행하는 앱 작업. 기존 `data/onprem.json`과 로그 경로를 유지합니다.
+- `deploy/onprem_web/Caddyfile.test`: 인증된 터널 요청만 받아 앱의 공개 Host·클라이언트 IP를 지정하는 루프백 게이트웨이.
+- `deploy/onprem_web/worker.mjs`, `wrangler.test.json`: Django 화면·정적 파일·폼·CSV POST 경로를 허용하는 테스트 도메인 전용 Worker. 원점·공개 호스트·비밀키 경계를 유지합니다.
+
+프로덕션 보안 설정을 유지한 루프백 실행 명령은 다음과 같습니다.
+
+```sh
+python -I -m onprem_web serve --config /path/to/onprem.json --bind 127.0.0.1
+```
+
+**공개 배포에 `--insecure-dev`를 사용하지 마십시오.** 기존 모델 프로세스를 소유하는 `co.tridatum.trid.site`도 중지하지 않습니다.
+
+### 적용 순서와 복구 경계
+
+1. SSH 연결 복구 후 실제 앱·게이트웨이의 실행 파일, 설정 경로, 계정 DB와 배포 버전을 확인합니다. 문서만으로 현재 실행 경로를 추정해 덮어쓰지 않습니다.
+2. 새 릴리스 venv와 wheel을 별도 경로에 설치하고, 현재 앱·게이트웨이 plist/설정과 Worker 버전을 보관합니다. 모델·터널·기존 릴리스는 유지합니다.
+3. 기존 앱만 중지하고 원본 DB를 백업한 뒤 9절의 이전을 실행합니다. 실패하면 새 앱을 시작하지 않고 기존 앱을 복구합니다.
+4. 새 앱을 루프백에서 시작하고 실제 이전된 관리자·일반 계정, 잠금 상태, 이용 기록을 확인합니다. Caddy와 Worker는 새 앱의 경로·헤더 계약에 맞춰 함께 전환해야 합니다.
+5. 공개 HTTPS에서 로그인·PDF 업로드·질문·관리자 화면·CSV POST를 확인합니다. 직접 원점 접근 차단도 확인한 후 배포 완료로 기록합니다.
+6. 공개 전환 전 실패 시 이전 앱·게이트웨이·Worker를 함께 복원합니다. **Django 전환 후 생성·수정된 계정과 기록은 원본 DB에 역동기화되지 않습니다.** 공개 사용 이후 복구가 필요하면 새 `web.db`도 보관하고 데이터 차이를 별도로 처리해야 합니다. 단순 DB 덮어쓰기로 최근 기록을 잃지 마십시오.
+
+### 2026-11-17 검증 상태 — 아직 공개 미배포
+
+- Django 테스트 142개, 기존 네이티브 앱 테스트 127개, Worker 경로 테스트 10개 통과.
+- 해시 고정 ARM64 의존성과 앱 wheel을 설치한 별도 venv에서 합성 기존 계정 3개·이용 기록 2개 이전 성공.
+- 실제 Chrome에서 이전한 관리자 비밀번호 로그인, PDF 업로드·텍스트 추출, 로컬 Qwen3-1.7B 원본 응답, 관리자 계정·이용 기록 화면을 확인했습니다. CSV POST는 인증된 브라우저 HTTPS 요청으로 HTTP200·CSV 내용 보존을 확인했습니다.
+- 실제 Caddy와 앱을 사용했습니다. 앱은 `127.0.0.1:51874`에만 바인딩되며 인증 없는 게이트웨이 요청은 HTTP403이었습니다. 브라우저의 테스트 도메인은 격리 프로필 안에서만 로컬 TLS 포트로 연결했습니다.
+- 모델 응답은 `unverified`로 표시되었습니다. 연결·표시 검증이지 답변 품질 합격이 아닙니다.
+- 실제 맥미니의 공인 IP·Tailscale IP SSH 연결은 모두 시간초과였습니다. 위 검증은 로컬 리허설이며 공개 Cloudflare/터널 전환과 실제 운영 DB 이전은 수행하지 않았습니다.
+

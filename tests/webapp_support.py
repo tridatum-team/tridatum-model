@@ -64,3 +64,32 @@ def make_runtime(answer=None, tok=None, registry=None, clock=None, **config_over
 
 def client() -> Client:
     return Client(enforce_csrf_checks=True, HTTP_HOST=HOST, HTTP_ORIGIN=ORIGIN, HTTP_X_REAL_IP='10.0.0.5')
+
+
+def start_waitress(server):
+    """Start a live fixture and return cleanup that joins before closing sockets."""
+    stop = threading.Event()
+
+    def serve():
+        while not stop.is_set():
+            server.asyncore.loop(timeout=0.1, map=server._map, count=1,
+                                 use_poll=server.adj.asyncore_use_poll)
+
+    thread = threading.Thread(target=serve, name='test-waitress-loop', daemon=True)
+    thread.start()
+
+    def close():
+        # Keep I/O alive while workers finish; they may still wake its trigger.
+        dispatcher = server.task_dispatcher
+        dispatcher.shutdown()
+        with dispatcher.lock:
+            if dispatcher.threads:
+                raise AssertionError('Waitress request workers did not stop')
+        stop.set()
+        thread.join(timeout=5)
+        if thread.is_alive():
+            raise AssertionError('Waitress event loop did not stop')
+        # Also close accepted channels, not just the listener and trigger.
+        server.asyncore.close_all(server._map)
+
+    return close

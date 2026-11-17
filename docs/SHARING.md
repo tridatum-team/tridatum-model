@@ -2,9 +2,27 @@
 
 공유 주소: https://test.tridatum.co
 
-이 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됩니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
+## Django 전환 준비 (2026-11-17, 공개 미배포)
 
-**현재 상태 (2026-11-12)**
+`feat/onprem-django`의 `5f45934`를 기준으로 `deploy/test-django-20261117`에서 테스트 배포 호환성과 기존 계정·이용 기록 이전을 준비했습니다. 팀원 브랜치와 `main`은 변경하지 않습니다.
+
+- 최근 배포 기록(`deploy/test-onprem-20261113`, `663f578`)의 공개 구성은 로그인 필수 PDF 앱입니다. 연결 경로는 Worker `trid-model-test` → named tunnel → Caddy `127.0.0.1:51875` → 앱 `127.0.0.1:51874` → 기존 모델 `127.0.0.1:51912`입니다.
+- 기록된 앱 루트는 `/Users/eomgyuhyeon/Services/trid-onprem`이며 기존 릴리스는 `releases/6bb85bd-native`입니다. SSH 복구 후 실제 상태와 대조해야 합니다.
+- Django 전환은 `onprem.db`를 읽기 전용으로 가져와 새 `web.db`에 계정·비밀번호·이용 기록을 보존합니다. 기존 세션/PDF는 이전하지 않으며, 기존 보관 기간 정책은 유지합니다.
+- 앱은 보안 설정을 유지한 `--bind 127.0.0.1`로 실행합니다. `--insecure-dev`를 공개 배포에 사용하지 않습니다.
+- 기존 `co.tridatum.trid.site`는 공유 모델을 소유하므로 중지하지 않습니다. 테스트 앱 `co.tridatum.trid.onprem`과 게이트웨이·Worker만 전환 대상으로 삼습니다.
+- Django 142개·기존 앱 127개·Worker 10개 테스트, 패키지 설치·합성 DB 이전·실제 Chrome/Caddy/PDF/로컬 모델 스모크를 통과했습니다. 답변은 검증되지 않은 모델 해설이며 품질 승격이 아닙니다.
+- 맥미니의 공인 IP·Tailscale IP 모두 SSH 시간초과여서 **실제 서버·DB·Cloudflare 배포는 변경하지 않았습니다.** 공개 사이트의 기존 `/healthz` 정상 응답만 확인했습니다.
+
+배포 파일·이전·복구 경계는 [Django 운영 안내 9–10절](ONPREM_WEB.md#9-기존-계정과-이용-기록-이전)을 따릅니다. 원본 DB와 새 Django DB는 역동기화되지 않으므로 공개 사용 이후 복구 시 새 기록을 별도로 보존해야 합니다.
+
+## 이전 공개 데모 기록 (2026-11-12까지)
+
+**아래의 “현재”·“기본”·“운영”은 당시 기록입니다. 현재 PDF 앱의 배포·복구 명령으로 사용하지 마십시오.** 최신 배포 준비 상태는 위 절을 따릅니다.
+
+당시 배포는 Cloudflare Worker → 고정 named tunnel(`trid-test-origin.eommydocs.com`) → **맥미니의 CPU 모델 서버**로 연결됐습니다(2026-11-01 22:08 KST부터, SITE-MEMORY-023). 별도 클라우드 머신이 아니며 맥미니 전원, 인터넷, GUI 로그인 세션이 필요합니다. 모델 서버와 터널은 맥미니 launchd 작업 두 개(`co.tridatum.trid.site`, `co.tridatum.trid.site.tunnel`)로 상주하며, 끝나면 launchd가 다시 띄웁니다. 맥북의 이전 원점은 정지·비활성화했습니다. 소규모 테스트용이며 가용성을 보장하지 않습니다.
+
+**당시 상태 (2026-11-12)**
 - 기본 선택지는 **TRID 행안부 · 근거 그래프 v0.2** (`trid-mois-graph-v0.2`, 모델 미사용)이며, **Qwen3-1.7B 원본**은 일반 대화·기존 검색·첨부 질문용으로 유지합니다. 이전 `trid-v0.1-reader`는 공개 목록에서 제거했습니다.
 - 기존 맥미니 운영본에 그래프 모듈·온톨로지·검토 사실·불변 RDF 저장소, 서버 연결·버전 설정·UI 변경만 **선택 적용**했습니다. 전체 main이나 기관별 기능 등 다른 미커밋 작업의 동기화가 아닙니다. Qwen 원본 가중치·문맥4,096·출력최대512토큰과 학습 실패 판정은 유지합니다.
 - 실제 release는 `mois-000966417b72488e5182`, 경로는 `runs/mois-graph/v1`입니다. 정상 재시작과 공개 Chrome 답변·인용·출처 표시를 확인했습니다. 새 GPU/클라우드 실행·Docker 중지는 하지 않았고, 유보한512토큰 원본/adapter 진단은 재개하지 않았습니다.

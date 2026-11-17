@@ -133,7 +133,7 @@ class ParityTests(unittest.TestCase):
             accounts.create_user(name, PW, role, must_change=False)
         cls.new = create_server(get_wsgi_application(), host='127.0.0.1', port=0, threads=4,
                                 ident=None, clear_untrusted_proxy_headers=True)
-        threading.Thread(target=cls.new.run, daemon=True).start()
+        cls.stop_new = staticmethod(S.start_waitress(cls.new))
 
     @classmethod
     def tearDownClass(cls):
@@ -141,7 +141,7 @@ class ParityTests(unittest.TestCase):
         cls.old.server_close()
         cls.store.close()
         cls.tmp.cleanup()
-        cls.new.close()
+        cls.stop_new()
         for p in cls.patches:
             p.stop()
         Session.objects.all().delete()

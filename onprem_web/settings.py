@@ -83,7 +83,7 @@ DATABASES = {
 }
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-PASSWORD_HASHERS = ['django.contrib.auth.hashers.ScryptPasswordHasher']
+PASSWORD_HASHERS = ['onprem_web.accounts.hashers.CompatibleScryptPasswordHasher']
 AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']  # rejects is_active=False
 AUTH_PASSWORD_VALIDATORS = []  # rules live in trid.onprem.passwords.check_new_password

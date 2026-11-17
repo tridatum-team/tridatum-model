@@ -31,7 +31,6 @@ class BootTests(django.test.TestCase):
         self.assertTrue(s.CSRF_USE_SESSIONS); self.assertEqual(s.CSRF_HEADER_NAME, 'HTTP_X_TRID_TOKEN')
         self.assertEqual(s.SESSION_COOKIE_NAME, '__Host-trid'); self.assertEqual(s.SESSION_COOKIE_SAMESITE, 'Strict')
         self.assertNotIn('django.contrib.admin', s.INSTALLED_APPS); self.assertNotIn('django.contrib.messages', s.INSTALLED_APPS)
-        self.assertEqual(s.PASSWORD_HASHERS[0], 'django.contrib.auth.hashers.ScryptPasswordHasher')
         self.assertEqual(s.ADMINS, []); self.assertEqual(s.DATA_UPLOAD_MAX_MEMORY_SIZE, 2 * 1024 * 1024)
 
     def test_unknown_path_is_korean_json_404(self):

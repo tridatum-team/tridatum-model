@@ -141,7 +141,9 @@ def attempt_login(username: str, password: str, ip: str | None, now: float | Non
             _verify(password, _dummy_hash())
             log('login_locked', user.username, ip, 'locked')
             return None
-        ok = _verify(password, user.password)
+        # A successful active login upgrades an imported native hash. Locked/disabled
+        # accounts must not change credentials as a side effect of a rejected login.
+        ok = user.check_password(password) if user.is_active else _verify(password, user.password)
         if not user.is_active:
             log('login_failed', user.username, ip, 'invalid', error='disabled')
             return None
