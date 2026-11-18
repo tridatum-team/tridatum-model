@@ -21,9 +21,10 @@ never filters for quality. Adapters:
     offending ids instead of being trained (pilot-sft-001 trained 57 targets without any [Dn], 36 over 256 tokens).
     Nonempty case history is unsupported and rejected. History must be a list of user/assistant pairs with nonempty
     string content (trid.text.validate_history); invalid history reports the file, line and row id before weights load.
-  - `grounded_messages`: rows {"id", "task", "split", "messages": [{"role": "system", "content": str},
-    {"role": "user", "content": str}], "answer": str}. All fields are nonempty; messages are preserved verbatim.
-    History is forbidden. Context or answer+EOS over budget rejects the input rather than dropping or truncating it.
+  - `grounded_messages`: rows {"id", "task", "split", "messages": [...], "answer": str}.
+    Native messages may start with a system turn, then alternate user/assistant and end with the current user.
+    All content is nonempty and preserved verbatim; prior assistant turns are masked context, not targets.
+    A separate `history` field is forbidden. Context or answer+EOS over budget rejects rather than truncates.
 Each sample is the native chat template with the generation prompt (Qwen3: the no-thinking prefix must render)
 followed by the answer and the tokenizer's EOS (end of turn); loss covers only those answer tokens. The system,
 all prior user/assistant turns, current user and batch padding stay masked. With --family qwen3 the vocabulary head
@@ -43,12 +44,12 @@ snapshots; its run_status stays "in_progress" and no <out>/adapter or <out>/trai
 finishes. <out>/adapter stays the exact last step, never a "best" pick; which checkpoint serves is selected
 elsewhere (development behaviour plus task-balanced validation, not training loss), so training.json records
 selection status "unselected". No optimizer state is saved; checkpoints are not resume points.
-On MPS with --family qwen3 the base weights are loaded by load_qwen3_pread: each tensor is read on its own with
-safetensors backend='pread' into CPU memory (no mmap-backed weight storage retained), moved to the device through
-PyTorch's allocator (the supervisor's memory cap applies), assigned into a meta-built model and its CPU allocation
-released (OS page-cache/RSS behaviour not guaranteed; no memory fit claimed); the tied lm_head shard is never read,
-checkpoint keys/shapes are checked before any read and no initialised stand-in exists for a missing weight. Other
-devices use from_pretrained(...).to(device) unchanged.
+On MPS with --family qwen3 the base weights are loaded by load_qwen3_pread: safetensors validates headers,
+then bounded contiguous CPU reads fill one final PyTorch-allocated device tensor (the supervisor's cap applies).
+Each MPS copy is synchronized before reusing its CPU buffer; no mmap-backed weight storage is retained.
+The meta-built model receives each completed tensor sequentially (OS page-cache/RSS behaviour is not guaranteed;
+no memory fit claimed). Tied lm_head bytes are never read; checkpoint keys/shapes are checked before any read.
+Other devices use from_pretrained(...).to(device) unchanged.
 With --base-gguf <q8_0.gguf> --base-gguf-sha256 <hex> (qwen3 only) the frozen base is instead the serving GGUF's
 Q8_0 blocks, loaded by q8_gguf_base.load_qwen3_q8_gguf: int8 weights + fp16 block-32 scales held as frozen
 Parameters (the exact bytes llama.cpp serves), dequantised per bounded row chunk on the fly in forward and backward,
@@ -130,17 +131,23 @@ def load_rows(entry, base):
                     if not isinstance(row.get(field), str) or not row[field].strip():
                         raise ValueError(f'grounded_messages requires nonempty string {field}')
                 messages = row.get('messages')
-                if not isinstance(messages, list) or len(messages) != 2:
-                    raise ValueError('grounded_messages requires exactly system and user messages')
-                for message, role in zip(messages, ('system', 'user')):
+                if not isinstance(messages, list) or not messages:
+                    raise ValueError('grounded_messages requires nonempty native chat messages')
+                has_system = isinstance(messages[0], dict) and messages[0].get('role') == 'system'
+                for index, message in enumerate(messages):
+                    role = ('system' if has_system and index == 0 else
+                            'user' if (index - int(has_system)) % 2 == 0 else 'assistant')
                     if not isinstance(message, dict) or set(message) != {'role', 'content'} or message['role'] != role:
                         raise ValueError(f'grounded_messages requires a {role} message with only role and content')
                     if not isinstance(message['content'], str) or not message['content'].strip():
                         raise ValueError(f'grounded_messages requires nonempty string {role} content')
+                if messages[-1]['role'] != 'user':
+                    raise ValueError('grounded_messages must end with the current user turn')
             except ValueError as exc:
                 raise ValueError(f"{path}:{line_number}: row {row.get('id')!r}: {exc}") from exc
             rows.append(dict(id=row['id'], task=row['task'], messages=messages, answer=row['answer'],
-                             adapter='grounded_messages', file=str(path)))
+                             adapter='grounded_messages', file=str(path),
+                             source_sha256=entry['sha256'], source_line=line_number))
             continue
         history = row.get('history', [])
         try:
@@ -197,7 +204,8 @@ def encode(tok, row, family, max_tokens):
         if row.get('adapter') == 'grounded_messages':
             raise ValueError(f"{row['file']}: row {row['id']!r}: over_context_budget ({len(ids)} > {max_tokens})")
         return None
-    return dict(ids=ids, labels=[-100] * len(prompt_ids) + answer_ids, task=row['task'], file=row['file'])
+    return dict(ids=ids, labels=[-100] * len(prompt_ids) + answer_ids, task=row['task'], file=row['file'],
+                identity={key: row.get(key) for key in ('id', 'source_sha256', 'source_line')})
 
 
 def build_items(tok, entries, base, family, max_tokens, max_answer_tokens, expand):
@@ -314,17 +322,64 @@ def tied_output_keys(model):
     input_key = next(name for name, module in model.named_modules() if module is inputs) + '.weight'
     return {name for name, p in model.named_parameters(remove_duplicate=False) if p is inputs.weight} - {input_key}, input_key
 
+PREAD_CHUNK_BYTES = 32 * 1024 * 1024
+_PREAD_DTYPES = {'F32': torch.float32, 'BF16': torch.bfloat16, 'F16': torch.float16}
+
+
+def _copy_pread_tensor(source, offset, tensor, source_dtype, chunk_bytes):
+    """Read a validated contiguous safetensors range into one final allocation, in flat element order.
+
+    A reusable bytearray shares storage with frombuffer. If casting, its source bytes plus the explicit CPU
+    conversion fit chunk_bytes; same-dtype device copies avoid implicit device-side cast staging. Flattening
+    the destination is a view, so scalar, empty and arbitrarily wide-row shapes need no oversized read.
+    The unbuffered source implements seek/readinto. Returns (chunks, peak CPU payload bytes), excluding RSS/cache.
+    """
+    itemsize = source_dtype.itemsize
+    cast_itemsize = tensor.element_size() if source_dtype != tensor.dtype else 0
+    staging_itemsize = itemsize + cast_itemsize
+    if chunk_bytes < staging_itemsize:
+        raise ValueError(f'pread chunk budget {chunk_bytes} is smaller than one {staging_itemsize}-byte staged element')
+    elements = tensor.numel()
+    if not elements:
+        return 0, 0
+    flat = tensor.view(-1)  # contiguous final allocation; never reshape/copy the full destination
+    chunk_elements = min(elements, chunk_bytes // staging_itemsize)
+    buffer = bytearray(chunk_elements * itemsize)
+    view = memoryview(buffer)
+    source.seek(offset)
+    chunks = 0
+    for start in range(0, elements, chunk_elements):
+        count = min(chunk_elements, elements - start)
+        nbytes, filled = count * itemsize, 0
+        while filled < nbytes:
+            read = source.readinto(view[filled:nbytes])
+            if not read:
+                raise EOFError(f'truncated safetensors payload at byte {offset + start * itemsize + filled}')
+            filled += read
+        staged = torch.frombuffer(buffer, dtype=source_dtype, count=count)
+        if cast_itemsize:
+            staged = staged.to(dtype=tensor.dtype)  # bounded CPU cast; no second full device allocation
+        try:
+            flat[start:start + count].copy_(staged)
+        finally:
+            # Even if copy_ raises after queuing work, retain the CPU source until transfers complete.
+            if tensor.device.type == 'mps':
+                torch.mps.synchronize()
+        chunks += 1
+        del staged  # no pending copy may retain this buffer when the next read overwrites it
+    return chunks, len(buffer) + chunk_elements * cast_itemsize
+
+
 
 @torch.no_grad()
 def load_qwen3_pread(model_dir, dtype, device):
-    """Qwen3ForCausalLM from a local safetensors directory, one tensor at a time: safetensors' official
-    `backend='pread'` reads a single tensor into CPU memory (no mmap-backed weight storage is retained, unlike
-    `from_pretrained(...).to(device)`, which keeps the mapped shard alive while it copies module by module), the
-    tensor is moved to `device`/`dtype` through PyTorch's own allocator (so the supervisor's MPS memory fraction cap
-    applies to every device allocation), assigned into a meta-built model and the per-tensor CPU allocation released
-    before the next tensor is read. Peak transient CPU staging is one tensor (Qwen3-1.7B: the 622 MB embedding); the
-    kernel may still cache file pages, so OS page-cache and RSS behaviour are not guaranteed and no memory fit is
-    claimed. The model is built on the meta device (buffers such as
+    """Qwen3ForCausalLM from a local safetensors directory, one final device allocation per tensor.
+    Safetensors validates headers without materializing weights. Its 0.8 CPU pread slicing reads a whole tensor,
+    so payloads instead use unbuffered readinto on validated byte offsets, with one reusable CPU buffer
+    shared by torch.frombuffer. Source plus optional CPU-cast payloads total at most 32 MiB. Contiguous views
+    fill a single PyTorch-allocated device destination. MPS copies synchronize before buffer reuse; no second
+    full device tensor is staged. The allocator cap still applies; framework overhead/cache/RSS are not bounded.
+    The model is built on the meta device (buffers such as
     rotary `inv_freq` are computed normally), checkpoint headers are checked against every expected key and shape
     BEFORE any tensor bytes are read, the canonical `tie_weights()` is re-applied and generation_config.json, dtype
     and eval mode follow from_pretrained. A tied output key (`lm_head.weight`) present in the checkpoint is only
@@ -355,12 +410,17 @@ def load_qwen3_pread(model_dir, dtype, device):
         shards = [SAFE_WEIGHTS_NAME]
     else:
         raise FileNotFoundError(f'{model_dir} has neither {SAFE_WEIGHTS_INDEX_NAME} nor {SAFE_WEIGHTS_NAME}')
-    sizes = {'F32': 4, 'BF16': 2, 'F16': 2}
     plan, seen, problems = [], {}, []
     for shard in shards:
         with safe_open(model_dir / shard, framework='pt', device='cpu', backend='pread') as f:
             keys = list(f.keys())
             header = {k: (f.get_slice(k).get_shape(), f.get_slice(k).get_dtype()) for k in keys}
+        # safe_open has already validated offsets, lengths, shapes, dtypes and the complete file layout.
+        # Read only that header here; calling its CPU get_slice()[...] would stage the entire tensor.
+        with open(model_dir / shard, 'rb', buffering=0) as source:
+            header_size = int.from_bytes(source.read(8), 'little')
+            layout = json.loads(source.read(header_size))
+        offsets = {key: 8 + header_size + layout[key]['data_offsets'][0] for key in keys}
         for key, (shape, kind) in header.items():
             if key in seen:
                 problems.append(f'{key} appears in {seen[key]} and {shard}')
@@ -370,16 +430,21 @@ def load_qwen3_pread(model_dir, dtype, device):
                 problems.append(f'unexpected key {key} in {shard}')
             elif tuple(shape) != want:
                 problems.append(f'{key}: checkpoint shape {list(shape)} != model shape {list(want)}')
-        nbytes = {k: math.prod(shape) * sizes.get(kind, 0) for k, (shape, kind) in header.items()}
-        plan.append(dict(file=shard, keys=keys, bytes=nbytes))
+            if key not in redundant and kind not in _PREAD_DTYPES:
+                problems.append(f'{key}: unsupported checkpoint dtype {kind}')
+        nbytes = {key: layout[key]['data_offsets'][1] - layout[key]['data_offsets'][0] for key in keys}
+        plan.append(dict(file=shard, keys=keys, bytes=nbytes, offsets=offsets,
+                         dtypes={key: kind for key, (_, kind) in header.items()}))
     missing = sorted(set(expected) - redundant - set(seen))
     if missing:
         problems.append(f'missing parameters: {missing}')
     if problems:
         raise ValueError(f'{model_dir} does not match {type(model).__name__}: ' + '; '.join(problems))
 
-    report = dict(backend='pread', staging='cpu-per-tensor', device=str(device), dtype=str(dtype), tied_output_keys=sorted(redundant),
-                  input_key=input_key, shards=[], parameters=0, bytes_loaded=0, bytes_skipped=0, cast=0)
+    report = dict(backend='safetensors-validated-readinto', staging='cpu-contiguous-chunk', device=str(device), dtype=str(dtype),
+                  staging_chunk_bytes=PREAD_CHUNK_BYTES, staging_peak_bytes=0, staging_chunks=0,
+                  tied_output_keys=sorted(redundant), input_key=input_key,
+                  shards=[], parameters=0, bytes_loaded=0, bytes_skipped=0, cast=0)
     for entry in plan:
         wanted = [k for k in entry['keys'] if k not in redundant]
         skipped = [k for k in entry['keys'] if k in redundant]
@@ -389,15 +454,20 @@ def load_qwen3_pread(model_dir, dtype, device):
         report['bytes_skipped'] += record['bytes_skipped']
         if not wanted:
             continue  # the whole shard is redundant (Qwen3-1.7B shard 2 = lm_head.weight only): never read
-        with safe_open(model_dir / entry['file'], framework='pt', device='cpu', backend='pread') as f:
+        with open(model_dir / entry['file'], 'rb', buffering=0) as source:
+            if sys.platform == 'darwin':
+                import fcntl
+                fcntl.fcntl(source.fileno(), fcntl.F_NOCACHE, 1)
             for key in wanted:  # redundant keys of a mixed shard are simply never fetched
                 module_name, _, attr = key.rpartition('.')
                 module = model.get_submodule(module_name)
                 target = getattr(module, attr)
-                staged = f.get_tensor(key)  # one tensor on CPU via pread(2)
-                report['cast'] += int(staged.dtype != target.dtype)
-                tensor = staged.to(device=device, dtype=target.dtype)  # PyTorch-allocated device copy (cap-accounted)
-                del staged  # the CPU staging copy is released before the next tensor is read
+                source_dtype = _PREAD_DTYPES[entry['dtypes'][key]]
+                report['cast'] += int(source_dtype != target.dtype)
+                tensor = torch.empty(target.shape, device=device, dtype=target.dtype)
+                chunks, peak_bytes = _copy_pread_tensor(source, entry['offsets'][key], tensor, source_dtype, PREAD_CHUNK_BYTES)
+                report['staging_chunks'] += chunks
+                report['staging_peak_bytes'] = max(report['staging_peak_bytes'], peak_bytes)
                 module.load_state_dict({attr: tensor}, strict=False, assign=True)
                 report['parameters'] += 1
                 report['bytes_loaded'] += entry['bytes'][key]
@@ -504,7 +574,7 @@ def load_init_adapter(model, path, device):
     return len(expected)
 
 
-def main():
+def main(argv=None, observer=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--model', type=Path, required=True)
     p.add_argument('--model-id', required=True)
@@ -538,7 +608,7 @@ def main():
     p.add_argument('--checkpoint-every', type=int,
                    help='also save the adapter every N steps and at the last step under <out>/checkpoints/step-NNNNNN/ '
                         '(each with its own training.json); <out>/adapter stays the last step, nothing is selected')
-    a = p.parse_args()
+    a = p.parse_args(argv)
     if a.out.exists():
         p.error('Use a new --out directory')
     if a.checkpoint_every is not None and a.checkpoint_every < 1:
@@ -570,6 +640,9 @@ def main():
                                        a.max_tokens, a.max_answer_tokens, False)
     if not train:
         raise ValueError('No training rows')
+    if observer:
+        observer('admission', args=a, train=train, valid=valid, dropped=dropped, valid_dropped=valid_dropped)
+    selection = observer('selection') if observer else SELECTION
     random.shuffle(train)
     steps = a.steps or math.ceil(len(train) / a.batch_size)
     accumulation = a.batch_size // a.micro_batch_size
@@ -599,7 +672,9 @@ def main():
     warmup = max(1, steps // 20)
     schedule = torch.optim.lr_scheduler.LambdaLR(
         optimizer, lambda s: (s + 1) / warmup if s < warmup else 0.5 * (1 + math.cos(math.pi * (s - warmup) / max(1, steps - warmup))))
-    history, cursor = [], 0
+    if observer:
+        observer('model', model=model, optimizer=optimizer, schedule=schedule)
+    history, cursor, coverage = [], 0, []
     trained_tokens = {}
     model.train()
     train_started = time.time()
@@ -625,6 +700,9 @@ def main():
             system_prompt=SYSTEM, case_system_prompt=CASE_SYSTEM,
             versions=dict(torch=torch.__version__, transformers=transformers.__version__, peft=peft.__version__),
             history=list(history), elapsed_seconds=round(time.time() - started, 1), status=status)
+        payload['coverage'] = list(coverage)
+        if observer:
+            payload.update(observer('report') or {})
         payload.update(extra)  # a checkpoint overrides `steps` with the steps its adapter was trained for
         payload['cumulative_steps'] = (ancestry['source_cumulative_steps'] if ancestry else 0) + payload['steps']
         return payload
@@ -638,13 +716,14 @@ def main():
             run_status=run_status, planned_steps=steps, checkpoint_every=a.checkpoint_every,
             base_model_id=a.model_id, base_revision=a.model_revision, manifest_sha256=manifest_sha256, base_weights=base_weights,
             init_adapter=ancestry,
-            checkpoints=list(checkpoints), selection=SELECTION, **extra))
+            checkpoints=list(checkpoints), selection=selection, **extra))
 
     def save_checkpoint(step, record):
         folder = a.out / 'checkpoints' / f'step-{step:06d}'
         model.save_pretrained(folder / 'adapter')
         checkpoints.append(dict(step=step, path=str(folder / 'adapter'),
                                 adapter_weights_sha256=sha256(folder / 'adapter' / 'adapter_model.safetensors'),
+                                adapter_config_sha256=sha256(folder / 'adapter' / 'adapter_config.json'),
                                 train_loss=record['train_loss'], valid_loss_by_task=record.get('valid_loss_by_task'),
                                 elapsed_seconds=record['elapsed_seconds']))
         # Bound to this step only: `steps` is what the saved adapter was trained for, never the plan.
@@ -660,26 +739,38 @@ def main():
             cursor += a.micro_batch_size
             for x in chunk:
                 trained_tokens[x['file']] = trained_tokens.get(x['file'], 0) + sum(1 for t in x['labels'] if t != -100)
+                coverage.append(dict(file=x['file'], **x['identity']))
             loss = batch_loss(model, chunk, a.device, pad_id, a.family) / accumulation
             if not torch.isfinite(loss):
                 raise FloatingPointError(f'non-finite loss at step {step}; stopping without saving')
             loss.backward()
+            if observer:
+                observer('backward', model=model, optimizer=optimizer, step=step)
             total += loss.item()
-        torch.nn.utils.clip_grad_norm_(params, 1.0)
+        health = observer('before_step', model=model, optimizer=optimizer, step=step) if observer else None
+        torch.nn.utils.clip_grad_norm_(params, 1.0, error_if_nonfinite=True)
+        applied_lr = optimizer.param_groups[0]['lr']
         optimizer.step(); schedule.step()
+        if observer:
+            health.update(observer('after_step', model=model, optimizer=optimizer, step=step))
         if a.max_train_seconds and step == 5:
             projected = (time.time() - train_started) / 5 * steps
             if projected > a.max_train_seconds:
                 raise SystemExit(f'projected training time {projected:.0f}s exceeds --max-train-seconds; stopping early')
         checkpoint_step = bool(a.checkpoint_every) and (step % a.checkpoint_every == 0 or step == steps)
         record = {'step': step, 'train_loss': round(total, 5), 'lr': schedule.get_last_lr()[0],
+                  'applied_lr': applied_lr, 'next_lr': schedule.get_last_lr()[0],
                   'elapsed_seconds': round(time.time() - started, 1)}
+        if health:
+            record['numerical_health'] = health
         if valid and (step % a.valid_every == 0 or step == steps or checkpoint_step):
             record['valid_loss_by_task'] = validate(model, valid, a.device, pad_id, a.micro_batch_size, a.family)
         history.append(record)
         print(json.dumps(record, ensure_ascii=False), flush=True)
         if checkpoint_step:
             save_checkpoint(step, record)
+    if observer:
+        observer('completion', coverage=coverage, steps=steps)
     a.out.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(a.out / 'adapter')
     if a.merge:
@@ -688,9 +779,12 @@ def main():
         tok.save_pretrained(a.out / 'merged')
     extra = {}
     if a.checkpoint_every:
-        last = dict(step=steps, path=str(a.out / 'adapter'), adapter_weights_sha256=sha256(a.out / 'adapter' / 'adapter_model.safetensors'))
-        last['equals_last_checkpoint'] = last['adapter_weights_sha256'] == checkpoints[-1]['adapter_weights_sha256']
-        extra = dict(checkpoints=checkpoints, last_step=last, selection=SELECTION)
+        last = dict(step=steps, path=str(a.out / 'adapter'),
+                    adapter_weights_sha256=sha256(a.out / 'adapter' / 'adapter_model.safetensors'),
+                    adapter_config_sha256=sha256(a.out / 'adapter' / 'adapter_config.json'))
+        last['equals_last_checkpoint'] = all(last[field] == checkpoints[-1][field]
+            for field in ('adapter_weights_sha256', 'adapter_config_sha256'))
+        extra = dict(checkpoints=checkpoints, last_step=last, selection=selection)
         ledger('complete', last_step=last)
     write_json(a.out / 'training.json', report('complete', **extra))
     print(f'complete: {steps} steps -> {a.out}')
