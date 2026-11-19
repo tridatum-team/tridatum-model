@@ -35,6 +35,9 @@ agree with the full-width computation within floating-point tolerance. Rows long
 rejects them. No upsampling beyond the per-file epochs; the per-file share of trained answer
 tokens is recorded. Validation loss per task is recorded at fixed steps only; nothing is selected on evaluation sets.
 Writes the LoRA adapter, optionally the merged model (--merge) for GGUF conversion, and training.json.
+Its system_prompt/case_system_prompt fields record only legacy prompts used by admitted train/valid rows,
+otherwise null; native row-specific systems are preserved in the manifest-pinned source messages, not replaced
+by either legacy prompt. Mixed inputs report only the legacy prompts actually present.
 With --checkpoint-every N the adapter is also saved every N steps and at the last step under
 <out>/checkpoints/step-NNNNNN/adapter, each with its own training.json (status "checkpoint", `steps` = the steps that
 adapter was trained for, `planned_steps`, the validation loss per task measured at that step, elapsed time, base
@@ -205,6 +208,7 @@ def encode(tok, row, family, max_tokens):
             raise ValueError(f"{row['file']}: row {row['id']!r}: over_context_budget ({len(ids)} > {max_tokens})")
         return None
     return dict(ids=ids, labels=[-100] * len(prompt_ids) + answer_ids, task=row['task'], file=row['file'],
+                legacy_system_prompt=row.get('system') if row.get('adapter') != 'grounded_messages' else None,
                 identity={key: row.get(key) for key in ('id', 'source_sha256', 'source_line')})
 
 
@@ -640,6 +644,8 @@ def main(argv=None, observer=None):
                                        a.max_tokens, a.max_answer_tokens, False)
     if not train:
         raise ValueError('No training rows')
+    # Only admitted legacy rows use these global prompts; native systems remain in the pinned source messages.
+    legacy_system_prompts = {item['legacy_system_prompt'] for items in (train, valid) for item in items}
     if observer:
         observer('admission', args=a, train=train, valid=valid, dropped=dropped, valid_dropped=valid_dropped)
     selection = observer('selection') if observer else SELECTION
@@ -697,7 +703,8 @@ def main(argv=None, observer=None):
             lora=dict(rank=a.rank, alpha=a.alpha, dropout=a.dropout, targets=TARGETS), max_tokens=a.max_tokens,
             max_answer_tokens=a.max_answer_tokens,
             seed=a.seed, device=a.device, dtype=str(dtype), base_weights=base_weights, init_adapter=ancestry,
-            system_prompt=SYSTEM, case_system_prompt=CASE_SYSTEM,
+            system_prompt=SYSTEM if SYSTEM in legacy_system_prompts else None,
+            case_system_prompt=CASE_SYSTEM if CASE_SYSTEM in legacy_system_prompts else None,
             versions=dict(torch=torch.__version__, transformers=transformers.__version__, peft=peft.__version__),
             history=list(history), elapsed_seconds=round(time.time() - started, 1), status=status)
         payload['coverage'] = list(coverage)

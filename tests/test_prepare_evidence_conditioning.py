@@ -1,7 +1,9 @@
 """Behavioral tests for source-preserving evidence dataset preparation."""
+from collections import Counter
 from copy import deepcopy
 import json
 from pathlib import Path
+import random
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -221,6 +223,9 @@ class PreparationBehaviorTests(unittest.TestCase):
 
     def test_general_rows_exact_and_replay_at_least_twenty_percent(self):
         self.annotations['synthetic'] = [scenario('fictional-train', 'train')]
+        general = next(r for r in self.records if r['cohort'] == 'general' and r['split'] == 'train')
+        general['messages'][1]['content'] += ' \n'
+        general['reference_answer'] += '\n  '
         matrix, _, _ = self.build()
         train, metadata = prep.training_view(matrix)
         originals_by_id = prep.indexed(self.records, 'source')
@@ -230,12 +235,141 @@ class PreparationBehaviorTests(unittest.TestCase):
         for item in general_metadata:
             original = originals_by_id[item['parent_id']]
             row = train_by_id[item['id']]
-            self.assertEqual(row['messages'], original['messages'])
-            self.assertEqual(row['answer'], original['reference_answer'])
+            self.assertEqual(prep.canonical(row['messages']).encode(), prep.canonical(original['messages']).encode())
+            self.assertEqual(row['answer'].encode(), original['reference_answer'].encode())
+            self.assertEqual(item['behavior'], original['behavior'])
+        self.assertIn(general['id'], train_by_id)
         self.assertIn('train-a::structured', train_by_id)
-        self.assertEqual(sum(m['parent_id'] == 'train-b' for m in metadata), 1)
-        self.assertEqual(sum(m['fictional'] for m in metadata), 6)
+        self.assertEqual(sum(m['parent_id'] == 'train-b' for m in metadata), 2)
+        self.assertEqual({m['id'] for m in metadata if m['fictional']},
+                         {m['id'] for m in matrix if m['reference']['fictional']})
+        self.assertEqual(len(train), 13)  # four real + six fictional + three general
         self.assertEqual(prep.training_view(matrix), (train, metadata))
+
+    def test_each_real_parent_has_clean_and_one_distinct_companion(self):
+        matrix, _, _ = self.build()
+        before = deepcopy(matrix)
+        train, metadata = prep.training_view(matrix)
+        by_id = prep.indexed(matrix, 'matrix')
+        parents = {r['id'] for r in self.records if r['cohort'] != 'general' and r['split'] == 'train'}
+        for parent in parents:
+            selected = [m for m in metadata if m['parent_id'] == parent]
+            self.assertEqual(len(selected), 2)
+            self.assertEqual(sum(m['condition'] == 'clean' for m in selected), 1)
+            companion = next(m for m in selected if m['condition'] != 'clean')
+            self.assertNotEqual(by_id[companion['id']]['messages'], by_id[parent + '::clean']['messages'])
+        self.assertEqual({m['condition'] for m in metadata if m['parent_id'] == 'train-a'},
+                         {'clean', 'structured'})
+        for row in train:
+            if row['id'] in by_id and by_id[row['id']]['reference']['row_type'] == 'evidence':
+                self.assertEqual(row['messages'], by_id[row['id']]['messages'])
+                self.assertEqual(row['answer'], prep.canonical(by_id[row['id']]['reference']['target']))
+        self.assertEqual(matrix, before)
+
+    def test_missing_companion_never_replaces_clean_and_incomplete_pairs_fail(self):
+        matrix, _, _ = self.build()
+        pair = [m for m in matrix if m['reference']['parent_id'] != 'train-b'
+                or m['reference']['condition'] in ('clean', 'missing')]
+        _, metadata = prep.training_view(pair)
+        self.assertEqual({m['condition'] for m in metadata if m['parent_id'] == 'train-b'},
+                         {'clean', 'missing'})
+        for retained in ('clean', 'missing'):
+            with self.subTest(retained=retained):
+                incomplete = [m for m in pair if m['reference']['parent_id'] != 'train-b'
+                              or m['reference']['condition'] == retained]
+                with self.assertRaises(ValueError):
+                    prep.training_view(incomplete)
+
+    def test_identity_reorder_is_excluded_and_cannot_supply_companion(self):
+        parent = next(r for r in self.records if r['id'] == 'train-b')
+        payload = json.loads(parent['messages'][1]['content'])
+        payload['source_data']['evidence'].pop()
+        parent['messages'][1]['content'] = prep.canonical(payload)
+        target = json.loads(parent['reference_answer'])
+        target['paragraphs'].pop()
+        parent['reference_answer'] = prep.canonical(target)
+        matrix, _, _ = self.build()
+        reorder = prep.indexed(matrix, 'matrix')['train-b::reordered']
+        self.assertIs(reorder['reference']['transformation']['permutation_is_identity'], True)
+        eligible = [m for m in matrix if m['reference']['parent_id'] != 'train-b'
+                    or m['reference']['condition'] in ('clean', 'reordered', 'missing')]
+        _, metadata = prep.training_view(eligible)
+        self.assertEqual({m['condition'] for m in metadata if m['parent_id'] == 'train-b'},
+                         {'clean', 'missing'})
+        identity_only = [m for m in eligible if m['id'] != 'train-b::missing']
+        with self.assertRaises(ValueError):
+            prep.training_view(identity_only)
+
+    def test_unchanged_nonclean_row_is_not_a_companion(self):
+        matrix, _, _ = self.build()
+        by_id = prep.indexed(matrix, 'matrix')
+        by_id['train-b::distractor']['messages'] = deepcopy(by_id['train-b::clean']['messages'])
+        unchanged = [m for m in matrix if m['reference']['parent_id'] != 'train-b'
+                     or m['reference']['condition'] in ('clean', 'distractor')]
+        with self.assertRaises(ValueError):
+            prep.training_view(unchanged)
+
+    def test_training_selection_is_input_order_independent_and_excludes_development(self):
+        self.annotations['synthetic'] = [scenario('fictional-train', 'train'), scenario()]
+        matrix, groups, _ = self.build()
+        before = deepcopy((matrix, groups))
+        expected = prep.training_view(matrix)
+        for seed in range(4):
+            shuffled = list(matrix)
+            random.Random(seed).shuffle(shuffled)
+            self.assertEqual(prep.training_view(shuffled), expected)
+        train, metadata = expected
+        development_ids = {m['id'] for m in matrix if m['reference']['split'] == 'development'}
+        self.assertFalse(development_ids & {row['id'] for row in train})
+        self.assertTrue(all(m['split'] == 'train' for m in metadata))
+        self.assertEqual((matrix, groups), before)
+
+    def test_general_replay_balances_behaviors_and_cycles_each_group(self):
+        template = next(r for r in self.records if r['id'] == 'general-train')
+        general = []
+        for index, behavior in enumerate(('reasoning', 'conversation', 'instruction_following',
+                                          'reasoning', 'instruction_following', 'reasoning')):
+            original = deepcopy(template)
+            original.update(id=f'general-{index}', family_id=f'general-family-{index}', behavior=behavior)
+            original['messages'][1]['content'] = f'요청 {index}\n '
+            original['reference_answer'] = f'응답 {index} \n'
+            general.append(original)
+        self.records = [source(f'parent-{index}', 'train', f'가상 기관{index}') for index in range(61)] + general
+        self.annotations['facts'] = []
+        matrix, _, _ = self.build()
+        train, metadata = prep.training_view(matrix)
+        replays = [m for m in metadata if 'replay_of' in m]
+        behavior_counts = Counter(m['behavior'] for m in replays)
+        self.assertEqual(set(behavior_counts), {r['behavior'] for r in general})
+        self.assertLessEqual(max(behavior_counts.values()) - min(behavior_counts.values()), 1)
+        row_counts = Counter(m['replay_of'] for m in replays)
+        for behavior in behavior_counts:
+            counts = [row_counts[r['id']] for r in general if r['behavior'] == behavior]
+            self.assertLessEqual(max(counts) - min(counts), 1)
+        general_metadata = [m for m in metadata if m['row_type'] == 'general']
+        non_general_count = len(metadata) - len(general_metadata)
+        self.assertEqual(len(general_metadata), max(len(general), (non_general_count + 3) // 4))
+        self.assertEqual({m['id'] for m in general_metadata if 'replay_of' not in m},
+                         {r['id'] for r in general})
+        train_by_id = prep.indexed(train, 'train')
+        originals_by_id = prep.indexed(general, 'general')
+        for ref in general_metadata:
+            original = originals_by_id[ref['parent_id']]
+            row = train_by_id[ref['id']]
+            self.assertEqual(ref['behavior'], original['behavior'])
+            self.assertEqual(prep.canonical(row['messages']).encode(), prep.canonical(original['messages']).encode())
+            self.assertEqual(row['answer'].encode(), original['reference_answer'].encode())
+        shuffled = list(matrix)
+        random.Random(19).shuffle(shuffled)
+        self.assertEqual(prep.training_view(shuffled), (train, metadata))
+
+    def test_general_replay_requires_authoritative_behavior(self):
+        matrix, _, _ = self.build()
+        for item in matrix:
+            if item['reference']['row_type'] == 'general':
+                item['reference'].pop('behavior')
+        with self.assertRaises(ValueError):
+            prep.training_view(matrix)
 
     def test_synthetic_whole_family_partition_and_explicit_fiction(self):
         self.annotations['synthetic'] = [scenario()]

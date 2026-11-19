@@ -515,9 +515,18 @@ class CheckpointTests(unittest.TestCase):
         }
         entries = {}
         for name, items in rows.items():
+            native_rows = []
+            for item in items:
+                messages = [{'role': 'system', 'content': '질문에 한국어로 답하세요.'}]
+                for turn in item.get('history', []):
+                    messages.extend([{'role': 'user', 'content': turn['user']},
+                                     {'role': 'assistant', 'content': turn['assistant']}])
+                messages.append({'role': 'user', 'content': item['prompt']})
+                native_rows.append(dict(id=item['id'], task=item['task'], split=name.removesuffix('.jsonl'),
+                                        messages=messages, answer=item['answer']))
             path = cls.base / name
-            path.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in items), encoding='utf-8')
-            entries[name] = dict(path=name, sha256=hashlib.sha256(path.read_bytes()).hexdigest(), adapter='prompt_answer')
+            path.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in native_rows), encoding='utf-8')
+            entries[name] = dict(path=name, sha256=hashlib.sha256(path.read_bytes()).hexdigest(), adapter='grounded_messages')
         cls.manifest = cls.base / 'manifest.json'
         cls.manifest.write_text(json.dumps({'id': 'tiny-checkpoints', 'train': [entries['train.jsonl']],
                                             'valid': [entries['valid.jsonl']]}))
@@ -557,6 +566,8 @@ class CheckpointTests(unittest.TestCase):
         self.assertEqual((meta['status'], meta['steps'], meta['planned_steps']), ('checkpoint', 2, 4))
         self.assertEqual((meta['base_model_id'], meta['base_revision'], meta['manifest_sha256'], meta['manifest_id']),
                          ('tiny/qwen3', 'rev-tiny', manifest_sha, 'tiny-checkpoints'))
+        self.assertIsNone(meta['system_prompt'])
+        self.assertIsNone(meta['case_system_prompt'])
         self.assertEqual([h['step'] for h in meta['history']], [1, 2])  # nothing from after this step leaks in
         self.assertEqual(meta['checkpoint']['step'], 2)
         self.assertIsInstance(meta['checkpoint']['elapsed_seconds'], float)
@@ -573,6 +584,8 @@ class CheckpointTests(unittest.TestCase):
             self.assertAlmostEqual(measured[task], recorded[task], places=3, msg=task)
         final = json.loads((out / 'training.json').read_text())
         self.assertEqual(final['status'], 'complete')
+        self.assertIsNone(final['system_prompt'])
+        self.assertIsNone(final['case_system_prompt'])
         self.assertEqual([c['step'] for c in final['checkpoints']], [2, 4])
         self.assertEqual(final['selection']['status'], 'unselected')
         self.assertTrue(final['last_step']['equals_last_checkpoint'])
@@ -600,11 +613,25 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(json.loads((folder / 'training.json').read_text())['status'], 'checkpoint')
 
     def test_default_run_writes_no_checkpoint_artifacts(self):
+        entries = []
+        for adapter, row in (
+            ('prompt_answer', {'id': 'rag', 'prompt': rag_prompt([('D1', '색은 은색이다.')], '색은?'),
+                               'answer': '은색 [D1]'}),
+            ('case', {'id': 'case', 'question': '색은?', 'context': ['색은 은색이다.'],
+                      'target': '은색입니다 [D1].'}),
+        ):
+            path = self.base / f'default-{adapter}.jsonl'
+            path.write_text(json.dumps(row, ensure_ascii=False) + '\n', encoding='utf-8')
+            entries.append(dict(path=path.name, sha256=trainer.sha256(path), adapter=adapter))
+        manifest = self.base / 'default-legacy-manifest.json'
+        manifest.write_text(json.dumps(dict(id='tiny-legacy-prompts', train=entries, valid=[])), encoding='utf-8')
         out = self.base / 'run-default'
-        self.run_trainer(out, '--steps', '2')
+        self.run_trainer(out, '--steps', '2', '--manifest', str(manifest))
         self.assertEqual(sorted(p.name for p in out.iterdir()), ['adapter', 'training.json'])
         final = json.loads((out / 'training.json').read_text())
         self.assertEqual((final['status'], final['steps']), ('complete', 2))
+        self.assertEqual(final['system_prompt'], trainer.SYSTEM)
+        self.assertEqual(final['case_system_prompt'], trainer.CASE_SYSTEM)
         self.assertNotIn('checkpoints', final)
 
 

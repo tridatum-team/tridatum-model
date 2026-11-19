@@ -286,7 +286,7 @@ def build_candidate(records, annotations):
         if parent['cohort'] == 'general':
             emit(parent['id'], parent['family_id'], split, 'original_general', deepcopy(parent['messages']),
                  parent['reference_answer'], parent['rubric'], parent.get('provenance', {}),
-                 row_type='general', **shared)
+                 row_type='general', behavior=parent['behavior'], **shared)
             matrix[-1]['reference']['review_status'] = 'original_admitted_unchanged'
             continue
         question, packet = original_packet(parent)
@@ -360,10 +360,11 @@ def build_candidate(records, annotations):
 
 
 def training_view(matrix):
-    """One deterministic condition per real parent, all authored synthetic variants.
+    """Pair each real TRAIN parent's clean row with one nonclean companion.
 
-    Fact overlays are always represented. General originals remain byte-equivalent
-    message/answer projections and explicit replay keeps >=20% general exposures.
+    Authored fact overlays take precedence; identity permutations are ineligible.
+    Fictional variants and general originals remain intact. Explicit general
+    replay reaches >=20% exposures, balanced by authoritative source behavior.
     """
     selected, by_parent, general = [], {}, []
     for item in matrix:
@@ -377,16 +378,43 @@ def training_view(matrix):
         else:
             by_parent.setdefault(ref['parent_id'], []).append(item)
     for parent, choices in sorted(by_parent.items()):
-        structured = [c for c in choices if c['reference']['condition'] == 'structured']
-        selected.append(structured[0] if structured else choices[int(hashlib.sha256(parent.encode()).hexdigest(), 16) % len(choices)])
+        variants = {item['reference']['condition']: item for item in choices}
+        require(len(variants) == len(choices), f'{parent}: duplicate training condition')
+        require('clean' in variants, f'{parent}: clean training row absent')
+        clean = variants['clean']
+        companions = []
+        for condition in ('reordered', 'distractor', 'missing', 'structured'):
+            if condition not in variants:
+                continue
+            item = variants[condition]
+            if condition == 'reordered' and item['reference'].get('transformation', {}).get('permutation_is_identity') is True:
+                continue
+            if item['messages'] != clean['messages']:
+                companions.append(item)
+        require(companions, f'{parent}: eligible nonclean training companion absent')
+        if 'structured' in variants:
+            companion = variants['structured']
+            require(companion in companions, f'{parent}: structured training companion is unchanged')
+        else:
+            companion = companions[int(hashlib.sha256(parent.encode()).hexdigest(), 16) % len(companions)]
+        selected.extend((clean, companion))
+    general.sort(key=lambda item: item['id'])
     selected.extend(general)
     require(general, 'general preservation rows absent')
+    by_behavior = {}
+    for item in general:
+        behavior = item['reference'].get('behavior')
+        require(isinstance(behavior, str) and behavior.strip(), 'general source behavior absent')
+        by_behavior.setdefault(behavior, []).append(item)
+    behavior_groups = [by_behavior[behavior] for behavior in sorted(by_behavior)]
     replay = max(0, (len(selected) - len(general) + 3) // 4 - len(general))
     for index in range(replay):
-        item = deepcopy(general[index % len(general)])
+        group = behavior_groups[index % len(behavior_groups)]
+        original = group[(index // len(behavior_groups)) % len(group)]
+        item = deepcopy(original)
         item['id'] = item['id'] + f'::replay-{index + 1}'
         item['reference']['id'] = item['id']
-        item['reference']['replay_of'] = general[index % len(general)]['id']
+        item['reference']['replay_of'] = original['id']
         selected.append(item)
     selected.sort(key=lambda item: case_sha({'id': item['id'], 'profile': PROFILE}))
     result = []
