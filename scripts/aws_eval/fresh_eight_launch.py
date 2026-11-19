@@ -55,8 +55,8 @@ Success means authenticated CUDA capacity/training/export plus positive compute
 cleanup only: training_success, never quality acceptance or CUDA evaluation.
 
 Public-evidence training/evaluation uses the same commands with the distinct
-trid-public-evidence-prerequisites-v1 registration and
-trid-public-evidence-gpu-plan-v1 plan. It requires a new run-bound authorization,
+trid-public-evidence-prerequisites-v2 registration and
+trid-public-evidence-gpu-plan-v2 plan. It requires a new run-bound authorization,
 approved cost/resource envelope, future absolute UTC deadline and current
 prerequisite observations. No historical authorization or fixed-dollar receipt
 is reused. Public projection preparation is available offline through
@@ -118,7 +118,7 @@ else:
 require = lifecycle.require
 SCHEMA = 'trid-fresh-eight-prerequisites-v2'
 EVALUATION_SCHEMA = 'trid-cuda-evaluation-prerequisites-v1'
-PUBLIC_EVIDENCE_SCHEMA = 'trid-public-evidence-prerequisites-v1'
+PUBLIC_EVIDENCE_SCHEMA = 'trid-public-evidence-prerequisites-v2'
 HELPERS = {'scripts/aws_eval/fresh_eight_launch.py', 'scripts/aws_eval/grounded_hf_lifecycle.py'}
 ROLE_KEYS = ('instance_role', 'scheduler_role')
 
@@ -187,6 +187,8 @@ def public_evidence_registration(reg):
 
 
 def registration_plan_schema(reg):
+    require(reg.get('schema') in (SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA),
+            'Unknown prerequisite registration schema; generic fallback forbidden')
     if public_evidence_registration(reg):
         return lifecycle.PUBLIC_EVIDENCE_SCHEMA
     return lifecycle.EVALUATION_SCHEMA if evaluation_registration(reg) else lifecycle.FRESH_SCHEMA

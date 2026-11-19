@@ -84,7 +84,7 @@ class PublicWorkerContracts(unittest.TestCase):
         plan = dict(recipe=dict(P.RECIPE), model=dict(id=P.MODEL_ID, revision=P.MODEL_REVISION),
                     data=dict(manifest=dict(path='public/training-manifest.json')), schema=P.SCHEMA)
         argv = core.train_argv(plan, Path('/owned'))
-        for flag, expected in (('--steps', '315'), ('--batch-size', '2'), ('--micro-batch-size', '1'),
+        for flag, expected in (('--steps', '615'), ('--batch-size', '2'), ('--micro-batch-size', '1'),
                                ('--max-tokens', '4096'), ('--max-answer-tokens', '768'), ('--device', 'cuda')):
             self.assertEqual(argv[argv.index(flag) + 1], expected)
         self.assertNotIn('--checkpoint-every', argv)
@@ -99,10 +99,10 @@ class PublicWorkerContracts(unittest.TestCase):
         coverage = [entry['identity'] for entry in reversed(items)]
         observer('completion', coverage=coverage, steps=plan['recipe']['steps'])
         self.assertTrue(receipt['coverage_exactly_once'])
-        self.assertEqual(receipt['masking']['rows'], 630)
+        self.assertEqual(receipt['masking']['rows'], 1230)
         self.assertTrue(receipt['masking']['eos_supervised'])
         with self.assertRaisesRegex(ValueError, 'wrapped, skipped or repeated'):
-            observer('completion', coverage=coverage[:-1] + [coverage[0]], steps=315)
+            observer('completion', coverage=coverage[:-1] + [coverage[0]], steps=615)
 
     def test_observer_rejects_mask_eos_drops_and_repeated_source(self):
         for failure in ('mask', 'eos', 'duplicate', 'dropped'):
@@ -117,6 +117,17 @@ class PublicWorkerContracts(unittest.TestCase):
             observer, _ = W.training_observer(plan, None, 1)
             with self.subTest(failure=failure), self.assertRaises(ValueError):
                 observer('admission', train=items, valid=[], dropped=int(failure == 'dropped'), valid_dropped=0)
+
+    def test_observer_rejects_old_recipe_and_short_completion(self):
+        for recipe in (dict(P.RECIPE, rows=630, steps=315), dict(P.RECIPE, steps=315),
+                       dict(P.RECIPE, epochs=2), dict(P.RECIPE, batch_size=4)):
+            with self.subTest(recipe=recipe), self.assertRaises(ValueError):
+                W.training_observer(dict(recipe=recipe), None, 1)
+        observer, _ = W.training_observer(dict(recipe=dict(P.RECIPE)), None, 1)
+        items = [item(i) for i in range(1230)]
+        observer('admission', train=items, valid=[], dropped=0, valid_dropped=0)
+        with self.assertRaises(ValueError):
+            observer('completion', coverage=[entry['identity'] for entry in items], steps=315)
 
 
 @unittest.skipUnless(all(importlib.util.find_spec(name) for name in ('torch', 'transformers', 'tokenizers', 'peft')),

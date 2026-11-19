@@ -1,5 +1,6 @@
 """Offline behavioral tests; synthetic fixtures are never launch admission receipts."""
 import copy
+from contextlib import chdir
 import datetime as dt
 import hashlib
 import io
@@ -51,6 +52,102 @@ class PublicEvidenceLeaseTests(unittest.TestCase):
             L.save(root / 'launch-dispatched.json', dict(run_id=plan['identity']['run_id'],
                 plan_sha256='a' * 64, request_sha256='b' * 64, at=deadline - 1000))
             self.assertEqual(L.cleanup_cutoff(plan, 'a' * 64, root), deadline)
+
+    def test_launch_window_enforces_eight_hours_and_thirty_dollars(self):
+        plan = self.plan()
+        public = L.public_evidence_module(plan)
+        plan['limits'] = dict(public.HOST_LIMITS, lifetime_seconds=27900)
+        plan['lifetime']['total_seconds'] = 28800
+        plan['cost']['cap_usd'] = 30
+        deadline = L.absolute_deadline(plan)
+        L.validate_launch_window(plan, deadline - 28861)
+        for now in (deadline - 28860, deadline - 28800, deadline):
+            with self.subTest(now=now), self.assertRaisesRegex(RuntimeError, 'launch window'):
+                L.validate_launch_window(plan, now)
+        for cap in (30.01, 0, -1, True, '30', float('inf'), float('nan')):
+            plan['cost']['cap_usd'] = cap
+            with self.subTest(cap=cap), self.assertRaisesRegex(ValueError, 'budget'):
+                L.validate_launch_window(plan, deadline - 40000)
+        plan['cost']['cap_usd'] = 30
+        plan['lifetime']['total_seconds'] = 28801
+        plan['limits']['lifetime_seconds'] = 27901
+        with self.assertRaisesRegex(ValueError, 'wall time'):
+            L.validate_launch_window(plan, deadline - 40000)
+
+    def test_old_public_plan_is_rejected_before_any_cloud_dispatch(self):
+        plan = dict(schema='trid-public-evidence-gpu-plan-v1', identity=identity(),
+                    ami={'RootDeviceName': '/dev/sda1'})
+        with self.assertRaisesRegex(RuntimeError, 'Unknown plan schema'):
+            L.validate_plan(plan, {}, 'a' * 64)
+        with tempfile.TemporaryDirectory() as temp:
+            calls = []
+            state = Path(temp) / 'state'
+            result = L.launch(plan, {}, 'a' * 64, temp, state,
+                              lambda *args, **kwargs: calls.append(args))
+            self.assertEqual(calls, [])
+            self.assertEqual(result['state'], 'failed')
+            self.assertIn('Unknown plan schema', result['error'])
+            self.assertFalse(result['dispatch_attempted'])
+            self.assertFalse((state / 'launch-dispatched.json').exists())
+
+
+class PublicEvidenceBootstrapGateTests(unittest.TestCase):
+    """Execute the actual stdlib pre-import verifier, never its shell/cloud setup."""
+
+    def plan(self):
+        return dict(schema='trid-public-evidence-gpu-plan-v2',
+            absolute_termination_deadline='2030-01-02T00:00:00Z',
+            lifetime=dict(total_seconds=28800, termination_grace_seconds=900, automatic_extension=False),
+            limits=dict(lifetime_seconds=27900, reserve_seconds=300, output_bytes=512 * 1024**2),
+            cost=dict(termination_grace_seconds=900, cap_usd=30, export_bytes=400 * 1024**2,
+                      tax_rate=0.10, contingency_usd=1),
+            network={'egress_byte_cap': 2 * L.GIB})
+
+    def verify(self, plan):
+        script = Path(L.__file__).with_name('grounded_hf_bootstrap.sh')
+        verifier = script.read_text().split("<<'PY'\n", 1)[1].split('\nPY\n', 1)[0]
+        with tempfile.TemporaryDirectory() as temp, chdir(temp):
+            with tarfile.open('bundle.tar', 'w'):
+                pass
+            size = Path('bundle.tar').stat().st_size
+            plan = dict(plan, bundle=dict(bytes=size, files=[], unpacked_bytes=0))
+            Path('plan.json').write_text(json.dumps(plan))
+            deadline = int(L.timestamp('2030-01-02T00:00:00Z') - 900)
+            with patch.object(sys, 'argv', ['-', str(size), str(deadline)]), \
+                    patch.object(L.time, 'time', return_value=deadline - 30000):
+                exec(compile(verifier, str(script) + ':verifier', 'exec'), {})
+            self.assertTrue(Path('code').is_dir())
+
+    def test_v2_boundaries_and_generic_profile_remain_admitted(self):
+        self.assertEqual(L.PUBLIC_EVIDENCE_SCHEMA, 'trid-public-evidence-gpu-plan-v2')
+        self.verify(self.plan())
+        plan = self.plan()
+        plan['cost']['cap_usd'] = 29.99
+        self.verify(plan)
+        self.verify({'schema': 'trid-grounded-hf-v1'})
+
+    def test_retired_schema_and_invalid_budget_fail_preimport(self):
+        plan = self.plan()
+        plan['schema'] = 'trid-public-evidence-gpu-plan-v1'
+        with self.assertRaises(AssertionError):
+            self.verify(plan)
+        for cap in (30.01, 0, -1, True, '30', None, float('inf'), float('nan')):
+            plan = self.plan()
+            plan['cost']['cap_usd'] = cap
+            with self.subTest(cap=cap), self.assertRaises(AssertionError):
+                self.verify(plan)
+
+    def test_wall_time_and_extension_fail_preimport(self):
+        for total in (28801, 1200, True):
+            plan = self.plan()
+            plan['lifetime']['total_seconds'] = total
+            plan['limits']['lifetime_seconds'] = total - 900
+            with self.subTest(total=total), self.assertRaises(AssertionError):
+                self.verify(plan)
+        plan = self.plan()
+        plan['lifetime']['automatic_extension'] = True
+        with self.assertRaises(AssertionError):
+            self.verify(plan)
 
 
 class Clock:

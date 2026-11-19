@@ -642,6 +642,15 @@ Mac의 메모리 한도를 낮추거나 같은 로드를 반복하지 않고, �
 - **다음 실행 경계:** 기존 630행·315update GPU 계약과 과거 결과는 변경하지 않았습니다. 새 구성은 그 계약으로 실행할 수 없으며, batch 2·1epoch를 택하면 615update인 별도 계획·소스 결박·비용 상한·새 승인이 필요합니다. 새 프롬프트에서 원본/후보 답변을 함께 새로 생성해 기존 품질 기준으로 비교해야 합니다. 과거 출력은 당시 소스 버전과 보존하며 새 parser로 재채점하지 않습니다. 이번 단계에는 유료 GPU·배포·모델 다운로드가 없었고 `test.tridatum.co`도 변경하지 않았습니다.
 - **남은 한계와 증거:** 이것은 학습 구성 가설의 구현이며 개별 변경의 인과 효과는 입증하지 않았습니다. TRAIN421의 숫자 표기와 지시 간 작은 불일치는 남겨 두었으며, 정답 자동 수정이나 수치 검증 완화로 숨기지 않았습니다. `runs/public-evidence-next-20261119T035252Z/`의 `training-audit.json`, `curriculum-preservation.json`, `implementation-reviews.json`, `prepared/`, `admitted/`, `affected-unittest-suite.log`, `actual-cpu-smoke.json`, `cpu-smoke/verification.json`, `completion-summary.json`에 근거를 보존합니다. 최초 pytest 미설치 실행 실패도 기록에 남겼고 이후 저장소의 unittest 실행기로 검증했습니다. 실행 자료·가중치는 Git 게시 대상이 아닙니다.
 
+##### 2026-11-19 paired GPU v2 · 별도 실행 요청
+
+- **실행 계약:** 기존 모듈 경로에서 GPU 실행 schema를 v2로 전환했습니다. 고정 recipe는 실제 학습 1,230행·일반 246행·batch 2·615update이며, 원본과 후보는 각각 개발 708문항을 새로 생성합니다. 데이터 profile `public_evidence_v1`은 유지합니다. 폐기된 v1 실행 계약은 registration·lifecycle·bootstrap·worker에서 거부하고, 과거 실행은 당시 소스와 결과로 보존합니다.
+- **승인·경계:** 새 run `public-evidence-paired-gpu-20261119-051631`에 원문 요청 `응 진행해`와 운영자가 정한 보수적 한도를 기록했습니다. 새로 숫자를 선택한 사용자 발언을 만들어 넣지 않았습니다. 한도는 L40S 1대·최대 8시간·US$30이며 자동 재시도·연장·배포는 금지합니다. 고정 절대 경계는 `2026-11-19T17:16:31Z`이고, 이와 별도로 기동한 GPU의 수명 제한도 적용합니다. 승인은 run·workload·소스·학습 데이터·recipe·비용·종료 경계에 결박됩니다.
+- **비용·자원:** 실제 AWS 읽기 요청 210건과 별도 KMS 정책 확인을 바탕으로 독립 비용 검토를 수행했습니다. 지원되지 않는 리전·비활성 서비스 등의 원래 실패 응답은 보존하고 적용 여부를 별도로 판정했습니다. 최신 [AWS 가격 API](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html), 저장·전송·요청·부대비용·예비비·세금을 포함한 조건부 계산은 **US$26.16**입니다. 청구액이나 강제 과금 차단액이 아닙니다. 기존 lifecycle 18개 규칙을 보존한 채 이번 두 prefix 규칙만 추가했고, 새 전용 IAM 역할·profile·수신 차단 SG·종료 예약 group을 생성·확인했습니다.
+- **검증·진행 상태:** 작업 사본의 관련 테스트 700개는 실패 0·skip 1입니다. 실제 승인 자료로 v2 projection과 공개 실행 bundle을 만들고, 독립 구현·평가 계약 검토, 최종 plan 검증과 실제 stage를 통과했습니다. 별도 controller에 단 한 번의 `launch --execute`를 전달했습니다. **이 기록만으로 GPU 학습 완료·결과 회수·자원 종료나 품질 향상을 주장하지 않습니다.**
+- **평가 계약:** 원본/후보의 답변 1,416개와 전체 관계 그룹을 두 독립 세션 패널이 검토하고, 불일치는 새 세션의 세 번째 판정으로 처리하도록 사전 고정했습니다. 기존 7개 개선·일반 능력 보존 기준과 24개 근거 자료군 macro 정의는 변경하지 않았습니다. 실행 성공은 의미 평가 통과나 배포 허가가 아닙니다.
+- **증거:** `runs/public-evidence-paired-gpu-20261119T051631Z/`의 `approval-intent.json`, `gpu-projection/`, `live-preflight/`, `independent-cost-review.json`, `cost-review-inputs.json`, `cost-admission.json`, `execution-readiness-review.json`, `protocol-preservation-check.json`, `assessment-protocol.json`, `assessment-orchestration-registration.json`, `v2-integration-tests.log`, `launch-package-pins.json`, `dispatch-command.json`, `state/`에 준비·승인·실행 기록을 보존합니다. 실행 자료와 가중치는 Git에 올리지 않습니다.
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.

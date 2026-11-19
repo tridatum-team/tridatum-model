@@ -62,12 +62,41 @@ def pin(root, name, content):
 
 
 class PublicEvidenceRegistrationBindingTests(unittest.TestCase):
+    def test_only_registered_schemas_select_an_execution_profile(self):
+        for schema, expected in (
+                (fresh.PUBLIC_EVIDENCE_SCHEMA, 'trid-public-evidence-gpu-plan-v2'),
+                (fresh.SCHEMA, fresh.lifecycle.FRESH_SCHEMA),
+                (fresh.EVALUATION_SCHEMA, fresh.lifecycle.EVALUATION_SCHEMA)):
+            with self.subTest(schema=schema):
+                self.assertEqual(fresh.registration_plan_schema({'schema': schema}), expected)
+        for schema in ('trid-public-evidence-prerequisites-v1', 'unregistered-prerequisites', None):
+            reg = {'schema': schema}
+            with self.subTest(schema=schema):
+                self.assertFalse(fresh.public_evidence_registration(reg))
+                with self.assertRaisesRegex(RuntimeError, 'generic fallback forbidden'):
+                    fresh.registration_plan_schema(reg)
+                with self.assertRaisesRegex(RuntimeError, 'Exact parent prerequisite registration'):
+                    fresh.validate_registration(reg, '/missing')
+                with patch.object(fresh.lifecycle, 'validate_plan') as validate_plan:
+                    with self.assertRaisesRegex(RuntimeError, 'generic fallback forbidden'):
+                        fresh.validate_final(reg, SHA, '/missing', '/missing',
+                                             {'schema': fresh.lifecycle.FRESH_SCHEMA}, {}, SHA)
+                    validate_plan.assert_not_called()
+
+    def test_old_public_plan_is_rejected_before_final_dispatch(self):
+        reg = {'schema': fresh.PUBLIC_EVIDENCE_SCHEMA}
+        with patch.object(fresh.lifecycle, 'validate_plan') as validate_plan:
+            with self.assertRaisesRegex(RuntimeError, 'Final plan not bound'):
+                fresh.validate_final(reg, SHA, '/missing', '/missing',
+                    {'schema': 'trid-public-evidence-gpu-plan-v1'}, {}, SHA)
+            validate_plan.assert_not_called()
+
     def test_final_plan_cannot_change_registered_deadline_cost_or_inputs(self):
         reg = dict(schema=fresh.PUBLIC_EVIDENCE_SCHEMA, identity={'run_id': 'public-evidence-fixture'},
             iam={}, controller_arn='synthetic-controller', authorization={'sha256': 'a' * 64},
             resource_envelope={'sha256': 'b' * 64}, workload={'evaluation_inputs': {'sha256': 'c' * 64}},
-            recipe={'steps': 315}, limits={'lifetime_seconds': 27900},
-            lifetime={'total_seconds': 28800}, cost={'cap_usd': 42},
+            recipe={'rows': 1230, 'steps': 615}, limits={'lifetime_seconds': 27900},
+            lifetime={'total_seconds': 28800}, cost={'cap_usd': 30},
             absolute_termination_deadline='2030-01-02T00:00:00Z',
             data={'train': {'sha256': 'd' * 64}}, phase_seconds={'train': 3600},
             ancillary_evidence={'sha256': 'e' * 64}, bootstrap_admission={'sha256': 'f' * 64})

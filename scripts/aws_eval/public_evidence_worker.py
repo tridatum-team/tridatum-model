@@ -295,6 +295,7 @@ def child_stage(core, plan, base, phase):
 
 def training_observer(plan, torch, eos_token_id):
     """Observe the real trainer's already-built items, model, and consumed coverage."""
+    P.require(plan['recipe'] == P.RECIPE, 'Sealed paired training recipe required')
     measured, expected = {}, set()
 
     def identity(row):
@@ -303,7 +304,7 @@ def training_observer(plan, torch, eos_token_id):
     def observe(event, **values):
         if event == 'admission':
             items = values['train']
-            recipe = plan['recipe']
+            recipe = P.RECIPE
             P.require(not values['valid'] and values['dropped'] == 0 and values['valid_dropped'] == 0
                       and len(items) == recipe['rows'] * recipe['epochs'],
                       'Trainer changed the finite admitted exposure set')
@@ -338,7 +339,7 @@ def training_observer(plan, torch, eos_token_id):
         elif event == 'completion':
             coverage = [identity(row) for row in values['coverage']]
             P.require(len(coverage) == len(expected) and set(coverage) == expected
-                      and values['steps'] == plan['recipe']['steps'], 'Training wrapped, skipped or repeated rows')
+                      and values['steps'] == P.RECIPE['steps'], 'Training wrapped, skipped or repeated rows')
             measured.update(observed_steps=values['steps'], coverage_exactly_once=True)
         elif event in ('before_step', 'after_step', 'report'):
             return {}
@@ -355,7 +356,7 @@ def train_stage(core, plan, base, torch):
     observer, measured = training_observer(plan, torch, tokenizer.eos_token_id)
     argv = core.train_argv(plan, base)
     core.trainer_module(base)['main'](argv[1:], observer=observer)
-    save_new(root / 'training/provenance.json', dict(schema='trid-public-evidence-adapter-v1',
+    save_new(root / 'training/provenance.json', dict(schema=P.ADAPTER_SCHEMA,
         run_id=plan['identity']['run_id'], plan_sha256=core.digest(base / 'plan.json'),
         training=P.pin(root / 'training/training.json', root), adapter=adapter_identity(root, plan),
         source_manifest=plan['workload']['source_manifest'], runtime=P.pin(root / 'runtime.json', root),

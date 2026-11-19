@@ -50,7 +50,7 @@ b = p['bundle']
 assert p.get('schema') in ('trid-grounded-hf-v1', 'trid-ordered-hf-inference-v1',
     'trid-hf14-followup-v1', 'trid-eight-sft-experiment-v1',
     'trid-fresh-eight-training-experiment-v2', 'trid-fresh-eight-cuda-evaluation-v1',
-    'trid-public-evidence-gpu-plan-v1')
+    'trid-public-evidence-gpu-plan-v2')
 assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= 128 * 1024**2
 if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
@@ -82,7 +82,7 @@ if p.get('schema') == 'trid-fresh-eight-cuda-evaluation-v1':
     assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
     assert p['network']['egress_byte_cap'] <= 2 * 1024**3
     assert not {'recipe', 'data', 'aggregate_ledger', 'evaluation'} & set(p)
-if p.get('schema') == 'trid-public-evidence-gpu-plan-v1':
+if p.get('schema') == 'trid-public-evidence-gpu-plan-v2':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
     assert type(lease['total_seconds']) is int and 1200 < lease['total_seconds'] <= 28800
     assert lease == dict(total_seconds=limits['lifetime_seconds'] + 900,
@@ -93,7 +93,7 @@ if p.get('schema') == 'trid-public-evidence-gpu-plan-v1':
     assert int(sys.argv[2]) == deadline - 900 and time.time() < deadline - 900
     assert limits['output_bytes'] == 512 * 1024**2
     assert 0 < cost['export_bytes'] <= limits['output_bytes']
-    assert type(cost['cap_usd']) in (int, float) and 0 < cost['cap_usd'] < float('inf')
+    assert type(cost['cap_usd']) in (int, float) and 0 < cost['cap_usd'] <= 30
     assert cost['tax_rate'] == 0.10 and cost['contingency_usd'] >= 1
     assert p['network']['egress_byte_cap'] <= 2 * 1024**3
     assert not {'aggregate_ledger', 'evaluation'} & set(p)

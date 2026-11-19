@@ -20,16 +20,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.aws_eval.fresh_eight_experiment import pin, require
 from scripts.aws_eval.fresh_eight_evaluation import RUNTIME_PACKAGES, ACQUISITION_SHA
 
-SCHEMA = 'trid-public-evidence-gpu-plan-v1'
-APPROVAL_SCHEMA = 'trid-public-evidence-gpu-approval-v1'
-AUTHORIZATION_SCHEMA = 'trid-public-evidence-gpu-authorization-v1'
+SCHEMA = 'trid-public-evidence-gpu-plan-v2'
+APPROVAL_SCHEMA = 'trid-public-evidence-gpu-approval-v2'
+AUTHORIZATION_SCHEMA = 'trid-public-evidence-gpu-authorization-v2'
+RESOURCE_ENVELOPE_SCHEMA = 'trid-public-evidence-resource-envelope-v2'
+CLOUD_ADMISSION_SCHEMA = 'trid-public-evidence-cloud-admission-v2'
+SOURCE_MANIFEST_SCHEMA = 'trid-public-evidence-source-manifest-v2'
+OFFLINE_PROJECTION_SCHEMA = 'trid-public-evidence-offline-projection-v2'
+GENERATION_BINDING_SCHEMA = 'trid-public-evidence-generation-binding-v2'
+ADAPTER_SCHEMA = 'trid-public-evidence-adapter-v2'
+TRAINING_ROWS = 1230
+GENERAL_TRAINING_ROWS = 246
+EVALUATION_ROWS = 708
 PROFILE = 'public_evidence_v1'
 COMPLETION_SCOPE = 'public_evidence_training_and_paired_evaluation'
 MODEL_ID = 'Qwen/Qwen3-8B'
 MODEL_REVISION = 'b968826d9c46dd6066d109eabc6255188de91218'
-RECIPE = dict(rows=630, epochs=1, steps=315, batch_size=2, micro_batch_size=1,
+RECIPE = dict(rows=TRAINING_ROWS, epochs=1, batch_size=2, micro_batch_size=1,
               rank=8, alpha=16, dropout=0.0, lr=1e-5, seed=14,
               context_tokens=4096, answer_tokens=768, checkpoint_every=0, valid_every=0)
+RECIPE['steps'] = RECIPE['rows'] * RECIPE['epochs'] // RECIPE['batch_size']
 GENERATION = dict(enable_thinking=False, do_sample=True, temperature=0.7, top_p=0.8,
                   top_k=20, min_p=0.0, num_beams=1, repetition_penalty=1.0,
                   no_repeat_ngram_size=0, seed=14, max_new_tokens=768,
@@ -111,8 +121,8 @@ def validate_limits(plan):
             and all(type(v) is int for v in plan['limits'].values()), 'Host resource limits differ')
     require(plan['cost']['termination_grace_seconds'] == 900, 'Unpriced termination grace')
     cap = plan['cost']['cap_usd']
-    require(type(cap) in (int, float) and Decimal(str(cap)).is_finite() and cap > 0,
-        'Operator budget must be a finite positive JSON number')
+    require(type(cap) in (int, float) and Decimal(str(cap)).is_finite() and 0 < cap <= 30,
+        'Operator budget must be a finite positive JSON number no greater than USD30')
     utc(plan['absolute_termination_deadline'])
 
 
@@ -168,17 +178,19 @@ def validate_resources(root, plan, *, active=True):
     require(auth.get('schema') == AUTHORIZATION_SCHEMA and auth.get('approved') is True
         and auth.get('run_id') == plan['identity']['run_id']
         and auth.get('workload_sha256') == object_sha(plan['workload'])
+        and auth.get('data_sha256') == object_sha(plan['data'])
+        and auth.get('recipe_sha256') == object_sha(plan['recipe'])
         and auth.get('source_manifest_sha256') == plan['workload']['source_manifest']['sha256']
         and auth.get('execution_started') is False and auth.get('additional_gpu_executions') == 1
         and all(auth.get(k) is False for k in ('automatic_retry', 'automatic_extension', 'deployment'))
         and Decimal(str(auth['budget_usd'])) == Decimal(str(plan['cost']['cap_usd'])) > 0
         and auth.get('max_wall_seconds') == plan['lifetime']['total_seconds']
         and auth.get('absolute_deadline_utc') == plan['absolute_termination_deadline'],
-        'Fresh unused run/workload/source/budget authorization required')
+        'Fresh unused run/workload/source/data/recipe/budget authorization required')
     if active:
         require(utc(auth['absolute_deadline_utc']) > datetime.now(timezone.utc), 'Authorization deadline expired')
     envelope = load(root, plan['resource_envelope'])
-    expected = dict(schema='trid-public-evidence-resource-envelope-v1', identity=plan['identity'],
+    expected = dict(schema=RESOURCE_ENVELOPE_SCHEMA, identity=plan['identity'],
         authorization=plan['authorization'], instance_type='g6e.2xlarge', root_gib=120,
         root_encrypted=True, root_delete_on_termination=True,
         gpu_execution_lease_seconds_max=plan['limits']['lifetime_seconds'], export_reserve_seconds=300,
@@ -207,7 +219,7 @@ def validate_plan(plan, base):
 
 
 def validate_workload(plan, bundled):
-    require(is_public(plan) and plan['recipe'] == RECIPE, 'Separate exact 630/315 recipe required')
+    require(is_public(plan) and plan['recipe'] == RECIPE, 'Separate exact 1230/615 recipe required')
     require(set(plan['phase_seconds']) == {'acquire', 'capacity', 'baseline', 'train', 'adapter'}
         and all(type(v) is int and v > 0 for v in plan['phase_seconds'].values())
         and sum(plan['phase_seconds'].values()) + 300 <= plan['limits']['lifetime_seconds'], 'Finite phase allocation differs')
@@ -230,7 +242,7 @@ def validate_workload(plan, bundled):
         for n in bundled), 'Private references/annotations/authors forbidden in cloud bundle')
 
 
-def validate_public_rows(rows, count=708):
+def validate_public_rows(rows, count=EVALUATION_ROWS):
     require(isinstance(rows, list) and len(rows) == count, 'Wrong evaluation denominator')
     ids = []
     for row in rows:
@@ -252,17 +264,22 @@ def validate_public_rows(rows, count=708):
 
 
 def validate_admission(admission, train_pin, inputs_pin):
-    require(admission.get('schema') == 'trid-public-evidence-cloud-admission-v1'
+    require(admission.get('schema') == CLOUD_ADMISSION_SCHEMA
         and admission.get('profile') == PROFILE and admission.get('state') == 'ADMITTED_FOR_RESEARCH'
         and admission.get('training_ready') is True and admission.get('semantic_evaluated') is False
         and admission.get('expert_certified') is False
         and admission.get('train') == train_pin and admission.get('evaluation_inputs') == inputs_pin
-        and admission.get('recipe') == RECIPE and admission.get('evaluation_rows') == 708
-        and admission.get('training_rows') == 630 and admission.get('general_training_rows', 0) >= 126
-        and admission.get('reviewers') and len(set(admission['reviewers'])) == 2
+        and admission.get('recipe') == RECIPE and admission.get('evaluation_rows') == EVALUATION_ROWS
+        and admission.get('training_rows') == TRAINING_ROWS
+        and admission.get('general_training_rows') == GENERAL_TRAINING_ROWS
+        and isinstance(admission.get('reviewers'), list) and len(admission['reviewers']) == 2
+        and all(isinstance(r, str) and r.strip() for r in admission['reviewers'])
+        and len(set(admission['reviewers'])) == 2
         and admission.get('live_trainer_token_proof') is True, 'Authenticated research-only projection admission required')
-    require(len(admission['training_ids']) == 630 and len(set(admission['training_ids'])) == 630,
-        'Training identity closure differs')
+    ids = admission.get('training_ids')
+    require(isinstance(ids, list) and len(ids) == TRAINING_ROWS
+        and all(isinstance(ident, str) and ident.strip() for ident in ids)
+        and len(set(ids)) == TRAINING_ROWS, 'Training identity closure differs')
     require(set(admission) == {'schema', 'profile', 'state', 'training_ready', 'semantic_evaluated', 'expert_certified',
         'train', 'evaluation_inputs', 'recipe', 'evaluation_rows', 'training_rows', 'general_training_rows',
         'reviewers', 'live_trainer_token_proof', 'training_ids', 'provenance_sha256'}, 'Cloud receipt contains private/unapproved fields')
@@ -293,7 +310,9 @@ def validate_registration_bundle(root, reg, files):
 
 
 def validate_data(root, plan):
-    validate_workload(plan, {p['path']: p for p in plan['bundle']['files']})
+    bundled = {p['path']: p for p in plan['bundle']['files']}
+    require(len(bundled) == len(plan['bundle']['files']), 'Duplicate bundle artifact')
+    validate_workload(plan, bundled)
     data, workload = plan['data'], plan['workload']
     manifest = load(root, data['manifest'])
     train = [json.loads(line) for line in bound(root, data['train']).read_text().splitlines()]
@@ -302,7 +321,7 @@ def validate_data(root, plan):
     admission = load(root, data['admission'])
     validate_admission(admission, data['train'], workload['evaluation_inputs'])
     require(set(manifest) == {'id', 'profile', 'rows', 'train', 'valid', 'max_tokens', 'max_answer_tokens'}
-        and manifest['profile'] == PROFILE and manifest['rows'] == 630 and manifest['valid'] == []
+        and manifest['profile'] == PROFILE and manifest['rows'] == TRAINING_ROWS and manifest['valid'] == []
         and manifest['max_tokens'] == 4096 and manifest['max_answer_tokens'] == 768
         and len(manifest['train']) == 1, 'Minimal exactly-once training manifest differs')
     entry = manifest['train'][0]
@@ -310,22 +329,30 @@ def validate_data(root, plan):
         sha256=data['train']['sha256'], adapter='grounded_messages', epochs=1)
         and PurePosixPath(data['train']['path']).parent == PurePosixPath(data['manifest']['path']).parent,
         'Training source file/epoch differs')
-    require(len(train) == 630 and [r['id'] for r in train] == admission['training_ids']
-        and not set(ids).intersection(admission['training_ids']), 'Training coverage or partition overlap')
+    require(len(train) == TRAINING_ROWS, 'Training coverage differs')
     for row in train:
-        require(set(row) == {'id', 'task', 'split', 'messages', 'answer'} and row['split'] == 'train'
-            and isinstance(row['task'], str) and row['task'].strip()
+        require(isinstance(row, dict) and set(row) == {'id', 'task', 'split', 'messages', 'answer'}
+            and row['split'] == 'train' and isinstance(row['task'], str) and row['task'].strip()
             and isinstance(row.get('answer'), str) and row['answer'].strip(), 'Invalid supervised training row')
         validate_public_rows([{'id': row['id'], 'messages': row['messages']}], 1)
+    require([r['id'] for r in train] == admission['training_ids']
+        and not set(ids).intersection(admission['training_ids']), 'Training coverage or partition overlap')
+    require(sum(r['task'] == 'general_preservation' for r in train) == GENERAL_TRAINING_ROWS,
+        'Actual general training exposure count differs')
     acquisition = load(root, workload['acquisition_manifest'])
     require(acquisition['repo_id'] == MODEL_ID and acquisition['revision'] == MODEL_REVISION
         and [{k: p[k] for k in ('path', 'bytes', 'sha256')} for p in acquisition['files']] ==
             [{k: p[k] for k in ('path', 'bytes', 'sha256')} for p in plan['model']['files']], 'Official model files differ')
-    sources = load(root, workload['source_manifest'])['files']
+    source_manifest = load(root, workload['source_manifest'])
+    require(isinstance(source_manifest, dict) and set(source_manifest) == {'schema', 'files'}
+        and source_manifest['schema'] == SOURCE_MANIFEST_SCHEMA
+        and isinstance(source_manifest['files'], list), 'Exact v2 source manifest required')
+    sources = source_manifest['files']
     require(len(sources) == len(plan['sources']) and {p['path'] for p in sources} == set(plan['sources']), 'Source manifest closure differs')
     for record in sources:
         bound(root, record)
-        require(record['sha256'] == plan['sources'][record['path']], 'Source seal differs')
+        require(record['sha256'] == plan['sources'][record['path']]
+            and bundled.get(record['path']) == record, 'Full source seal/bundle record differs')
     resources = load(root, plan['resource_envelope'])
     ancillary = load(root, plan['ancillary_evidence'])
     bootstrap_pin = plan['runtime']['bootstrap']['admission']
@@ -394,8 +421,9 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
         and load(source.parent, artifacts['evaluation-references.private.json']) == [m['reference'] for m in development],
         'Admitted public/train/reference projections differ')
     validate_public_rows(inputs)
-    require(len(train) == 630 and len({r['id'] for r in train}) == 630
-        and not {r['id'] for r in train}.intersection(r['id'] for r in inputs), '630/708 disjoint denominator required')
+    require(len(train) == TRAINING_ROWS and len({r['id'] for r in train}) == TRAINING_ROWS
+        and all(isinstance(r['id'], str) and r['id'].strip() for r in train)
+        and not {r['id'] for r in train}.intersection(r['id'] for r in inputs), '1230/708 disjoint denominator required')
     packet = load(source.parent, receipt['annotation_packet'])
     require(packet['items'] == review_items and packet['annotations'] == manifest['annotations']
         and packet['author_identity'] == annotations['author_identity'], 'Reviewed annotations changed')
@@ -416,7 +444,7 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
     training = load(source.parent, artifacts['training-manifest.json'])
     evaluation = load(source.parent, artifacts['evaluation-manifest.json'])
     require(training['train'] == [{**artifacts['train.jsonl'], 'adapter': 'grounded_messages', 'epochs': 1}]
-        and training['rows'] == 630 and training['valid'] == []
+        and training['rows'] == TRAINING_ROWS and training['valid'] == []
         and evaluation['inputs'] == artifacts['evaluation-inputs.json']
         and evaluation['references'] == artifacts['evaluation-references.private.json']
         and all(v['research_admission'] == manifest['research_admission'] and v['training_ready'] is True
@@ -426,27 +454,33 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
     acquisition = pin(Path(acquisition_manifest), root)
     require(acquisition['sha256'] == ACQUISITION_SHA, 'Original authoritative model metadata required')
     general = sum(m['row_type'] == 'general' for m in metadata)
-    require(general >= 126, 'Explicit general replay share below twenty percent')
-    output.mkdir(parents=True)
-    (output / 'train.jsonl').write_bytes(bound(source.parent, artifacts['train.jsonl']).read_bytes())
-    (output / 'evaluation-inputs.json').write_bytes(bound(source.parent, artifacts['evaluation-inputs.json']).read_bytes())
-    train_pin, inputs_pin = pin(output / 'train.jsonl', root), pin(output / 'evaluation-inputs.json', root)
-    minimal = dict(id='public-evidence-gpu-train630', profile=PROFILE, rows=630,
-        train=[dict(path='train.jsonl', bytes=train_pin['bytes'], sha256=train_pin['sha256'], adapter='grounded_messages', epochs=1)],
-        valid=[], max_tokens=4096, max_answer_tokens=768)
-    write_json(output / 'training-manifest.json', minimal)
-    public_receipt = dict(schema='trid-public-evidence-cloud-admission-v1', profile=PROFILE,
+    require(general == GENERAL_TRAINING_ROWS
+        and sum(r['task'] == 'general_preservation' for r in train) == GENERAL_TRAINING_ROWS,
+        'Exact general replay exposure count required')
+    train_pin = dict(artifacts['train.jsonl'], path=(output / 'train.jsonl').relative_to(root).as_posix())
+    inputs_pin = dict(artifacts['evaluation-inputs.json'],
+        path=(output / 'evaluation-inputs.json').relative_to(root).as_posix())
+    public_receipt = dict(schema=CLOUD_ADMISSION_SCHEMA, profile=PROFILE,
         state='ADMITTED_FOR_RESEARCH', training_ready=True, semantic_evaluated=False, expert_certified=False,
-        train=train_pin, evaluation_inputs=inputs_pin, recipe=RECIPE, evaluation_rows=708, training_rows=630,
+        train=train_pin, evaluation_inputs=inputs_pin, recipe=RECIPE,
+        evaluation_rows=EVALUATION_ROWS, training_rows=TRAINING_ROWS,
         general_training_rows=general, reviewers=reviewers, live_trainer_token_proof=True,
         training_ids=[r['id'] for r in train], provenance_sha256=dict(manifest=pin(source)['sha256'],
             research_admission=manifest['research_admission']['sha256'], candidate_manifest=manifest['candidate_manifest']['sha256'],
             annotation_packet=receipt['annotation_packet']['sha256'], reports=[p['sha256'] for p in receipt['reports']],
             token_proof=receipt['live_tokenizer_and_trainer_proof']['sha256'], source_pins=object_sha(source_pins)))
     validate_admission(public_receipt, train_pin, inputs_pin)
+    output.mkdir(parents=True)
+    (output / 'train.jsonl').write_bytes(bound(source.parent, artifacts['train.jsonl']).read_bytes())
+    (output / 'evaluation-inputs.json').write_bytes(bound(source.parent, artifacts['evaluation-inputs.json']).read_bytes())
+    train_pin, inputs_pin = pin(output / 'train.jsonl', root), pin(output / 'evaluation-inputs.json', root)
+    minimal = dict(id='public-evidence-gpu-paired1230', profile=PROFILE, rows=TRAINING_ROWS,
+        train=[dict(path='train.jsonl', bytes=train_pin['bytes'], sha256=train_pin['sha256'], adapter='grounded_messages', epochs=1)],
+        valid=[], max_tokens=4096, max_answer_tokens=768)
+    write_json(output / 'training-manifest.json', minimal)
     write_json(output / 'admission.json', public_receipt)
-    write_json(output / 'source-manifest.json', dict(schema='trid-public-evidence-source-manifest-v1', files=source_records))
-    result = dict(schema='trid-public-evidence-offline-projection-v1', cloud_authorized=False,
+    write_json(output / 'source-manifest.json', dict(schema=SOURCE_MANIFEST_SCHEMA, files=source_records))
+    result = dict(schema=OFFLINE_PROJECTION_SCHEMA, cloud_authorized=False,
         recipe=RECIPE, data=dict(manifest=pin(output / 'training-manifest.json', root), train=train_pin,
             admission=pin(output / 'admission.json', root)),
         workload=dict(evaluation_inputs=inputs_pin, source_manifest=pin(output / 'source-manifest.json', root),
@@ -456,11 +490,13 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
 
 
 def generation_binding(plan, arm, adapter=None):
+    require(is_public(plan) and plan['recipe'] == RECIPE, 'Sealed v2 generation recipe required')
     require(arm in ('baseline', 'adapter'), 'Unknown assessment arm')
     require((adapter is None) == (arm == 'baseline'), 'Adapter/base identity mismatch')
     if adapter is not None:
-        require(set(adapter) == {'config', 'weights', 'step'} and adapter['step'] == 315, 'Only final315 fresh adapter admitted')
-    return dict(schema='trid-public-evidence-generation-binding-v1', run_id=plan['identity']['run_id'], arm=arm,
+        require(set(adapter) == {'config', 'weights', 'step'} and adapter['step'] == RECIPE['steps'],
+            'Only final615 fresh adapter admitted')
+    return dict(schema=GENERATION_BINDING_SCHEMA, run_id=plan['identity']['run_id'], arm=arm,
         model=dict(id=MODEL_ID, revision=MODEL_REVISION), evaluation_inputs=plan['workload']['evaluation_inputs'],
         source_manifest=plan['workload']['source_manifest'], recipe_sha256=object_sha(RECIPE), adapter=adapter)
 
@@ -477,6 +513,7 @@ def output_members(plan=None):
 
 
 def output_provenance(root, plan, record):
+    require(is_public(plan) and plan['recipe'] == RECIPE, 'Sealed v2 output recipe required')
     require(record['plan_sha256'] == pin(Path(root) / 'plan.json')['sha256']
         and record['source_manifest'] == plan['workload']['source_manifest'], 'Worker plan/source provenance differs')
     runtime = load(root, record['runtime'])
@@ -492,7 +529,8 @@ def output_provenance(root, plan, record):
 def validate_capacity(root, plan):
     result = read_json(Path(root) / 'capacity-receipt.json')
     require(all(result.get(k) == v for k, v in dict(synthetic=True, discarded=True, microbatches=4,
-        context_tokens=4096, answer_tokens=768, admitted_expanded_rows=630,
+        context_tokens=RECIPE['context_tokens'], answer_tokens=RECIPE['answer_tokens'],
+        admitted_expanded_rows=RECIPE['rows'] * RECIPE['epochs'],
         finite_parameter_update=True, adapter_reload_equal=True, optimizer_updates=2,
         microbatches_per_update=2, optimizer_state_resident_before_second_update=True,
         gradient_checkpointing=True).items()), 'Full resident-optimizer capacity guard failed')
@@ -515,42 +553,49 @@ def validate_training(root, plan):
     report = read_json(root / 'training/training.json')
     provenance = read_json(root / 'training/provenance.json')
     output_provenance(root, plan, provenance)
-    require(provenance['schema'] == 'trid-public-evidence-adapter-v1' and provenance['run_id'] == plan['identity']['run_id']
+    require(provenance['schema'] == ADAPTER_SCHEMA and provenance['run_id'] == plan['identity']['run_id']
         and provenance['fresh'] is True and provenance['merged'] is False
         and provenance['training']['path'] == 'training/training.json' and load(root, provenance['training']) == report,
         'Fresh final adapter provenance differs')
-    require(report['status'] == 'complete' and report['steps'] == report['cumulative_steps'] == 315
-        and report['train_rows'] == 630 and report['valid_rows'] == 0
+    require(report['status'] == 'complete' and report['steps'] == report['cumulative_steps'] == RECIPE['steps']
+        and report['train_rows'] == RECIPE['rows'] * RECIPE['epochs'] and report['valid_rows'] == 0
         and report['dropped_over_max_tokens'] == report['valid_dropped'] == 0
         and report['init_adapter'] is None and report['device'] == 'cuda'
         and report['base_weights'] == dict(representation='hf-safetensors', dtype='torch.bfloat16')
         and report['manifest_sha256'] == plan['data']['manifest']['sha256']
         and report['base_model_id'] == MODEL_ID and report['base_revision'] == MODEL_REVISION,
-        'Final315 numerical/data/base acceptance differs')
-    for key, expected in dict(batch_size=2, micro_batch_size=1, lr=1e-5, seed=14, max_tokens=4096, max_answer_tokens=768).items():
+        'Final615 numerical/data/base acceptance differs')
+    for key, expected in dict(batch_size=RECIPE['batch_size'], micro_batch_size=RECIPE['micro_batch_size'],
+            lr=RECIPE['lr'], seed=RECIPE['seed'], max_tokens=RECIPE['context_tokens'],
+            max_answer_tokens=RECIPE['answer_tokens']).items():
         require(report[key] == expected, 'Actual training recipe differs: ' + key)
-    require(all(report['lora'][k] == v for k, v in dict(rank=8, alpha=16, dropout=0.0).items()), 'Actual LoRA recipe differs')
+    require(all(report['lora'][k] == RECIPE[k] for k in ('rank', 'alpha', 'dropout')), 'Actual LoRA recipe differs')
     admission = read_json(root / 'admission.json')
     validate_admission(admission, plan['data']['train'], plan['workload']['evaluation_inputs'])
     coverage = report['coverage']
-    require(len(coverage) == 630 and len({(r['source_line'], r['id']) for r in coverage}) == 630
+    require(len(coverage) == TRAINING_ROWS
+        and all(type(r['source_line']) is int for r in coverage)
+        and len({(r['source_line'], r['id']) for r in coverage}) == TRAINING_ROWS
         and {r['source_sha256'] for r in coverage} == {plan['data']['train']['sha256']}
         and {r['source_line']: r['id'] for r in coverage} == dict(enumerate(admission['training_ids'], 1)),
         'Exactly-once source line/id coverage failed')
     validate_inventory(provenance['parameter_inventory'])
     masking = provenance['masking']
-    require(provenance['fresh_zero_b'] is True and provenance['observed_steps'] == 315
-        and provenance['coverage_exactly_once'] is True and masking['rows'] == 630
+    require(provenance['fresh_zero_b'] is True and provenance['observed_steps'] == RECIPE['steps']
+        and provenance['coverage_exactly_once'] is True and masking['rows'] == TRAINING_ROWS
         and all(masking[k] is True for k in ('all_prompt_tokens_masked', 'all_answer_tokens_supervised', 'eos_supervised'))
         and 0 < masking['max_context_tokens'] <= 4096 and 0 < masking['max_answer_tokens'] <= 768,
         'Observed training initialization/masking/EOS/coverage differs')
-    require(len(report['history']) == 315, 'Incomplete optimizer history')
-    warmup = 315 // 20
+    steps = RECIPE['steps']
+    require(len(report['history']) == steps, 'Incomplete optimizer history')
+    warmup = steps // 20
+    def multiplier(step):
+        return ((step + 1) / warmup if step < warmup else
+                0.5 * (1 + math.cos(math.pi * (step - warmup) / (steps - warmup))))
     for step, row in enumerate(report['history'], 1):
-        multiplier = lambda s: (s + 1) / warmup if s < warmup else 0.5 * (1 + math.cos(math.pi * (s - warmup) / (315 - warmup)))
         require(row['step'] == step and math.isfinite(row['train_loss'])
-            and math.isclose(row['applied_lr'], 1e-5 * multiplier(step - 1), rel_tol=1e-12, abs_tol=1e-15)
-            and math.isclose(row['next_lr'], 1e-5 * multiplier(step), rel_tol=1e-12, abs_tol=1e-15), 'Numerical schedule/history differs')
+            and math.isclose(row['applied_lr'], RECIPE['lr'] * multiplier(step - 1), rel_tol=1e-12, abs_tol=1e-15)
+            and math.isclose(row['next_lr'], RECIPE['lr'] * multiplier(step), rel_tol=1e-12, abs_tol=1e-15), 'Numerical schedule/history differs')
     adapter = provenance['adapter']
     generation_binding(plan, 'adapter', adapter)
     require(adapter['config']['path'] == 'training/adapter/adapter_config.json'
@@ -570,7 +615,7 @@ def validate_outputs(root, plan, arm, *, smoke=False):
     ids = validate_public_rows(cases)
     path = root / arm / 'responses.jsonl'
     rows = [json.loads(line) for line in path.read_text().splitlines()]
-    require(len(rows) == 708 and [r['id'] for r in rows] == ids, 'All708 outputs required once in admitted order')
+    require(len(rows) == EVALUATION_ROWS and [r['id'] for r in rows] == ids, 'All708 outputs required once in admitted order')
     adapter = read_json(root / 'training/provenance.json')['adapter'] if arm == 'adapter' else None
     binding = generation_binding(plan, arm, adapter)
     loaded = read_json(root / arm / 'loaded-runtime.json')
@@ -618,7 +663,7 @@ def validate_outputs(root, plan, arm, *, smoke=False):
                 and row['rendered_prompt_sha256'] == prompt['rendered_prompt_sha256']
                 and row['prompt_token_ids'] == prompt['prompt_token_ids'], 'Preflight/native tokenization differs')
     completion = read_json(root / arm / 'completion.json')
-    require(completion['status'] == 'complete' and completion['arm'] == arm and completion['rows'] == 708
+    require(completion['status'] == 'complete' and completion['arm'] == arm and completion['rows'] == EVALUATION_ROWS
         and completion['quality_accepted'] is False and completion['outputs'] == pin(path, root)
         and completion['exception_rows'] == sum(r['error'] is not None for r in rows)
         and completion['length_rows'] == sum(r['finish_reason'] == 'length' for r in rows), 'Response completion accounting differs')

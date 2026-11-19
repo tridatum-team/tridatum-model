@@ -55,14 +55,22 @@ class PublicEvidenceSandboxTests(unittest.TestCase):
 
 
 class PublicEvidenceTrainingCommandTests(unittest.TestCase):
-    def test_exact_630_exposures_reach_the_real_trainer_as_315_updates(self):
+    def test_old_public_plan_cannot_fall_back_to_generic_training(self):
+        plan = {'schema': 'trid-public-evidence-gpu-plan-v1'}
+        self.assertFalse(L.public_evidence_mode(plan))
+        with self.assertRaisesRegex(RuntimeError, 'training fallback forbidden'):
+            W.stage_argv(plan, '.', 'train', 60, {}, 1001, 1001)
+        with self.assertRaisesRegex(RuntimeError, 'training fallback forbidden'):
+            W.bootstrap(plan, 'a' * 64, '.')
+
+    def test_exact_1230_exposures_reach_the_real_trainer_as_615_updates(self):
         plan = dict(schema=L.PUBLIC_EVIDENCE_SCHEMA,
             model=dict(id='Qwen/Qwen3-8B', revision=L.ORDERED_MODELS['qwen8'][1]),
             data={'manifest': {'path': 'prepared/manifest.json'}},
-            recipe=dict(rows=630, epochs=1, steps=315, batch_size=2, micro_batch_size=1,
+            recipe=dict(rows=1230, epochs=1, steps=615, batch_size=2, micro_batch_size=1,
                 lr=1e-5, rank=8, alpha=16, dropout=0.0, context_tokens=4096, answer_tokens=768, seed=14))
         argv = W.train_argv(plan, '/owned')
-        for option, value in (('--steps', '315'), ('--batch-size', '2'), ('--micro-batch-size', '1'),
+        for option, value in (('--steps', '615'), ('--batch-size', '2'), ('--micro-batch-size', '1'),
                               ('--max-tokens', '4096'), ('--max-answer-tokens', '768'),
                               ('--model-id', 'Qwen/Qwen3-8B'), ('--device', 'cuda')):
             self.assertEqual(argv[argv.index(option) + 1], value)
