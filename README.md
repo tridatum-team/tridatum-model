@@ -653,13 +653,29 @@ Mac의 메모리 한도를 낮추거나 같은 로드를 반복하지 않고, �
 - **대체 실행안:** AWS가 안내한 `ap-northeast-2b`의 같은 GPU 상품과 기존 subnet을 읽기 전용으로 확인했습니다. 상품 제공 여부는 실제 용량 확보를 보장하지 않습니다. 실패 시도의 비컴퓨팅 비용을 보수적으로 US$1.72 예약하면, 총 US$30 안에서 새 실행 상한은 US$28.28입니다. 기존 US$26.16 계산은 참고값일 뿐 새 실행 승인이 아닙니다. 새 사용자 승인·run identity·단일 사용 권한·현재 네트워크/가격/자원 검토·고정 종료 경계를 갖춘 별도 1회 실행이 필요하며 아직 요청하지 않았습니다. 금액은 청구액이나 AWS 강제 과금 차단액이 아닙니다.
 - **증거:** `runs/public-evidence-paired-gpu-20261119T051631Z/`의 `approval-intent.json`, `gpu-projection/`, `live-preflight/`, `independent-cost-review.json`, `cost-review-inputs.json`, `cost-admission.json`, `execution-readiness-review.json`, `protocol-preservation-check.json`, `assessment-protocol.json`, `assessment-orchestration-registration.json`, `v2-integration-tests.log`, `launch-package-pins.json`, `dispatch-command.json`, `state/`에 준비·승인·실행 기록을 보존합니다. 복구 근거는 `recover_unlaunched.py`, `helper-input-pins.json`, `capacity-recovery/execution/receipt.json`에, 대체안과 독립 비용 검토는 `alternative-zone-proposal.json`, `alternative-budget-review.json`에 보존합니다. 실행 자료와 가중치는 Git에 올리지 않습니다.
 
-##### 2026-11-19 paired GPU v2 · 서울 2b 새 단일 실행
+##### 2026-11-19 paired GPU v2 · 학습·전체 평가 완료, 일반 능력 보존 실패
 
 - **새 승인:** 사용자가 `2b에서 1회 진행`을 선택하여 `public-evidence-paired-azb-20261119-125723`을 별도로 승인했습니다. 앞선 실패의 권한·run·prefix를 재사용하지 않습니다. 실패 시도 예약액 US$1.72를 포함한 총 계획 한도는 US$30, 새 실행 한도는 US$28.28입니다. L40S 1대·최대 8시간이며 자동 재시도·연장·배포는 금지합니다. 새 승인 시점에 고정한 절대 경계는 `2026-11-20T00:57:23Z`이고 실제 인스턴스 수명 제한이 더 먼저 적용됩니다.
 - **현재 비용·실행 검토:** 새 AWS 읽기 요청 211건으로 서울 2b subnet의 실제 route·IGW·ACL과 가격·부대비용 조건을 확인했습니다. 독립 비용 검토의 새 실행 조건부 계산은 US$26.16, 앞선 실패분 예약을 합치면 US$27.88입니다. 청구액이나 강제 과금 차단액이 아닙니다. 기존 S3 lifecycle 20개 규칙을 보존하고 이번 두 규칙만 추가했습니다. 별도 구현 검토와 실제 registration·bundle·전용 자원 생성·최종 plan 검증·stage를 통과했습니다.
-- **관측 상태:** AWS 조회에서 `2026-11-19T13:11:23Z`에 서울 `ap-northeast-2b`의 `g6e.2xlarge` 1대가 생성되어 `running`임을 확인했습니다. 전용 root 디스크의 `DeleteOnTermination=true`와 실제 종료 예약 readback도 확인했습니다. **서버 생성은 학습 완료나 새 성능 결과가 아닙니다.** 원본 생성·학습·후보 생성·결과 회수·정리의 최종 결과는 아직 나오지 않았습니다.
+- **실행 완료:** 서울 `ap-northeast-2b`의 L40S에서 `Qwen/Qwen3-8B`를 초기 어댑터 없이 학습했습니다. 실제 1,230행을 각각 한 번 사용해 615update를 완료했고, 길이 초과 제외는 0행입니다. trainer의 학습 시간 기록은 716.1초이며 전체 준비·답변 생성·회수 시간과 구분합니다. 원본과 후보 각각 708개 답변 및 병합하지 않은 LoRA 어댑터를 인증된 export로 회수했습니다. GPU 종료·root 디스크 삭제·종료 예약 삭제와 전용 IAM 역할 2개·profile·예약 group·SG 삭제를 확인했습니다. 정리 중 발생한 두 AWS 읽기 연결 오류는 보존했고, 연결 진단 후 변경하지 않은 정리 명령이 완료됐습니다. S3 자료와 22개 lifecycle 규칙은 유지했습니다.
 - **변경하지 않은 비교 조건:** 실행 소스 21개는 이미 게시·검증한 v2와 동일합니다. 학습 1,230행·일반 246행·615update, 각 arm의 개발 708문항, 전체 두 패널 검토·불일치 세 번째 판정, 7개 품질 기준과 24개 자료군 macro를 유지합니다. 이전 답변이나 점수를 새 실행 결과로 쓰지 않습니다.
-- **증거:** `runs/public-evidence-paired-azb-20261119T125723Z/`의 `approval-intent.json`, `live-preflight/`, `readonly-diagnosis.json`, `cost-review-inputs.json`, `independent-cost-review.json`, `cost-admission.json`, `execution-readiness-review.json`, `protocol-preservation-check.json`, `launch-package-pins.json`, `implementation-publication.json`, `dispatch-command.json`, `initial-owned-instance-observation.json`과 `state/`에 보존합니다. 최초 로컬 validation의 approval SHA 인수 누락은 실행 전에 거절됐고, 원래 실패 로그를 남긴 채 정확한 SHA를 전달한 검증을 통과했습니다. 실행 자료와 가중치는 Git 게시 대상이 아닙니다.
+- **전체 독립 평가:** A/B 각 25개, 불일치 판정 C 6개로 총 56개의 새 AI 검토 세션을 사용했습니다. A/B는 각각 답변 1,416개·group-arm 672개를 모두 판정했습니다. 답변 59개·group-arm 18개의 불일치는 전체 답변 쌍·관계 문맥을 제공한 C 판정과 boolean 다수결로 처리했습니다. 별도 최종 검토에서 집계·다수결·승인식·24개 자료군 macro 계산 오류는 발견되지 않았습니다.
+
+| 개발 평가 지표 | 원본 8B | 학습 후 후보 | 고정 기준 판정 |
+| --- | ---: | ---: | --- |
+| 근거 과제 의미 정답 | 170/668 (25.4%) | 383/668 (57.3%) | 통과 |
+| 근거 과제 의미·완료·형식·인용 동시 통과 | 169/668 (25.3%) | 383/668 (57.3%) | 통과 |
+| 근거 과제 중대한 오류 · 적을수록 좋음 | 287/668 (43.0%) | 105/668 (15.7%) | 통과 |
+| 일반 질문 의미 정답 | 25/40 (62.5%) | 15/40 (37.5%) | **실패** |
+| 일반 질문 중대한 오류 · 적을수록 좋음 | 7/40 (17.5%) | 14/40 (35.0%) | **실패** |
+| 관계 그룹 동시 통과 | 31/336 (9.2%) | 115/336 (34.2%) | 통과 |
+| 근거 전용 24개 자료군 macro 통과율 | 28.6064% | 62.5671% | 통과 |
+| 정상·혼입·순서변경 근거가 있는 488개 의미 정답 | 164/488 (33.6%) | 205/488 (42.0%) | 별도 진단 · 승인 기준 아님 |
+
+- **판정:** 사전 고정한 기준 **5/7 통과, 전체 기준 실패**입니다. 일반 질문의 정답과 중대한 오류 기준이 모두 악화되어 연구 후보로만 보존하며 배포하지 않았습니다. 전체 근거 의미 정답 순증의 약 77%는 근거가 없는 경우의 적절한 보류에서 나왔습니다. 답할 근거가 있는 경우도 개선됐지만, 단순히 전체 정답률만으로 실용적인 문서 추론 성능을 주장하지 않습니다.
+- **퇴행과 다음 설계:** 일반 질문은 원본이 맞고 후보가 틀린 경우 11개, 반대 1개였습니다. 산술은 5/5에서 1/5로 낮아졌습니다. 일반 학습 행은 이전 126/630에서 246/1,230으로 늘었으나 비율은 두 실행 모두 20%이며, 새 일반 행도 서로 다른 120개 메시지·정답 쌍의 반복입니다. 행 수 증가만으로 일반 능력 보존을 입증할 수 없습니다. 학습량·조건 구성 등이 함께 달라 단일 원인은 확정하지 않았습니다. 추가 GPU나 더 긴 학습보다, 평가 문항을 학습에 넣지 않는 별도 일반 학습 자료·보존 목적과 고정 학습량의 한 변수 비교를 먼저 설계해야 합니다.
+- **한계:** 관련 변형은 서로 독립적인 새 질문이 아닙니다. AI 세션의 분리 기록은 격리된 sandbox나 독립적인 모델 편향·사람 전문가 인증을 뜻하지 않습니다. 실제 기관 자료 범위는 주로 행정안전부이며 모든 공공기관·RAG 검색 품질·온톨로지 정확도를 검증한 결과가 아닙니다. 단일 seed이고 보호 최종 자료는 열지 않았습니다. 원본 3개·후보 1개의 출력 길이 제한 사례와 형식 실패도 분모에 유지했습니다. 문항별 지연 시간은 측정 자료가 없어 보고하지 않습니다.
+- **증거:** `runs/public-evidence-paired-azb-20261119T125723Z/`의 승인·현재 비용·구현 검토와 `state/` 실행 기록을 보존합니다. 최종 근거는 `assessment-export-authentication.json`, `training-completion-observations.json`, `cleanup-completion-verification.json`, `assessment/{primary-session-receipts,adjudication-session-receipts}.json`, `assessment/scored/{outputs,research-report,evaluator-score,merged-judgments,panel-reasons}.json`, `final-evidence-review.json`, `outcome-diagnosis.json`, `parent-diagnostic-verification.json`입니다. 원본 실패 로그·판정 이유·source pin을 유지하며, 학습 산출물은 `state/public-evidence-export/training/adapter/`에 있습니다. 실행 자료와 가중치는 Git 게시 대상이 아닙니다.
 
 ### Packed-head 학습 엔진
 
