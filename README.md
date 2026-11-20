@@ -677,6 +677,17 @@ Mac의 메모리 한도를 낮추거나 같은 로드를 반복하지 않고, �
 - **한계:** 관련 변형은 서로 독립적인 새 질문이 아닙니다. AI 세션의 분리 기록은 격리된 sandbox나 독립적인 모델 편향·사람 전문가 인증을 뜻하지 않습니다. 실제 기관 자료 범위는 주로 행정안전부이며 모든 공공기관·RAG 검색 품질·온톨로지 정확도를 검증한 결과가 아닙니다. 단일 seed이고 보호 최종 자료는 열지 않았습니다. 원본 3개·후보 1개의 출력 길이 제한 사례와 형식 실패도 분모에 유지했습니다. 문항별 지연 시간은 측정 자료가 없어 보고하지 않습니다.
 - **증거:** `runs/public-evidence-paired-azb-20261119T125723Z/`의 승인·현재 비용·구현 검토와 `state/` 실행 기록을 보존합니다. 최종 근거는 `assessment-export-authentication.json`, `training-completion-observations.json`, `cleanup-completion-verification.json`, `assessment/{primary-session-receipts,adjudication-session-receipts}.json`, `assessment/scored/{outputs,research-report,evaluator-score,merged-judgments,panel-reasons}.json`, `final-evidence-review.json`, `outcome-diagnosis.json`, `parent-diagnostic-verification.json`입니다. 원본 실패 로그·판정 이유·source pin을 유지하며, 학습 산출물은 `state/public-evidence-export/training/adapter/`에 있습니다. 실행 자료와 가중치는 Git 게시 대상이 아닙니다.
 
+##### 2026-11-20 개발 서버 연구 자료 이관 · AWS 임시 GPU 분리
+
+- **접속·격리:** 별도 개발 서버의 등록된 Windows SSH 호스트 키를 검증하고 `Ubuntu-24.04` WSL의 기존 사용자로 접속했습니다. 연구 작업은 `/srv/trid/data/trid-research`에 격리했습니다. 기존 `/srv/trid/models/trid`, 서비스 코드·DB·공개 도메인·권한은 변경하지 않았습니다.
+- **확인한 자원:** 확인 시점 WSL은 논리 CPU 16개, RAM 약 47.0GiB 중 가용 약 45.5GiB, ext4 디스크 여유 약 728GiB였습니다. Windows 물리 디스크 여유도 별도로 확인했습니다. 이는 자원 관측이며 모델 추론 속도나 동시 서비스 수용량 검증은 아닙니다.
+- **이관 범위:** 최신 paired 실행의 LoRA 어댑터·학습/답변 생성 기록·전체 평가 판정과 승인된 학습/개발 자료를 복사했습니다. 선별 파일 226개, 원래 실행 bundle 40개 파일, export 27개 파일 및 admitted artifact 14개 pin을 검증했습니다. 로컬 원본과 과거 실행 기록은 보존하며, 전체 역사적 코퍼스나 보호 최종 자료를 옮긴 것은 아닙니다.
+- **원본 모델:** `Qwen/Qwen3-8B` revision `b968826d9c46dd6066d109eabc6255188de91218`의 공식 파일 11개·16,392,994,350바이트를 기존 로컬 사본에서 복사했습니다. 서버 경로는 `/srv/trid/data/trid-research/models/Qwen3-8B/b968826d9c46dd6066d109eabc6255188de91218`입니다. 수신·디스크 재읽기 SHA-256 검사와 기존 `model_identity`의 정확한 파일 집합 검증을 통과했습니다. 운영용 수신 영수증은 모델 디렉터리 밖에 두었습니다.
+- **실제 CPU 검증:** 복원한 기존 `validate_data`와 `validate_export`를 개발 서버에서 실행해 학습 1,230행·일반 246행·평가 입력 708개, 과거 원본/후보 답변 총 1,416개와 최종 615update 산출물을 확인했습니다. 새 답변 생성·tokenizer preflight·학습·성능 재평가를 수행한 것은 아닙니다. 이번 이관에서 native 추론/학습 의존성을 설치하지 않았습니다.
+- **작업 경로:** `/srv/trid/data/trid-research/workspace.json`에 연구 저장소·원본 모델·어댑터·학습 manifest·평가 입력·검증 영수증 경로를 기록하고 실제 경로와 영수증 읽기를 확인했습니다. 연구 저장소는 `/srv/trid/data/trid-research/imports/devserver-research-handoff-20261120T045058Z/repo`입니다. 어댑터의 고정된 설정 바이트는 바꾸지 않았으므로 이후 로딩 시 이전 AWS 절대 경로를 따르지 말고 위 원본 모델 경로를 명시해야 합니다.
+- **역할·승인 경계:** 개발 서버는 장기 보관과 CPU 전처리·분석의 작업 공간이며, AWS는 새로 승인한 GPU 작업에만 사용합니다. 원격 개발 서버 RAM을 AWS GPU 메모리로 공유하지 않습니다. AWS에도 작업 중 자체 RAM·임시 디스크가 필요하며, 자동 클라우드 실행 파이프라인을 구성한 것은 아닙니다. 과거 승인은 재사용하지 않고 새 실행의 승인된 공개 bundle만 전송합니다. private reference를 포함한 연구 공간 전체를 AWS로 복사하지 않습니다.
+- **품질·증거:** 후보의 판정은 여전히 **5/7 통과·일반 능력 보존 실패·연구 전용**입니다. 서비스 모델 교체나 새 GPU 기동은 하지 않았습니다. 이관 근거는 `runs/devserver-research-handoff-20261120T045058Z/`의 `server-inventory.json`, `windows-host-inventory.json`, `handoff-manifest.json`, `restore-receipt.json`, `receiver-review.json`, `model-acquisition-receipt.json`, `model-directory-layout-correction.json`, `model-identity-validation.json`, `workspace-verification.json`에 있습니다. 가중치·실행 자료는 Git에 올리지 않습니다.
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.
