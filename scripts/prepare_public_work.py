@@ -1,4 +1,4 @@
-"""Prepare portable, public/seen synthetic diagnostics, never training or holdout admission."""
+"""Prepare portable synthetic diagnostics or development holdouts, never training admission."""
 from __future__ import annotations
 
 import argparse
@@ -15,6 +15,7 @@ from trid.service.public_work import PROFILE, TASKS, public_row, reference_row, 
 
 SOURCE_SCHEMA = 'trid-public-work-source-v1'
 MANIFEST_SCHEMA = 'trid-public-work-suite-v1'
+SUITE_KINDS = {'diagnostic': 'synthetic_diagnostic', 'development_holdout': 'synthetic_development'}
 
 
 def _require(condition, message):
@@ -48,14 +49,18 @@ def _pin(name, data):
 def project_source(source):
     _require(isinstance(source, dict) and set(source) == {'schema', 'scope', 'cases'},
              'Invalid author source fields')
-    _require(source['schema'] == SOURCE_SCHEMA and source['scope'] == 'diagnostic',
-             'Only synthetic diagnostic sources are supported')
+    _require(source['schema'] == SOURCE_SCHEMA and source['scope'] in SUITE_KINDS,
+             'Unsupported synthetic suite scope')
     cases = source['cases']
-    _require(isinstance(cases, list) and len(cases) == 24, 'Exactly 24 authored diagnostics required')
+    _require(isinstance(cases, list) and (
+        len(cases) == 24 if source['scope'] == 'diagnostic' else len(cases) >= 1),
+        'Exactly 24 authored diagnostics or nonempty development holdout required')
     ids, tasks, prompts = set(), set(), set()
     rows, references = [], []
     for case in cases:
         validate_case(case)
+        _require(case['provenance']['kind'] == SUITE_KINDS[source['scope']],
+                 'Case provenance does not match suite scope')
         _require(case['id'] not in ids, 'Duplicate case ID: ' + case['id'])
         ids.add(case['id'])
         tasks.add(case['task'])
@@ -78,13 +83,14 @@ def verify_manifest(path):
         'case_count', 'training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen',
     }, 'Invalid manifest fields')
     _require(manifest['schema'] == MANIFEST_SCHEMA and manifest['profile'] == PROFILE
-             and manifest['scope'] == 'diagnostic', 'Unsupported suite')
+             and manifest['scope'] in SUITE_KINDS, 'Unsupported suite')
     _require(all(manifest[key] is False for key in (
         'training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen',
-    )), 'Diagnostic suite cannot claim admission or unseen status')
+    )), 'Synthetic suite cannot claim admission or unseen status')
     _require(manifest['expected_tasks'] == list(TASKS)
-             and type(manifest['case_count']) is int and manifest['case_count'] == 24,
-             'Invalid expected task/count contract')
+             and type(manifest['case_count']) is int
+             and (manifest['case_count'] == 24 if manifest['scope'] == 'diagnostic'
+                  else manifest['case_count'] >= 1), 'Invalid expected task/count contract')
     values = {}
     for key, name in (('source', 'source.private.json'), ('inputs', 'inputs.json'),
                       ('references', 'references.private.json')):
@@ -98,6 +104,8 @@ def verify_manifest(path):
         _require(pin == _pin(name, data), 'Artifact pin mismatch: ' + key)
         values[key] = strict_json(data.decode('utf-8'))
     rows, references = project_source(values['source'])
+    _require(values['source']['scope'] == manifest['scope']
+             and len(rows) == manifest['case_count'], 'Source scope/count differs from manifest')
     _require(rows == values['inputs'] and references == values['references'],
              'Pinned artifacts differ from authored projections')
     return manifest
@@ -107,14 +115,15 @@ def prepare(source_path, output):
     source_path, output = Path(source_path), Path(output)
     _require(source_path.is_file() and not source_path.is_symlink(), 'Source must be an ordinary file')
     source_bytes = source_path.read_bytes()
-    rows, references = project_source(strict_json(source_bytes.decode('utf-8')))
+    source = strict_json(source_bytes.decode('utf-8'))
+    rows, references = project_source(source)
     files = {
         'source.private.json': source_bytes,
         'inputs.json': _bytes(rows),
         'references.private.json': _bytes(references),
     }
     manifest = {
-        'schema': MANIFEST_SCHEMA, 'profile': PROFILE, 'scope': 'diagnostic',
+        'schema': MANIFEST_SCHEMA, 'profile': PROFILE, 'scope': source['scope'],
         'source': _pin('source.private.json', files['source.private.json']),
         'inputs': _pin('inputs.json', files['inputs.json']),
         'references': _pin('references.private.json', files['references.private.json']),

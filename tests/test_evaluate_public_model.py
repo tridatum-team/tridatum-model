@@ -40,12 +40,13 @@ def write_json(path, value):
     return runner.pin(path)['sha256']
 
 
-def make_suite(root, rows=None):
+def make_suite(root, rows=None, scope='diagnostic'):
     root.mkdir()
-    rows = rows if rows is not None else [row()]
+    rows = rows if rows is not None else [row(str(index)) for index in range(24)]
     write_json(root / 'inputs.json', rows)
     # Private files intentionally absent: the worker must not consume them.
-    manifest = {'schema': 'trid-public-work-suite-v1', 'profile': 'public_work_v1', 'scope': 'diagnostic',
+    manifest = {'schema': 'trid-public-work-suite-v1', 'profile': 'public_work_v1', 'scope': scope,
+                'expected_tasks': list(runner.TASKS),
                 'training_ready': False, 'quality_accepted': False, 'expert_reviewed': False,
                 'historically_unseen': False, 'case_count': len(rows),
                 'inputs': relative_pin(root, root / 'inputs.json'),
@@ -94,11 +95,40 @@ def make_adapter(root, identity):
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_development_scope_is_carried_without_opening_private_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, digest = make_suite(Path(directory) / 'suite', [row()], 'development_holdout')
+            rows, identity = runner.public_suite(path, digest)
+            self.assertEqual(rows, [row()])
+            self.assertEqual(identity['suite_scope'], 'development_holdout')
+            self.assertFalse((path.parent / 'source.private.json').exists())
+            self.assertFalse((path.parent / 'references.private.json').exists())
+
+    def test_development_manifest_claims_and_missing_task_inventory_are_rejected(self):
+        changes = [{'scope': 'heldout'}, {'expected_tasks': list(runner.TASKS)[:-1]},
+                   {'case_count': 0}, {'case_count': True}]
+        changes.extend({key: True} for key in (
+            'training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen'))
+        with tempfile.TemporaryDirectory() as directory:
+            path, _ = make_suite(Path(directory) / 'suite', [row()], 'development_holdout')
+            manifest = runner.load_json(path)
+            for change in changes:
+                digest = write_json(path, {**manifest, **change})
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    runner.public_suite(path, digest)
+
+    def test_diagnostic_runner_retains_exact_count_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, digest = make_suite(Path(directory) / 'suite', [row()])
+            with self.assertRaisesRegex(ValueError, 'case count'):
+                runner.public_suite(path, digest)
+
     def test_public_source_and_references_are_never_read(self):
         with tempfile.TemporaryDirectory() as directory:
             path, digest = make_suite(Path(directory) / 'suite')
             rows, identity = runner.public_suite(path, digest)
-            self.assertEqual(rows, [row()])
+            self.assertEqual(rows, [row(str(index)) for index in range(24)])
+            self.assertEqual(identity['suite_scope'], 'diagnostic')
             self.assertEqual(identity['source']['sha256'], 'a' * 64)
             self.assertFalse((path.parent / 'source.private.json').exists())
             self.assertTrue(Path(identity['source']['path']).is_absolute())
@@ -414,7 +444,7 @@ class JournalTests(unittest.TestCase):
     def test_existing_output_rejected_without_admission_or_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            suite, digest = make_suite(root / 'suite')
+            suite, digest = make_suite(root / 'suite', [row()], 'development_holdout')
             model_manifest, model_digest = make_model(root / 'model')
             output = root / 'output'
             output.mkdir()
@@ -437,6 +467,8 @@ class JournalTests(unittest.TestCase):
                 self.assertEqual(runner.supervise(args), 1)
             launch.assert_not_called()
             completion = runner.load_json(args.output / 'completion.json')
+            self.assertEqual(runner.load_json(args.output / 'runtime.json')['suite_scope'],
+                             'development_holdout')
             self.assertEqual(completion['missing_ids'], ['one'])
             self.assertEqual(completion['observed_ids'], [])
             self.assertFalse(completion['complete'])

@@ -25,7 +25,7 @@ def case(identifier, task):
             'institution': '가상 기관', 'family_ids': ['synthetic-' + identifier],
             'documents': [] if general else [{'id': 'D1', 'title': '가상 진단 안내', 'institution': '가상 기관',
                                              'text': '접수는 월요일입니다.', 'source_kind': 'synthetic_diagnostic'}],
-            'history': [], 'question': '인사해 주세요.' if general else '접수일을 알려 주세요.',
+            'history': [], 'question': identifier + (': 인사해 주세요.' if general else ': 접수일을 알려 주세요.'),
             'output_contract': {'format': 'plain_text', 'citations_required': not general},
             'target': '안녕하세요.' if general else '접수는 월요일입니다. [D1]',
             'rubric': {'required_claims': ['자연스러운 인사' if general else '월요일 접수'],
@@ -41,21 +41,35 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.authored = [case('work', 'fact_extraction'), case('general', 'general_dialogue'),
                          case('work2', 'grounded_explanation')]
-        self.rows = [public_row(item) for item in self.authored]
-        self.refs = [reference_row(item, row) for item, row in zip(self.authored, self.rows)]
-        source = put(self.root / 'source.private.json', {'schema': 'trid-public-work-source-v1',
-                     'scope': 'diagnostic', 'cases': self.authored})
-        inputs = put(self.root / 'inputs.json', self.rows)
-        refs = put(self.root / 'references.private.json', self.refs)
-        self.manifest_path = self.root / 'manifest.json'
-        self.manifest = {'schema': 'trid-public-work-suite-v1', 'profile': 'public_work_v1',
-                         'scope': 'diagnostic', 'source': source, 'inputs': inputs, 'references': refs,
-                         'case_count': len(self.rows), 'expected_tasks': list(TASKS), 'training_ready': False,
-                         'quality_accepted': False, 'expert_reviewed': False, 'historically_unseen': False}
-        put(self.manifest_path, self.manifest)
+        covered = {item['task'] for item in self.authored}
+        self.authored.extend(case(task, task) for task in TASKS if task not in covered)
+        self.authored.extend(case(f'extra-{index}', 'fact_extraction') for index in range(9))
+        self.set_suite('diagnostic')
         self.paths = {name: self.root / name for name in ('base', 'candidate')}
         for name in self.paths:
             self.make_arm(name)
+
+    def set_suite(self, scope):
+        kind = 'synthetic_development' if scope == 'development_holdout' else 'synthetic_diagnostic'
+        for item in self.authored:
+            item['provenance']['kind'] = kind
+            for document in item['documents']:
+                document['source_kind'] = kind
+        self.rows = [public_row(item) for item in self.authored]
+        self.refs = [reference_row(item, row) for item, row in zip(self.authored, self.rows)]
+        source = self.suite_pin('source.private.json', {'schema': 'trid-public-work-source-v1',
+                               'scope': scope, 'cases': self.authored})
+        inputs = self.suite_pin('inputs.json', self.rows)
+        refs = self.suite_pin('references.private.json', self.refs)
+        self.manifest_path = self.root / 'manifest.json'
+        self.manifest = {'schema': 'trid-public-work-suite-v1', 'profile': 'public_work_v1',
+                         'scope': scope, 'source': source, 'inputs': inputs, 'references': refs,
+                         'case_count': len(self.rows), 'expected_tasks': list(TASKS), 'training_ready': False,
+                         'quality_accepted': False, 'expert_reviewed': False, 'historically_unseen': False}
+        put(self.manifest_path, self.manifest)
+
+    def suite_pin(self, name, value):
+        return dict(put(self.root / name, value), path=name)
 
     def make_arm(self, name, model='fixture/model', token=1):
         directory = self.paths[name]
@@ -68,7 +82,10 @@ class PublicWorkEvaluationTests(unittest.TestCase):
                      'do_sample': False, 'num_beams': 1, 'seed': 0, 'seed_policy': 'constant',
                      'mode': 'evaluation', 'template_kwargs': {'enable_thinking': False}}
         runtime = {'schema': 'public_work_hf_runtime_v1', 'suite_manifest': evaluator.artifact_pin(self.manifest_path),
-                   'source': self.manifest['source'], 'inputs': self.manifest['inputs'], 'model_manifest': model_pin,
+                   'suite_scope': self.manifest['scope'],
+                   'source': dict(self.manifest['source'], path=str(self.root / 'source.private.json')),
+                   'inputs': dict(self.manifest['inputs'], path=str(self.root / 'inputs.json')),
+                   'model_manifest': model_pin,
                    'model_identity': {'repo_id': model, 'revision': 'fixture-revision'},
                    'tokenizer_identity': {'files': [tokenizer_pin, tokenizer_config_pin],
                                           'template_sha256': hashlib.sha256(str(token).encode()).hexdigest()},
@@ -130,6 +147,58 @@ class PublicWorkEvaluationTests(unittest.TestCase):
                            'critical_error': False, 'reason': 'The answer addresses the request and does not invent unsupported facts.'}
                           for item in packet['cases'] for answer in item['responses'] if answer['judgment_required']]}
 
+    def test_development_holdout_load_packet_and_report_preserve_scope(self):
+        self.authored = self.authored[:len(TASKS)]
+        self.set_suite('development_holdout')
+        for name in self.paths:
+            self.make_arm(name)
+        manifest, rows, refs, _ = evaluator.load_suite(self.manifest_path)
+        self.assertEqual(manifest['scope'], 'development_holdout')
+        self.assertEqual(len(rows), len(TASKS))
+        self.assertEqual({ref['task'] for ref in refs.values()}, set(TASKS))
+        packet, mapping = self.packet()
+        report = evaluator.score_packet(packet, mapping)
+        for artifact in (packet, mapping, report):
+            self.assertEqual(artifact['suite_scope'], 'development_holdout')
+        self.assertEqual(report['scope'], 'observed_development_holdout_not_fresh_gold')
+        self.assertFalse(report['quality_accepted'])
+        self.assertFalse(report['historically_unseen'])
+        self.assertFalse(report['expert_reviewed'])
+        self.change_runtime('candidate', lambda value: value.update(suite_scope='diagnostic'))
+        with self.assertRaisesRegex(ValueError, 'Runtime suite scope mismatch'):
+            self.packet()
+
+    def test_development_evaluator_authenticates_flags_scope_count_and_inventory(self):
+        self.set_suite('development_holdout')
+        original = copy.deepcopy(self.manifest)
+        mutations = [{'scope': 'diagnostic'}, {'case_count': 25},
+                     {'expected_tasks': list(TASKS)[:-1]}]
+        mutations.extend({key: True} for key in (
+            'training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen'))
+        for change in mutations:
+            put(self.manifest_path, {**original, **change})
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                evaluator.load_suite(self.manifest_path)
+
+    def test_development_evaluator_rejects_repinned_provenance_and_missing_coverage(self):
+        self.set_suite('development_holdout')
+        source = json.loads((self.root / 'source.private.json').read_text())
+        mutations = [
+            lambda s: s['cases'][0]['provenance'].update(kind='synthetic_diagnostic'),
+            lambda s: s['cases'][0]['documents'][0].update(source_kind='synthetic_diagnostic'),
+            lambda s: s['cases'][0]['provenance'].update(expert_reviewed=True),
+            lambda s: s['cases'][0]['provenance'].update(historically_unseen=True),
+            lambda s: s.update(cases=[item for item in s['cases'] if item['task'] != 'clarification']),
+        ]
+        for mutate in mutations:
+            changed = copy.deepcopy(source)
+            mutate(changed)
+            self.manifest['source'] = self.suite_pin('source.private.json', changed)
+            self.manifest['case_count'] = len(changed['cases'])
+            put(self.manifest_path, self.manifest)
+            with self.subTest(source=changed), self.assertRaises(ValueError):
+                evaluator.load_suite(self.manifest_path)
+
     def test_structural_only_is_not_semantic_acceptance(self):
         packet, mapping = self.packet()
         report = evaluator.score_packet(packet, mapping)
@@ -138,32 +207,34 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         self.assertTrue(report['research_only'])
         self.assertNotIn('paired', report)
         for summary in report['arms'].values():
-            self.assertEqual(summary['expected'], 3)
+            self.assertEqual(summary['expected'], 24)
             self.assertNotIn('accepted', summary)
             self.assertEqual(set(summary['by']['task']), set(TASKS))
-            self.assertEqual(summary['by']['task']['general_arithmetic']['expected'], 0)
+            self.assertEqual(summary['by']['task']['general_arithmetic']['expected'], 1)
         self.assertNotIn('arm_alias', json.dumps(packet))
         self.assertNotIn('model_identity', json.dumps(packet))
-        self.assertEqual(len(packet['cases']), 3)
+        self.assertEqual(len(packet['cases']), 24)
+        self.assertEqual(packet['scope'], 'observed_diagnostic_not_fresh_gold')
+        self.assertEqual(report['suite_scope'], 'diagnostic')
 
     def test_missing_rows_are_not_invented_or_judged(self):
         self.replace_records('candidate', self.records('candidate')[:1])
         packet, mapping = self.packet()
-        self.assertEqual(sum(len(item['responses']) for item in packet['cases']), 4)
+        self.assertEqual(sum(len(item['responses']) for item in packet['cases']), 25)
         verdicts = self.judgments(packet, mapping)
-        self.assertEqual(len(verdicts['cases']), 4)
+        self.assertEqual(len(verdicts['cases']), 25)
         report = evaluator.score_packet(packet, mapping, verdicts)
         candidate = report['arms']['candidate']
-        self.assertEqual((candidate['expected'], candidate['missing'], candidate['accepted']), (3, 2, 1))
-        self.assertEqual(candidate['accepted_rate_fixed_denominator'], 1 / 3)
+        self.assertEqual((candidate['expected'], candidate['missing'], candidate['accepted']), (24, 23, 1))
+        self.assertEqual(candidate['accepted_rate_fixed_denominator'], 1 / 24)
         self.assertEqual(candidate['semantic_judged'], 1)
-        self.assertEqual(report['paired']['by_task_group']['general']['regressions'], 1)
+        self.assertEqual(report['paired']['by_task_group']['general']['regressions'], 2)
 
     def test_empty_unexecuted_arm_keeps_denominator(self):
         self.replace_records('candidate', [], complete=False, worker_exit_code=137, guard_failure='memory guard')
         packet, mapping = self.packet()
         report = evaluator.score_packet(packet, mapping, self.judgments(packet, mapping))
-        self.assertEqual(report['arms']['candidate']['expected'], 3)
+        self.assertEqual(report['arms']['candidate']['expected'], 24)
         self.assertEqual(report['arms']['candidate']['observed'], 0)
         self.assertEqual(report['arms']['candidate']['semantic_judged'], 0)
         self.assertEqual(report['arms']['candidate']['termination']['worker_exit_code'], 137)
@@ -175,7 +246,8 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         directory.mkdir()
         # Exact initial supervisor runtime, before tokenizer or model admission.
         runtime = {'schema': 'public_work_hf_runtime_v1',
-                   **{key: previous[key] for key in ('suite_manifest', 'source', 'inputs', 'model_manifest', 'model_identity')},
+                   **{key: previous[key] for key in ('suite_manifest', 'suite_scope', 'source', 'inputs',
+                                                     'model_manifest', 'model_identity')},
                    'tokenizer_identity': {'files': [], 'template_sha256': None}, 'adapter': None,
                    'packages': {}, 'resources': {}, 'generation_policy': runner.requested_policy(16, 128),
                    'status': 'not_started', 'research_only': True, 'quality_accepted': False}
@@ -190,15 +262,15 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         packet, mapping = self.packet()
         report = evaluator.score_packet(packet, mapping, self.judgments(packet, mapping))
         summary = report['arms']['candidate']
-        self.assertEqual((summary['expected'], summary['missing'], summary['observed']), (3, 3, 0))
-        self.assertEqual((summary['semantic_judged'], summary['accepted'], summary['completion_failures']), (0, 0, 3))
-        self.assertEqual(sum(len(case['responses']) for case in packet['cases']), 3)
+        self.assertEqual((summary['expected'], summary['missing'], summary['observed']), (24, 24, 0))
+        self.assertEqual((summary['semantic_judged'], summary['accepted'], summary['completion_failures']), (0, 0, 24))
+        self.assertEqual(sum(len(case['responses']) for case in packet['cases']), 24)
         authentication = report['generation_authentication']
         self.assertEqual(authentication['arms']['candidate']['status'], 'failed_before_tokenizer_preflight')
         self.assertFalse(authentication['arms']['candidate']['tokenizer_identity_authenticated'])
         self.assertFalse(authentication['arms']['candidate']['inference_observed'])
         self.assertIsNone(authentication['cross_tokenizer_comparison'])
-        self.assertEqual(report['paired']['by_task_group']['general']['regressions'], 1)
+        self.assertEqual(report['paired']['by_task_group']['general']['regressions'], 2)
         self.assertEqual(summary['termination']['guard_failure'], 'resource admission failed')
 
     def test_missing_tokenizer_cannot_admit_nonempty_or_unfailed_arm(self):
@@ -243,10 +315,10 @@ class PublicWorkEvaluationTests(unittest.TestCase):
                 packet, mapping = self.packet()
                 report = evaluator.score_packet(packet, mapping, self.judgments(packet, mapping))
                 summary = report['arms']['candidate']
-                self.assertEqual((summary['expected'], summary['observed'], summary['missing']), (3, 1, 2))
+                self.assertEqual((summary['expected'], summary['observed'], summary['missing']), (24, 1, 23))
                 self.assertEqual(summary['semantic_judged'], 1)
                 self.assertTrue(summary['termination']['journal_error'])
-                self.assertEqual(sum(len(case['responses']) for case in packet['cases']), 4)
+                self.assertEqual(sum(len(case['responses']) for case in packet['cases']), 25)
                 self.assertEqual((directory / 'responses.jsonl').read_bytes(), journal)
 
     def test_unattested_malformed_journal_is_rejected(self):
@@ -291,20 +363,20 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         self.make_arm('candidate')
         source_path = self.root / 'source.private.json'
         source_path.write_text(source_path.read_text() + '\n')
-        with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+        with self.assertRaisesRegex(ValueError, 'pin mismatch'):
             self.packet()
 
     def test_source_projection_and_reference_coverage_are_authenticated(self):
         references_path = self.root / 'references.private.json'
-        self.manifest['references'] = put(references_path, self.refs[:-1])
+        self.manifest['references'] = self.suite_pin(references_path.name, self.refs[:-1])
         put(self.manifest_path, self.manifest)
-        with self.assertRaisesRegex(ValueError, 'Missing reference'):
+        with self.assertRaisesRegex(ValueError, 'authored projections'):
             self.packet()
         changed = copy.deepcopy(self.refs)
         changed[0]['target'] = '접수는 화요일입니다. [D1]'
-        self.manifest['references'] = put(references_path, changed)
+        self.manifest['references'] = self.suite_pin(references_path.name, changed)
         put(self.manifest_path, self.manifest)
-        with self.assertRaisesRegex(ValueError, 'projection mismatch'):
+        with self.assertRaisesRegex(ValueError, 'authored projections'):
             self.packet()
 
     def test_false_complete_receipt_rejected(self):
@@ -350,7 +422,7 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         packet, mapping = self.packet()
         report = evaluator.score_packet(packet, mapping)
         self.assertTrue(report['generation_authentication']['cross_tokenizer_comparison'])
-        self.assertEqual(report['arms']['candidate']['completed'], 3)
+        self.assertEqual(report['arms']['candidate']['completed'], 24)
         self.assertEqual(report['arms']['candidate']['candidate_source']['model_identity']['repo_id'],
                          'fixture/other-model')
 
@@ -392,15 +464,15 @@ class PublicWorkEvaluationTests(unittest.TestCase):
         self.replace_records('candidate', records)
         packet, mapping = self.packet()
         judgments = self.judgments(packet, mapping)
-        self.assertEqual(len(judgments['cases']), 5)
+        self.assertEqual(len(judgments['cases']), 47)
         report = evaluator.score_packet(packet, mapping, judgments)
         summary = report['arms']['candidate']
-        self.assertEqual(summary['expected'], 3)
+        self.assertEqual(summary['expected'], 24)
         self.assertEqual(summary['length'], 1)
         self.assertEqual(summary['exception'], 1)
         self.assertEqual(summary['truncated'], 2)
-        self.assertEqual(summary['accepted'], 0)
-        self.assertEqual(summary['semantic_pass'], 2)
+        self.assertEqual(summary['accepted'], 21)
+        self.assertEqual(summary['semantic_pass'], 23)
         self.assertEqual(summary['completion_failures'], 3)
         error_id = next(key for key, value in mapping['response_map'].items()
                         if value == {'case_id': 'general', 'arm': 'candidate'})

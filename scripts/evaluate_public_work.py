@@ -1,4 +1,4 @@
-"""Pinned offline public-work diagnostics, not fresh gold or model acceptance.
+"""Pinned offline public-work synthetic suites, not fresh gold or model acceptance.
 
 The private blind packet contains reference rubrics and unchanged observed answers,
 but no arm/model labels. External semantic judgments are human/model-authored
@@ -18,8 +18,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'scripts'))
 from evaluate_evidence_conditioning import artifact_pin, load_json, write_new_json
 from evaluate_local_eight import object_sha, require, strict_json
-from trid.service.public_work import (TASKS, public_row, reference_row, validate_answer,
-                                      validate_case, validate_reference)
+from prepare_public_work import verify_manifest
+from trid.service.public_work import TASKS, validate_answer
 
 PROTOCOL = 'trid-public-work-offline-paired-v1'
 PACKET_SCHEMA = 'trid-public-work-blind-packet-v1'
@@ -56,33 +56,10 @@ def load_suite(manifest_path, expected_sha=None):
     path = Path(manifest_path).resolve()
     identity = artifact_pin(path)
     require(expected_sha is None or identity['sha256'] == expected_sha, 'Manifest hash mismatch')
-    manifest = load_json(path)
-    require(manifest.get('schema') == 'trid-public-work-suite-v1'
-            and manifest.get('profile') == 'public_work_v1' and manifest.get('scope') == 'diagnostic',
-            'Unsupported public-work diagnostic suite')
-    require(manifest.get('expected_tasks') == list(TASKS), 'Required task inventory mismatch')
-    require(all(manifest.get(key) is False for key in
-                ('training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen')),
-            'Diagnostic suite cannot claim admission or fresh gold')
-    source = load_json(pinned_path(path.parent, manifest['source']))
-    require(source.get('schema') == 'trid-public-work-source-v1' and source.get('scope') == 'diagnostic'
-            and isinstance(source.get('cases'), list), 'Invalid diagnostic source')
-    authored = source['cases']
-    expected = set()
-    for case in authored:
-        validate_case(case)
-        require(case['id'] not in expected, 'Duplicate authored ID')
-        expected.add(case['id'])
-    require(expected and manifest.get('case_count') == len(expected), 'Suite case count mismatch')
+    manifest = verify_manifest(path)
     rows = load_json(pinned_path(path.parent, manifest['inputs']))
-    row_map = _index(rows, expected, 'public input')
+    expected = {row['id'] for row in rows}
     refs = _index(load_json(pinned_path(path.parent, manifest['references'])), expected, 'reference')
-    for case in authored:
-        row, ref = row_map[case['id']], refs[case['id']]
-        validate_reference(ref)
-        require(row == public_row(case) and ref == reference_row(case, row),
-                'Source/public/reference projection mismatch')
-        require(ref['prompt_sha256'] == object_sha(row['messages']), 'Reference prompt hash mismatch')
     return manifest, rows, refs, identity
 
 
@@ -166,6 +143,8 @@ def load_arm(directory, rows, manifest_path, manifest, completion_sha256=None):
             and response_path.resolve() == directory / 'responses.jsonl', 'Arm artifact location mismatch')
     runtime = load_json(runtime_path)
     require(runtime.get('schema') == 'public_work_hf_runtime_v1', 'Unsupported native runtime')
+    require(runtime.get('suite_scope', 'diagnostic') == manifest['scope'],
+            'Runtime suite scope mismatch')
     suite_path = pinned_path(directory, runtime['suite_manifest'])
     require(suite_path.resolve() == Path(manifest_path).resolve(), 'Runtime suite identity mismatch')
     for key in ('source', 'inputs'):
@@ -347,11 +326,15 @@ def build_blind_packet(manifest_path, arm_paths, *, seed=None, manifest_sha256=N
                       'reference': {key: reference[key] for key in
                                     ('target', 'rubric', 'output_contract', 'document_ids')},
                       'responses': answers})
-    packet = {'schema': PACKET_SCHEMA, 'protocol': PROTOCOL, 'scope': 'observed_diagnostic_not_fresh_gold',
+    packet = {'schema': PACKET_SCHEMA, 'protocol': PROTOCOL,
+              'scope': ('observed_diagnostic_not_fresh_gold' if manifest['scope'] == 'diagnostic'
+                        else 'observed_development_holdout_not_fresh_gold'),
+              'suite_scope': manifest['scope'],
               'instructions': 'Judge each judgment_required answer against the messages and private rubric; '
                               'explain actual supported/unsupported claims. Labels and format do not establish semantics.',
               'cases': cases}
     mapping = {'schema': MAPPING_SCHEMA, 'protocol': PROTOCOL, 'manifest': manifest_pin,
+               'suite_scope': manifest['scope'],
                'artifacts': {name: arm[3] for name, arm in arms.items()}, 'seed': seed,
                'packet_sha256': object_sha(packet), 'case_map': case_map, 'response_map': response_map,
                'generation_authentication': authentication}
@@ -499,7 +482,7 @@ def score_packet(packet, mapping, judgments=None):
         results.extend(selected)
     report = {'schema': 'trid-public-work-assessment-v1', 'protocol': PROTOCOL,
               'research_only': True, 'quality_accepted': False, 'historically_unseen': False,
-              'expert_reviewed': False, 'scope': 'observed_diagnostic_not_fresh_gold',
+              'expert_reviewed': False, 'scope': packet['scope'], 'suite_scope': manifest['scope'],
               'semantic_evaluated': semantic, 'semantic_judgment_provenance': 'external_unverified' if semantic else None,
               'manifest': mapping['manifest'], 'packet_sha256': mapping['packet_sha256'],
               'generation_authentication': mapping['generation_authentication'],

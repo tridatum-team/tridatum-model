@@ -14,6 +14,8 @@ TASKS = (
     'general_dialogue', 'general_arithmetic', 'tool_result_use',
 )
 GENERAL_TASKS = ('general_dialogue', 'general_arithmetic')
+# Both kinds are fictional and AI-authored; neither is expert gold nor an unseen test.
+SOURCE_KINDS = ('synthetic_diagnostic', 'synthetic_development')
 CASE_FIELDS = {
     'id', 'task', 'domain', 'institution', 'family_ids', 'documents', 'history',
     'question', 'output_contract', 'target', 'rubric', 'provenance',
@@ -97,7 +99,7 @@ def _shared(value, document_ids):
     provenance = value['provenance']
     _shape(provenance, {'kind', 'author', 'historically_unseen', 'expert_reviewed'}, 'provenance')
     _text(provenance['author'], 'author')
-    _require(provenance['kind'] == 'synthetic_diagnostic'
+    _require(provenance['kind'] in SOURCE_KINDS
              and provenance['historically_unseen'] is False
              and provenance['expert_reviewed'] is False, 'Unsupported provenance claims')
 
@@ -113,7 +115,9 @@ def validate_case(case):
         _shape(document, {'id', 'title', 'institution', 'text', 'source_kind'}, 'document')
         for key in ('id', 'title', 'institution', 'text'):
             _text(document[key], 'document ' + key)
-        _require(document['source_kind'] == 'synthetic_diagnostic', 'Unsupported source kind')
+        _require(isinstance(case['provenance'], dict)
+                 and document['source_kind'] == case['provenance'].get('kind')
+                 and document['source_kind'] in SOURCE_KINDS, 'Unsupported source kind')
         _require('가상' in document['title'], 'Document title must explicitly identify fiction')
         _require(document['institution'].startswith('가상 '),
                  'Document institution must explicitly identify fiction')

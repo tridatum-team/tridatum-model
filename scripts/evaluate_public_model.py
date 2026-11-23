@@ -20,6 +20,7 @@ import time
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 import qwen_linux_guard as guard
+from prepare_public_work import SUITE_KINDS, TASKS
 
 PROFILES = guard.EXACT_CPU_PROFILES
 PINS = {'torch': '2.9.1+cpu', 'transformers': '4.57.6', 'tokenizers': '0.22.2',
@@ -151,10 +152,11 @@ def validate_public_rows(rows):
 def public_suite(path, sha256):
     manifest, identity = anchored_json(path, sha256)
     require(manifest.get('schema') == 'trid-public-work-suite-v1'
-            and manifest.get('profile') == 'public_work_v1' and manifest.get('scope') == 'diagnostic'
+            and manifest.get('profile') == 'public_work_v1' and manifest.get('scope') in SUITE_KINDS
             and all(manifest.get(key) is False for key in
                     ('training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen')),
-            'Only declared public-work diagnostic suites are admitted')
+            'Only declared synthetic public-work suites are admitted')
+    require(manifest.get('expected_tasks') == list(TASKS), 'Required task inventory mismatch')
     # Source/reference pins are metadata only. Never open either private artifact.
     root = Path(path).parent
     source = dict(validate_pin(manifest['source']))
@@ -172,9 +174,11 @@ def public_suite(path, sha256):
     # Only after path and inode admission may public input contents be opened.
     check_pin(root, input_pin)
     rows = validate_public_rows(load_json(inputs))
-    require(type(manifest.get('case_count')) is int and manifest['case_count'] == len(rows),
+    require(type(manifest.get('case_count')) is int and manifest['case_count'] == len(rows)
+            and (len(rows) == 24 if manifest['scope'] == 'diagnostic' else len(rows) >= 1),
             'Suite case count mismatch')
-    return rows, {'suite_manifest': identity, 'source': source, 'inputs': pin(inputs)}
+    return rows, {'suite_manifest': identity, 'suite_scope': manifest['scope'],
+                  'source': source, 'inputs': pin(inputs)}
 
 
 def requested_policy(max_new_tokens, context_limit):

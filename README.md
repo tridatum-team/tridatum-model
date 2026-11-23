@@ -747,6 +747,24 @@ python scripts/evaluate_public_work.py score \
 - **관측된 실패 유형:** 자료에 없는 의무·원칙·제재를 덧붙임, "정보 없음"을 "기한 없음"으로 단정, 기한·상한 조건을 바꿔 서술, 필요한 확인 질문 생략, 인용 누락입니다. LoRA 후보는 중대 오류가 적었지만 인용 표기는 12/24로 가장 낮았습니다.
 - **실행 중 확인·수정한 문제:** 첫 8B 실행은 가중치(익명 17.5GB)와 파일 캐시(16.8GB)가 함께 32GiB에 도달해 guard가 응답 전 중단했습니다(OOM·swap 없음). 캐시 해제 경로 추가 뒤 cgroup 최대 사용은 18.7GB였습니다. 이후 공동 서비스 재시작으로 가용 메모리가 39.1GiB가 되어 40GiB 입장 조건에 걸렸고, 제한을 낮추는 대신 위 24GiB profile을 추가했습니다. 8B와 4B는 재실행에서 24/24 응답이 바이트 단위로 같았습니다.
 - **근거:** `runs/public-model-development-20261121T060754Z/`의 `base8b-preflight-failure.json`, `profile24g-*-execution-artifacts.json`, `base8b-vs-adapter8b/`, `base8b-vs-compact4b/`(`semantic-report.json`, `review-agreement.json`, `judgment-rebinding.json`). 실행 자료는 Git에 올리지 않습니다.
+
+**2026-11-23 `public_work_v1` 개발 자료(학습 후보 530건·분리 홀드아웃 170건).** 위 실측의 실패 유형을 겨냥해 AI가 작성한 **가상** 사례입니다. 실제 원문 기반·전문가 검수 최종 시험이 아니며 [벤치마크 규격](docs/PUBLIC_BENCHMARK_PROTOCOL.md)의 2,000문항 목표에 산입하지 않습니다.
+
+- **구성:** `data/public-work-v1/development/`의 25개 batch 700건입니다. 학습은 6개 업무군(보훈·복지, 주거·부동산, 고용·인사, 계약·조달, 회계·예산, 공기업 운영·서비스)과 일반 과제, 홀드아웃은 학습에 없는 2개 업무군(보건·안전, 교육·연구)과 별도 일반 과제입니다. 근거 과제는 같은 문서에서 한 조건만 달라 정답이 바뀌는 대조 쌍으로 작성했습니다(기한 있음/자료에 없음, 범위 안/밖, 상한 적용/미적용, 충돌/일치). 일반 과제 비중은 학습 26%·홀드아웃 27%이고, 500자 이상 긴 문서 batch(학습 80건·홀드아웃 20건)를 포함하지만 문서 길이 중앙값은 63자로 짧습니다.
+- **분리:** `scripts/prepare_public_work_development.py prepare`가 학습·홀드아웃·기존 24문항 진단 사이의 기관, 문서 계열, 사례 ID, 프롬프트 해시, 정규화한 문서·질문의 중복과 8-gram 근접 중복(포함도 0.5 이상·공유 20개 이상)을 검사하고 하나라도 걸리면 실패합니다. 계산 사례는 계산식을 실제로 평가해 결과와 대조합니다. 홀드아웃 정답·루브릭은 `train.jsonl`에 들어가지 않습니다.
+- **검토와 승인:** 모델 출력을 보기 전에 독립 AI 검토 2건이 700건 전체를 판정했습니다. 한쪽이라도 지적한 16건을 고친 뒤 새 검토 2건이 16건을 모두 통과시켰고, `admit`이 두 검토의 전건 통과를 확인해 `state: ADMITTED_FOR_RESEARCH`, `training_ready: true`, `expert_certified: false`인 학습 manifest를 만들었습니다. 이는 연구용 학습 입력 승인일 뿐 GPU 실행·품질·전문가 인증이 아닙니다. 생성된 `train.jsonl`은 실제 `train_open_weight_lora.load_rows`로 530건 로딩을 확인했습니다. 토큰 예산은 측정하지 않았으며, 학습 시 `--max-tokens 4096 --max-answer-tokens 768`을 명시해야 합니다.
+- **홀드아웃 사용:** `prepare` 출력의 `holdout/`은 scope `development_holdout`인 suite로, 위 runner·blind packet·score 경로에 그대로 넣습니다. 한 실행 기한(최대 3,600초)에 170건이 들어가지 않으므로 실측 속도(문항당 약 50초) 기준으로 나눠 실행해야 하며, 아직 어떤 모델도 이 홀드아웃으로 실행하지 않았습니다.
+- **전문가 검수(미완료):** `expert-review/holdout.md`와 `verdicts.template.json`은 사람이 문서·질문·제안 답변·루브릭을 읽고 판정·교정 답변을 적는 양식입니다. 검수자가 확보되지 않아 판정은 0건이며, 그때까지 홀드아웃 점수는 AI 작성 기준에 대한 개발 지표로만 씁니다.
+
+```bash
+python scripts/prepare_public_work_development.py prepare \
+  --batches data/public-work-v1/development \
+  --diagnostics data/public-work-v1/diagnostics.json --output "$PREPARED"
+python scripts/prepare_public_work_development.py admit \
+  --prepared "$PREPARED/manifest.json" --review "$REVIEW_A" --review "$REVIEW_B" --output "$ADMITTED"
+```
+
+검토 파일은 `review-packet.json`의 `packet_sha256`에 결박된 `trid-public-work-annotation-review-v1` 형식이며 서로 다른 검토자 2명의 전건 통과와 사유가 필요합니다. 실행 근거는 `runs/public-work-development-20261123/`(`prepared-v2/manifest.json`, `reviews/review-process.json`, `admitted/manifest.json`)에 있고 Git에 올리지 않습니다. 관련 테스트는 296개 통과했습니다.
 <!-- public_work_v1:end -->
 
 ### Packed-head 학습 엔진

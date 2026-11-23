@@ -1,0 +1,1090 @@
+{
+  "schema": "trid-public-work-development-batch-v1",
+  "batch": "g02",
+  "split": "train",
+  "business_group": "일반",
+  "institutions": [],
+  "cases": [
+    {
+      "id": "dev-g02-01",
+      "task": "general_dialogue",
+      "domain": "공동생활",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-summary"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "다음 글을 두 문장으로 줄여 주세요. “우리 독서모임은 이번 달부터 책을 끝까지 읽지 않아도 참여할 수 있도록 했다. 대신 기억에 남는 부분 한 곳을 골라 오기로 했다. 모임 장소는 매번 참석자가 돌아가며 정한다. 다음 모임 장소는 아직 정하지 않았다.”",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "독서모임은 이번 달부터 완독하지 않아도 기억에 남는 부분 한 곳을 골라 오면 참여할 수 있습니다. 모임 장소는 참석자가 돌아가며 정하며, 다음 장소는 아직 미정입니다.",
+      "rubric": {
+        "required_claims": [
+          "완독 없이도 기억에 남는 부분 한 곳을 골라 참여할 수 있다고 요약한다.",
+          "장소를 돌아가며 정하고 다음 장소는 미정임을 두 문장 안에 담는다."
+        ],
+        "forbidden_claims": [
+          "다음 모임 장소를 지어낸다.",
+          "완독이 참여 조건이라고 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-02",
+      "task": "general_dialogue",
+      "domain": "학습",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-concept"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "초등학생도 이해하게 평균이 뭔지 간단히 설명해 주세요. 계산 문제는 풀지 말고요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "평균은 여러 수를 모두 더한 뒤, 그 수가 몇 개인지로 나눈 값입니다. 친구들이 가진 구슬을 한데 모아 똑같이 나눠 가진다고 생각하면 쉽습니다.",
+      "rubric": {
+        "required_claims": [
+          "합계를 수의 개수로 나눈 값이라고 설명한다.",
+          "쉬운 비유를 사용한다."
+        ],
+        "forbidden_claims": [
+          "평균을 가장 자주 나오는 값이라고 설명한다.",
+          "사용자가 요청하지 않은 계산 문제를 푼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-03",
+      "task": "general_dialogue",
+      "domain": "글쓰기",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-proofread"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "맞춤법과 띄어쓰기만 고쳐서 문장만 주세요: 내일은 웬지 비가 올것 같아서 우산을 챙겨야 겠다.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "내일은 왠지 비가 올 것 같아서 우산을 챙겨야겠다.",
+      "rubric": {
+        "required_claims": [
+          "왠지, 올 것, 챙겨야겠다로 교정한다."
+        ],
+        "forbidden_claims": [
+          "원문의 뜻이나 말투를 바꾼다.",
+          "교정 설명을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-04",
+      "task": "general_dialogue",
+      "domain": "이웃소통",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-tone"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "이웃에게 보낼 문자를 부드러운 존댓말로 바꿔 주세요. “복도에 둔 상자 좀 치워 주세요. 지나가기 불편해요.” 원문에 없는 기한은 넣지 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "복도에 두신 상자를 정리해 주실 수 있을까요? 지나다니는 데 조금 불편함이 있어 부탁드립니다.",
+      "rubric": {
+        "required_claims": [
+          "상자 정리를 정중히 요청한다.",
+          "통행이 불편하다는 이유를 유지한다."
+        ],
+        "forbidden_claims": [
+          "정리 기한이나 처벌을 새로 넣는다.",
+          "상자 소유자를 비난한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-05",
+      "task": "general_dialogue",
+      "domain": "감사인사",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-thanks"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "이웃이 여행 중에 화분에 물을 줬어요. 선물 얘기 없이 감사 문자 두 문장 써 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "여행하는 동안 화분에 물을 주셔서 감사합니다. 덕분에 마음 편히 다녀왔습니다.",
+      "rubric": {
+        "required_claims": [
+          "화분에 물을 준 일에 감사하는 두 문장을 쓴다."
+        ],
+        "forbidden_claims": [
+          "선물이나 보답을 약속한다.",
+          "화분의 상태를 확인한 것처럼 단정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-06",
+      "task": "general_dialogue",
+      "domain": "공동생활",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-titles"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "동네 물건 나눔 행사 제목을 짧게 세 개만 목록으로 제안해 주세요. 판매 행사가 아니라 무료 나눔이에요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 우리 동네 무료 나눔\n- 이웃과 나누는 물건\n- 필요한 이웃에게, 무료로",
+      "rubric": {
+        "required_claims": [
+          "짧은 행사 제목을 세 개 제안한다.",
+          "무료 나눔이라는 취지와 맞는 표현을 쓴다."
+        ],
+        "forbidden_claims": [
+          "판매나 유료 거래 행사처럼 표현한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-07",
+      "task": "general_dialogue",
+      "domain": "학습",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-comparison"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "공부 장소를 고르려고 합니다. 집은 이동 시간이 없지만 집안일이 눈에 들어오고, 동네 학습실은 조용하지만 왕복 30분이 걸려요. 제가 말한 장단점만 표로 비교해 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 장소 | 장점 | 단점 |\n|---|---|---|\n| 집 | 이동 시간이 없음 | 집안일이 눈에 들어옴 |\n| 동네 학습실 | 조용함 | 왕복 30분이 걸림 |",
+      "rubric": {
+        "required_claims": [
+          "각 장소의 장단점을 사용자가 제공한 내용으로만 비교한다."
+        ],
+        "forbidden_claims": [
+          "학습실 이용료나 운영시간을 지어낸다.",
+          "한 장소가 반드시 성적을 높인다고 주장한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-08",
+      "task": "general_dialogue",
+      "domain": "집안일",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-checklist"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "겨울옷을 보관하기 전에 확인할 체크리스트를 네 항목으로 만들어 주세요. 옷감마다 다른 세탁법을 하나로 단정하지는 말아 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- [ ] 옷의 세탁 표시를 확인합니다.\n- [ ] 얼룩이나 오염이 있으면 표시된 방법에 맞게 처리합니다.\n- [ ] 옷이 완전히 마른 상태인지 확인합니다.\n- [ ] 보관 장소의 습기와 먼지를 확인합니다.",
+      "rubric": {
+        "required_claims": [
+          "세탁 표시 확인과 완전 건조를 포함한 네 항목을 쓴다."
+        ],
+        "forbidden_claims": [
+          "모든 겨울옷을 같은 방법으로 세탁하라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-09",
+      "task": "general_dialogue",
+      "domain": "동네모임",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-minutes"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "이 메모를 결정 사항/미정 사항/담당으로 나눠 짧은 회의록 목록으로 바꿔 주세요. “가상 골목모임: 벼룩시장은 안 하고 무료 책 나눔만 하자고 결정. 날짜는 아직 못 정함. 장소 후보는 마당과 모임방. 책 수집은 운영 담당, 안내문은 홍보 담당.”",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 결정 사항: 벼룩시장 대신 무료 책 나눔만 진행합니다.\n- 미정 사항: 날짜와 장소는 미정이며, 장소 후보는 마당과 모임방입니다.\n- 담당: 운영 담당은 책 수집, 홍보 담당은 안내문 작성을 맡습니다.",
+      "rubric": {
+        "required_claims": [
+          "결정 사항과 미정 사항을 구분한다.",
+          "책 수집과 안내문의 담당을 정확하게 연결한다."
+        ],
+        "forbidden_claims": [
+          "장소 후보 중 하나를 확정된 장소로 쓴다.",
+          "회의 날짜나 참석자를 만들어 넣는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-10",
+      "task": "general_dialogue",
+      "domain": "학습",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-howto"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "책을 읽고 짧은 감상문을 쓸 때 어떤 순서로 쓰면 좋을까요? 세 문장 이내로 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "책에서 가장 기억에 남는 장면이나 생각을 먼저 적습니다. 그 부분이 왜 인상 깊었는지 자신의 경험이나 생각과 연결해 설명합니다. 마지막에는 책을 읽고 달라진 생각이나 남은 질문으로 마무리하면 됩니다.",
+      "rubric": {
+        "required_claims": [
+          "기억에 남는 내용, 이유와 연결, 마무리의 순서를 제시한다."
+        ],
+        "forbidden_claims": [
+          "감상문에 반드시 정해진 분량이나 인용 개수가 필요하다고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-11",
+      "task": "general_dialogue",
+      "domain": "일상대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-smalltalk"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "책상 한쪽을 드디어 치웠더니 좀 뿌듯하네요. 그냥 한마디 해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "책상 한쪽을 정리하고 나니 뿌듯하시겠습니다. 한결 가벼워진 공간을 잠시 즐기셔도 좋겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "정리 후 느낀 뿌듯함을 짧게 인정한다."
+        ],
+        "forbidden_claims": [
+          "추가 청소 계획을 길게 제시한다.",
+          "사용자의 생활 습관을 평가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-12",
+      "task": "general_dialogue",
+      "domain": "외국어",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-translation"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“이 책을 내일까지 빌려도 될까요?”를 자연스러운 영어 한 문장으로 번역해 주세요. 번역만요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "Could I borrow this book until tomorrow?",
+      "rubric": {
+        "required_claims": [
+          "책을 내일까지 빌려도 되는지 묻는 영어 문장을 쓴다."
+        ],
+        "forbidden_claims": [
+          "내일까지를 내일 이후로 바꾼다.",
+          "번역 외에 해설을 붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-13",
+      "task": "general_dialogue",
+      "domain": "모임준비",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-actionitems"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 대화에서 확정된 할 일만 담당자별 목록으로 뽑아 주세요. “준비 담당: 제가 돗자리 챙길게요. 간식 담당: 저는 과일을 씻어 올게요. 준비 담당: 비 오면 실내로 옮기는 건 어때요? 간식 담당: 그건 다른 사람들과 더 얘기해 봐요.”",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 준비 담당: 돗자리를 챙깁니다.\n- 간식 담당: 과일을 씻어 옵니다.",
+      "rubric": {
+        "required_claims": [
+          "확정된 두 가지 할 일을 담당자와 연결한다."
+        ],
+        "forbidden_claims": [
+          "실내로 옮기는 일을 확정된 할 일로 넣는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-14",
+      "task": "general_dialogue",
+      "domain": "공동생활",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-agenda"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "공용 주방 청소를 논의할 모임의 안건을 세 개만 목록으로 제안해 주세요. 아직 분담이나 주기는 결정하지 않았어요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 청소할 구역과 작업 범위 정하기\n- 참여자별 역할 분담 방식 논의하기\n- 청소 주기와 완료 확인 방식 정하기",
+      "rubric": {
+        "required_claims": [
+          "범위, 분담, 주기를 논의할 안건 세 개를 제안한다."
+        ],
+        "forbidden_claims": [
+          "역할이나 청소 주기가 이미 확정됐다고 쓴다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-15",
+      "task": "general_dialogue",
+      "domain": "주말계획",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-planning"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "토요일 오전에 빨래 돌리기, 책상 정리, 산책을 하려고 해요. 세탁기는 돌리는 동안 자리를 비워도 되지만, 빨래를 넌 다음에 밖에 나가고 싶어요. 순서만 짧게 추천해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "빨래를 돌리는 동안 책상을 정리하고, 세탁이 끝나면 빨래를 넌 뒤 산책을 나가시면 됩니다.",
+      "rubric": {
+        "required_claims": [
+          "세탁 중 책상 정리, 널기, 산책의 순서를 제안한다."
+        ],
+        "forbidden_claims": [
+          "빨래를 널기 전에 산책을 가라고 한다.",
+          "근거 없이 작업 시간을 확정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-16",
+      "task": "general_dialogue",
+      "domain": "식사준비",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-history-meal"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "매운 음식은 빼고 저녁 메뉴 후보 두 가지만 골라 주세요. 집에 오이, 생식용 두부, 달걀, 밥이 있어요."
+        },
+        {
+          "role": "assistant",
+          "content": "오이 두부 샐러드와 달걀볶음밥을 추천합니다."
+        }
+      ],
+      "question": "그중에서 불을 쓰지 않고 먹을 수 있는 쪽으로 골라 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "오이 두부 샐러드가 맞습니다. 생식용으로 표시된 두부와 씻은 오이를 사용하면 불을 쓰지 않고 준비할 수 있습니다.",
+      "rubric": {
+        "required_claims": [
+          "앞선 두 후보 중 오이 두부 샐러드를 고른다.",
+          "불을 쓰지 않는 조건에 맞도록 생식용 표시를 확인한 두부를 제안한다."
+        ],
+        "forbidden_claims": [
+          "이전에 없던 후보를 고른다.",
+          "모든 두부를 조리 없이 먹어도 된다고 단정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-17",
+      "task": "general_dialogue",
+      "domain": "학습",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-history-study"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "읽은 내용을 복습하는 방법 두 가지를 알려 주세요."
+        },
+        {
+          "role": "assistant",
+          "content": "책을 보지 않고 기억나는 것을 적거나, 적은 내용과 책을 비교하며 빠뜨린 부분을 확인하는 방법이 있습니다."
+        }
+      ],
+      "question": "책은 이미 읽었어요. 그럼 두 가지 중 무엇부터 하면 되죠?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "책 내용을 보지 않고 기억나는 것을 적는 방법부터 하시면 됩니다. 적고 나서 책과 비교하면 잘 기억한 부분과 빠뜨린 부분을 확인할 수 있습니다.",
+      "rubric": {
+        "required_claims": [
+          "앞서 나온 두 방법 중 책을 보지 않고 기억나는 것을 적는 방법을 먼저 권한다."
+        ],
+        "forbidden_claims": [
+          "앞선 대화를 무시하고 책을 처음부터 읽으라고 한다.",
+          "이 방법이 성적 향상을 보장한다고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-18",
+      "task": "general_dialogue",
+      "domain": "창작",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-microstory"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“낡은 찻잔에서 작은 잎이 올라왔습니다.” 다음에 이어질 동화 두 문장만 써 주세요. 무섭지 않고 따뜻하게요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "아이는 찻잔을 햇볕이 드는 창가에 놓고 매일 아침 인사를 건넸습니다. 잎은 조금씩 자라 작은 그늘을 만들었고, 아이는 그 곁에서 쉬는 시간을 좋아하게 되었습니다.",
+      "rubric": {
+        "required_claims": [
+          "찻잔의 잎에서 자연스럽게 이어지는 따뜻한 동화 두 문장을 쓴다."
+        ],
+        "forbidden_claims": [
+          "공포나 위협적인 전개를 넣는다.",
+          "동화에 대한 설명을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-19",
+      "task": "general_arithmetic",
+      "domain": "장보기",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-discount"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 가게에서 24,000원짜리 수납함을 15% 할인해요. 배송비는 없고 다른 할인도 없을 때 결제액을 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "결제액은 20,400원입니다. 정가 24,000원에 15% 할인을 적용하면 24,000 × (1 − 15 ÷ 100) = 20,400원입니다.",
+      "rubric": {
+        "required_claims": [
+          "정가와 할인율을 식에 표시하고 결제액 20,400원을 구한다."
+        ],
+        "forbidden_claims": [
+          "할인액 3,600원을 결제액이라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "24000*(1-15/100)",
+          "result": "20400",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-20",
+      "task": "general_arithmetic",
+      "domain": "음료준비",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-ratio"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "시럽과 물을 부피 기준 1:4로 섞어 음료 750mL를 만들려고 해요. 물은 몇 mL 넣으면 되나요? 섞기 전후 총부피는 같다고 가정해요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "물은 600mL 넣으면 됩니다. 시럽과 물의 비율이 1:4이므로 물의 양은 750 × 4 ÷ (1 + 4) = 600mL입니다.",
+      "rubric": {
+        "required_claims": [
+          "전체 비율 5 중 물의 비율 4를 적용해 600mL를 구한다."
+        ],
+        "forbidden_claims": [
+          "시럽과 물의 비율을 거꾸로 적용한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "750*4/(1+4)",
+          "result": "600",
+          "unit": "mL"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-21",
+      "task": "general_arithmetic",
+      "domain": "집안일",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-conversion"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "용량 1.8L인 물병 두 개에 물이 가득 들어 있어요. 물의 총량을 mL로 바꿔 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "물의 총량은 3,600mL입니다. 1L = 1,000mL이므로 1.8 × 2 × 1,000 = 3,600mL입니다.",
+      "rubric": {
+        "required_claims": [
+          "1L를 1,000mL로 환산해 총량 3,600mL를 구한다."
+        ],
+        "forbidden_claims": [
+          "물병 한 개의 양만 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "1.8*2*1000",
+          "result": "3600",
+          "unit": "mL"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-22",
+      "task": "general_arithmetic",
+      "domain": "학습",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-duration"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "같은 날 오후 1시 35분부터 오후 3시 10분까지 공부했고 중간에 15분 쉬었어요. 실제 공부한 시간은 몇 분인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "실제 공부한 시간은 80분입니다. 전체 시간은 (15 × 60 + 10) − (13 × 60 + 35) = 95분이고, 휴식 15분을 빼면 95 − 15 = 80분입니다.",
+      "rubric": {
+        "required_claims": [
+          "전체 95분에서 휴식 15분을 빼 실제 공부 시간 80분을 구한다."
+        ],
+        "forbidden_claims": [
+          "휴식을 포함한 95분을 실제 공부 시간이라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(15*60+10)-(13*60+35)-15",
+          "result": "80",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-23",
+      "task": "general_arithmetic",
+      "domain": "독서",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-average"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "나흘 동안 읽은 분량이 각각 18쪽, 24쪽, 16쪽, 22쪽이에요. 하루 평균 몇 쪽 읽었나요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "하루 평균 20쪽 읽었습니다. 나흘간 읽은 분량을 더해 날짜 수로 나누면 (18 + 24 + 16 + 22) ÷ 4 = 20쪽입니다.",
+      "rubric": {
+        "required_claims": [
+          "네 날짜의 분량 합계 80쪽을 4로 나눠 평균 20쪽을 구한다."
+        ],
+        "forbidden_claims": [
+          "날짜 수가 아닌 다른 수로 나눈다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(18+24+16+22)/4",
+          "result": "20",
+          "unit": "쪽"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-24",
+      "task": "general_arithmetic",
+      "domain": "모임정산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-proportional-split"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 공동구매 배송비 12,000원을 주문 수량 비율로 나눠요. 가구 가는 2개, 가구 나는 3개, 가구 다는 5개를 주문했어요. 가구별 배송비를 계산식과 함께 표로 보여 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 가구 | 주문 수량 | 배송비 계산 | 부담액 |\n|---|---:|---|---:|\n| 가 | 2개 | 12,000 × 2 ÷ (2 + 3 + 5) | 2,400원 |\n| 나 | 3개 | 12,000 × 3 ÷ (2 + 3 + 5) | 3,600원 |\n| 다 | 5개 | 12,000 × 5 ÷ (2 + 3 + 5) | 6,000원 |\n| 합계 | 10개 | 2,400 + 3,600 + 6,000 | 12,000원 |",
+      "rubric": {
+        "required_claims": [
+          "수량 비율 2:3:5에 따라 2,400원, 3,600원, 6,000원으로 나눈다.",
+          "부담액 합계가 12,000원임을 표시한다."
+        ],
+        "forbidden_claims": [
+          "세 가구가 4,000원씩 균등 부담하도록 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "12000*2/(2+3+5)+12000*3/(2+3+5)+12000*5/(2+3+5)",
+          "result": "12000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-25",
+      "task": "general_arithmetic",
+      "domain": "장보기",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-compound-change"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "개당 1,200원인 사과 4개와 개당 2,300원인 빵 2개를 샀어요. 10,000원을 냈다면 거스름돈은 얼마인가요? 할인은 없어요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "거스름돈은 600원입니다. 사과와 빵의 총액은 1,200 × 4 + 2,300 × 2 = 9,400원이므로, 10,000 − 9,400 = 600원입니다.",
+      "rubric": {
+        "required_claims": [
+          "상품별 단가와 수량을 반영해 총액 9,400원과 거스름돈 600원을 구한다."
+        ],
+        "forbidden_claims": [
+          "수량을 빠뜨리거나 할인을 임의로 적용한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "10000-(1200*4+2300*2)",
+          "result": "600",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-26",
+      "task": "general_arithmetic",
+      "domain": "공동예산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-rounding-remainder"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "공동예산 16,000원을 세 팀에 똑같이 나누되, 팀별 배분액은 100원 미만을 버리기로 했어요. 남은 돈은 공동예산에 보관합니다. 팀별 배분액과 남는 돈을 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "팀별 배분액은 5,300원이고, 남는 돈은 100원입니다. 16,000 ÷ 3 = 5,333.333…원에서 100원 미만을 버리면 팀별 5,300원이며, 잔액은 16,000 − 5,300 × 3 = 100원입니다.",
+      "rubric": {
+        "required_claims": [
+          "균등 배분액의 100원 미만을 버려 팀별 5,300원을 구한다.",
+          "공동예산에 남는 돈 100원을 계산한다."
+        ],
+        "forbidden_claims": [
+          "반올림하거나 팀마다 서로 다른 금액을 배분한다.",
+          "남은 100원을 한 팀에 임의로 준다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "16000-5300*3",
+          "result": "100",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-27",
+      "task": "general_arithmetic",
+      "domain": "학습계획",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-weekly-practice"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "단어 카드를 하루에 18장씩, 일주일에 5일 공부할 계획이에요. 4주 동안 빠짐없이 하면 총 몇 장을 공부하나요? 매일 다른 카드를 공부한다고 가정해요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "총 360장을 공부합니다. 하루 18장씩 주 5일, 4주간 공부하므로 18 × 5 × 4 = 360장입니다.",
+      "rubric": {
+        "required_claims": [
+          "주당 학습일 5일과 4주를 적용해 총 360장을 구한다."
+        ],
+        "forbidden_claims": [
+          "일주일을 7일로 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "18*5*4",
+          "result": "360",
+          "unit": "장"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-28",
+      "task": "general_arithmetic",
+      "domain": "생활기록",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-percent-increase"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "하루 걸음 수가 6,000걸음에서 7,500걸음으로 늘었어요. 원래 걸음 수에 비해 몇 퍼센트 증가했나요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "원래 걸음 수에 비해 25% 증가했습니다. 증가량은 7,500 − 6,000 = 1,500걸음이고, 증가율은 (7,500 − 6,000) ÷ 6,000 × 100 = 25%입니다.",
+      "rubric": {
+        "required_claims": [
+          "원래 걸음 수 6,000을 기준으로 증가율 25%를 구한다."
+        ],
+        "forbidden_claims": [
+          "늘어난 뒤의 7,500걸음을 분모로 쓴다.",
+          "125%를 증가율이라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(7500-6000)/6000*100",
+          "result": "25",
+          "unit": "%"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-29",
+      "task": "general_arithmetic",
+      "domain": "모임회비",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-cap"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 동네모임에서 준비물 비용의 40%를 돌려주되 한 사람당 최대 8,000원까지만 돌려주기로 했어요. 제가 준비물에 23,000원을 썼다면 얼마를 돌려받나요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "돌려받는 금액은 8,000원입니다. 준비물 비용의 40%는 23,000 × 40 ÷ 100 = 9,200원이지만, 한 사람당 상한이 8,000원이므로 두 금액 중 작은 금액인 8,000원을 적용합니다.",
+      "rubric": {
+        "required_claims": [
+          "23,000원의 40%인 9,200원에 상한을 적용해 8,000원을 구한다."
+        ],
+        "forbidden_claims": [
+          "상한을 무시하고 9,200원이라고 한다.",
+          "지출액을 먼저 8,000원으로 제한한 뒤 40%를 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min(23000*40/100,8000)",
+          "result": "8000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g02-30",
+      "task": "general_arithmetic",
+      "domain": "요리",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g02-recipe-scale"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상의 팬케이크 조리법이 2인분에 밀가루 160g, 우유 240mL예요. 같은 비율로 5인분을 만들 때 두 재료의 양을 계산식과 함께 표로 알려 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 재료 | 2인분 기준 | 5인분 계산 | 필요한 양 |\n|---|---:|---|---:|\n| 밀가루 | 160g | 160 × 5 ÷ 2 | 400g |\n| 우유 | 240mL | 240 × 5 ÷ 2 | 600mL |",
+      "rubric": {
+        "required_claims": [
+          "2인분에서 5인분으로 2.5배 늘려 밀가루 400g과 우유 600mL를 구한다."
+        ],
+        "forbidden_claims": [
+          "재료의 양을 다섯 배로 계산한다.",
+          "g과 mL를 같은 단위로 합산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "240*5/2",
+          "result": "600",
+          "unit": "mL"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g02 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    }
+  ]
+}

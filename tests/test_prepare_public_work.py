@@ -1,4 +1,4 @@
-"""Portable pins, exclusive output and strict diagnostic-only preparation."""
+"""Portable pins, exclusive output and strict synthetic suite preparation."""
 from contextlib import redirect_stdout
 from copy import deepcopy
 import hashlib
@@ -30,7 +30,85 @@ def repin(manifest_path, key, artifact):
     write_json(manifest_path, manifest)
 
 
+def development_source(count=None):
+    cases = []
+    for index in range(len(TASKS) if count is None else count):
+        task = TASKS[index % len(TASKS)]
+        general = task.startswith('general_')
+        cases.append({
+            'id': f'development-{index}', 'task': task, 'domain': 'fixture',
+            'institution': '가상 기관', 'family_ids': [f'fixture-{index}'],
+            'documents': [] if general else [{
+                'id': 'D1', 'title': '가상 안내', 'institution': '가상 기관',
+                'text': '접수는 월요일입니다.', 'source_kind': 'synthetic_development',
+            }],
+            'history': [], 'question': f'사례 {index}: 요청에 답하세요.',
+            'output_contract': {'format': 'plain_text', 'citations_required': not general},
+            'target': '안녕하세요.' if general else '접수는 월요일입니다. [D1]',
+            'rubric': {'required_claims': ['응답'], 'forbidden_claims': [],
+                       'required_citations': [] if general else ['D1'], 'calculation': None},
+            'provenance': {'kind': 'synthetic_development', 'author': 'test-fixture',
+                           'historically_unseen': False, 'expert_reviewed': False},
+        })
+    return {'schema': prep.SOURCE_SCHEMA, 'scope': 'development_holdout', 'cases': cases}
+
+
 class PreparePublicWorkTests(unittest.TestCase):
+    def test_development_holdout_prepare_and_verify_preserve_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = development_source()
+            source_path = root / 'source.json'
+            write_json(source_path, source)
+            manifest = prep.prepare(source_path, root / 'suite')
+            self.assertEqual(manifest['scope'], 'development_holdout')
+            self.assertEqual(manifest['case_count'], len(TASKS))
+            self.assertEqual(manifest['expected_tasks'], list(TASKS))
+            self.assertEqual(prep.verify_manifest(root / 'suite/manifest.json'), manifest)
+            self.assertTrue(all(manifest[key] is False for key in (
+                'training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen')))
+
+    def test_development_provenance_flags_and_coverage_reject_before_output(self):
+        mutations = [
+            lambda s: s['cases'].clear(),
+            lambda s: s['cases'].pop(),
+            lambda s: s['cases'][0]['provenance'].update(kind='synthetic_diagnostic'),
+            lambda s: s['cases'][0]['documents'][0].update(source_kind='synthetic_diagnostic'),
+            lambda s: s['cases'][0]['provenance'].update(expert_reviewed=True),
+            lambda s: s['cases'][0]['provenance'].update(historically_unseen=True),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index, mutate in enumerate(mutations):
+                with self.subTest(index=index):
+                    source = development_source()
+                    mutate(source)
+                    path, output = root / 'source.json', root / f'suite-{index}'
+                    write_json(path, source)
+                    with self.assertRaises(ValueError):
+                        prep.prepare(path, output)
+                    self.assertFalse(output.exists())
+
+    def test_development_manifest_rejects_flags_and_source_scope_count_mismatch(self):
+        mutations = [lambda m: m.update(scope='diagnostic'),
+                     lambda m: m.update(case_count=25),
+                     lambda m: m.update(expected_tasks=list(TASKS)[:-1])]
+        mutations.extend(lambda m, key=key: m.update({key: True}) for key in (
+            'training_ready', 'quality_accepted', 'expert_reviewed', 'historically_unseen'))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # A 24-case development source isolates scope binding from count checks.
+            source_path = root / 'source.json'
+            write_json(source_path, development_source(24))
+            manifest = prep.prepare(source_path, root / 'suite')
+            path = root / 'suite/manifest.json'
+            for mutate in mutations:
+                changed = deepcopy(manifest)
+                mutate(changed)
+                write_json(path, changed)
+                with self.subTest(manifest=changed), self.assertRaises(ValueError):
+                    prep.verify_manifest(path)
+
     def test_cli_writes_verified_portable_suite_without_mutating_source(self):
         before = SOURCE.read_bytes()
         with tempfile.TemporaryDirectory() as directory:
