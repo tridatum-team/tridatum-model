@@ -765,6 +765,21 @@ python scripts/prepare_public_work_development.py admit \
 ```
 
 검토 파일은 `review-packet.json`의 `packet_sha256`에 결박된 `trid-public-work-annotation-review-v1` 형식이며 서로 다른 검토자 2명의 전건 통과와 사유가 필요합니다. 실행 근거는 `runs/public-work-development-20261123/`(`prepared-v2/manifest.json`, `reviews/review-process.json`, `admitted/manifest.json`)에 있고 Git에 올리지 않습니다. 관련 테스트는 296개 통과했습니다.
+
+**2026-11-23 AWS GPU 학습·홀드아웃 실측(`public-work-gpu-20261123-054203`, 연구 전용).** 승인된 530건으로 Qwen3-8B LoRA를 학습하고, 같은 인스턴스에서 원본과 학습 모델이 홀드아웃 170건·진단 24건에 답했습니다. 홀드아웃 설명에 적었던 "아직 어떤 모델도 실행하지 않았다"는 이 실행으로 갱신됩니다.
+
+- **실행:** 서울 `g6e.2xlarge`(L40S) 1대, 기동부터 종료까지 약 49분. 학습은 rank 16·alpha 32·학습률 5e-5·batch 2·530 스텝(530건을 정확히 2회)으로 433초 걸렸고 손실 평균은 처음 20스텝 1.48에서 마지막 20스텝 0.34로 내려갔습니다. 생성 정책은 CPU runner와 같습니다(greedy·seed 0·512토큰·thinking 끔). 비용 상한은 $30(사전 산정 상한 $26.16)이며 실제 청구액은 확인하지 않았습니다.
+- **정리와 저장:** 인스턴스 종료와 루트 볼륨 삭제, 실행 전용 IAM·보안 그룹·스케줄 삭제를 확인했습니다. 결과물(194.7MB, SHA-256 `cf67127a…04b4`)은 개발 PC `/srv/trid/data/trid-research/gpu-runs/public-work-gpu-20261123-054203/`에 저장해 디스크에서 다시 읽어 해시를 확인했고, S3의 이 실행 객체 8개는 삭제 후 부재를 확인했습니다. S3 prefix 수명주기 규칙 2개는 남아 있습니다.
+
+| 홀드아웃 170건 | 형식 | 인용 | 의미 통과 | 중대 오류 | 수용 |
+| --- | --- | --- | --- | --- | --- |
+| 원본 Qwen3-8B | 168 | 157 | 108 | 18 | 103 |
+| 8B + public_work LoRA | 170 | 168 | 115 | 13 | 113 |
+
+- **해석:** 수용 기준 쌍별 변화는 개선 25·퇴행 15입니다(부호 검정 양측 p≈0.15). 방향은 개선이지만 이 표본으로 우위를 단정할 수 없습니다. 업무 과제 124건은 의미 통과 78→86·중대 오류 16→10, 일반 과제 46건은 30→29·중대 오류 2→3으로 일반 능력은 유지 수준입니다. 확인 질문은 0→4/10, 다중 문서는 3→8/8로 올랐고, 표 계산 9→7·적용 시점 10→8·부분 답변 8→6은 내려갔습니다. 문서 초안은 두 모델 모두 0/10, 일반 대화는 12/26으로, 모델 문제인지 기준·검토 문제인지 아직 가리지 않았습니다.
+- **진단 24건:** 의미 통과 7→9, 중대 오류 7→7, 수용 6→9입니다. 진단 문항의 실패 유형을 보고 학습 자료를 만들었으므로 독립 지표가 아닙니다.
+- **판정 방식과 한계:** 모델을 가린 사례를 한 건씩 보는 독립 AI 검토 2건의 보수적 합의이며 전문가 판정이 아닙니다. 검토자 불일치는 홀드아웃 340응답 중 22건, 진단 48응답 중 12건입니다. 앞선 CPU 실측과 검토자가 달라 그 표의 수치와 직접 비교할 수 없습니다. 홀드아웃은 AI가 작성했고 전문가 검수가 0건입니다.
+- **GPU 경로:** `scripts/aws_eval/public_work_experiment.py`·`public_work_worker.py`가 기존 `fresh_eight_launch.py` 수명주기에 `trid-public-work-gpu-plan-v1` 계약으로 추가됐습니다(`prepare → prepare-prerequisites → validate → stage → launch → owned-prerequisite-cleanup → s3-purge`, 복구용 `retrieve`). 비공개 정답·루브릭은 인스턴스로 보내지 않습니다. `tests/test_grounded_hf_gpu.py`의 2건은 이 변경 이전부터 schema 없는 입력 때문에 실패합니다. 근거는 `runs/public-work-gpu-20261123/`(`plan.json`, `state/`, `assessment/`, `devpc-storage-receipt.json`)에 있습니다.
 <!-- public_work_v1:end -->
 
 ### Packed-head 학습 엔진

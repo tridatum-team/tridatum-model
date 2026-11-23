@@ -62,6 +62,18 @@ prerequisite observations. No historical authorization or fixed-dollar receipt
 is reused. Public projection preparation is available offline through
 public_evidence_experiment.py; private references never enter the bundle.
 
+Public-work research uses trid-public-work-prerequisites-v1 and the separate
+trid-public-work-gpu-plan-v1 contract, never an evidence-profile fallback.
+After launch/reconcile proves compute cleanup, retrieve --execute can explicitly
+recover an interrupted controller export into state/retrieved-export/. It needs
+the same registration/plan hashes and exact consumed approval, not a new launch
+approval. This one-shot retrieval preserves prior retrieval intents and files.
+After launch or retrieve authenticates a local export, s3-purge --execute deletes
+only code/<run_id>/ and outputs/<run_id>/. It requires the same registration/plan
+hashes, journals each deletion with absence readback, and preserves all bucket
+lifecycle rules. Metadata-only completion cannot authorize purge. Existing
+mutation intents forbid replay.
+
 Sampling evaluation uses the same commands with a fresh registration/run/state:
   schema:trid-cuda-evaluation-prerequisites-v1,
   decoder_profile:qwen3_nonthinking_sampling,
@@ -87,7 +99,11 @@ Get/List/Tag-at-create/Create/DeleteScheduleGroup; existing-bucket S3
 Get/PutLifecycleConfiguration and HeadBucket. Stage additionally needs exact
 code-prefix ListBucket/PutObject/GetObject; launch/reconcile require existing
 lifecycle permissions (RunInstances, PassRole, schedule/termination and evidence
-operations). No CreateBucket/DeleteBucket/DeleteObject permissions are needed.
+operations). No CreateBucket/DeleteBucket permissions are needed. Only the
+explicit public-work s3-purge additionally needs exact-prefix DeleteObject,
+GetBucketVersioning, ListBucketMultipartUploads, GetObject (HEAD), ListBucket,
+and GetLifecycleConfiguration readbacks. Retrieval needs exact output-prefix
+GetObject plus the existing compute-cleanup read/termination-schedule permissions.
 All creation tags are the registered exact ownership tags. No managed IAM policy
 is attached. IAM trust and permissions are validated against lifecycle rules.
 
@@ -119,6 +135,7 @@ require = lifecycle.require
 SCHEMA = 'trid-fresh-eight-prerequisites-v2'
 EVALUATION_SCHEMA = 'trid-cuda-evaluation-prerequisites-v1'
 PUBLIC_EVIDENCE_SCHEMA = 'trid-public-evidence-prerequisites-v2'
+PUBLIC_WORK_SCHEMA = 'trid-public-work-prerequisites-v1'
 HELPERS = {'scripts/aws_eval/fresh_eight_launch.py', 'scripts/aws_eval/grounded_hf_lifecycle.py'}
 ROLE_KEYS = ('instance_role', 'scheduler_role')
 
@@ -186,9 +203,19 @@ def public_evidence_registration(reg):
     return reg.get('schema') == PUBLIC_EVIDENCE_SCHEMA
 
 
+def public_work_registration(reg):
+    return reg.get('schema') == PUBLIC_WORK_SCHEMA
+
+
+def public_contract_registration(reg):
+    return public_evidence_registration(reg) or public_work_registration(reg)
+
+
 def registration_plan_schema(reg):
-    require(reg.get('schema') in (SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA),
+    require(reg.get('schema') in (SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA, PUBLIC_WORK_SCHEMA),
             'Unknown prerequisite registration schema; generic fallback forbidden')
+    if public_work_registration(reg):
+        return lifecycle.PUBLIC_WORK_SCHEMA
     if public_evidence_registration(reg):
         return lifecycle.PUBLIC_EVIDENCE_SCHEMA
     return lifecycle.EVALUATION_SCHEMA if evaluation_registration(reg) else lifecycle.FRESH_SCHEMA
@@ -213,13 +240,13 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
               'resource_envelope', 'aggregate_ledger', 'sources', 'iam', 'network', 'bucket_lifecycle_before',
               'retention_days', 'lifecycle_rule_ids', 'bundle'}
     evaluation = evaluation_registration(reg)
-    public = public_evidence_registration(reg)
+    public = public_contract_registration(reg)
     require(active or evaluation or public, 'Historical prerequisite admission requires a bounded profile')
     if public:
         fields = (fields - {'aggregate_ledger'}) | {
             'workload', 'recipe', 'limits', 'lifetime', 'cost', 'absolute_termination_deadline',
             'data', 'phase_seconds', 'ancillary_evidence', 'bootstrap_admission'}
-        shell = dict(reg, schema=lifecycle.PUBLIC_EVIDENCE_SCHEMA)
+        shell = dict(reg, schema=registration_plan_schema(reg))
         lifecycle.absolute_deadline(shell)
         if active and launch_window:
             lifecycle.validate_launch_window(shell, time.time())
@@ -233,7 +260,7 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
             lifecycle.absolute_deadline(shell)
             if active and launch_window:
                 lifecycle.validate_launch_window(shell, time.time())
-    require(set(reg) == fields and reg['schema'] in (SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA) and reg['approved'] is True
+    require(set(reg) == fields and reg['schema'] in (SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA, PUBLIC_WORK_SCHEMA) and reg['approved'] is True
             and reg['automatic_retry'] is False, 'Exact parent prerequisite registration required')
     ident = reg['identity']
     run = ident['run_id']
@@ -268,7 +295,7 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
     pin_bytes(root, envelope['cost_evidence'])
     resource_plan = dict(reg, schema=registration_plan_schema(reg), instance_type='g6e.2xlarge')
     if public:
-        lifecycle.public_evidence_module(resource_plan).validate_resources(root, resource_plan, active=active and launch_window)
+        lifecycle.public_contract_module(resource_plan).validate_resources(root, resource_plan, active=active and launch_window)
     else:
         validator = lifecycle.validate_evaluation_resources if evaluation else lifecycle.validate_fresh_resources
         if evaluation and reg.get('decoder_profile') == lifecycle.SAMPLING_PROFILE:
@@ -312,7 +339,7 @@ def validate_registration(reg, root, *, active=True, launch_window=True):
                 'Public evidence bundle must bind fresh authorization and current source closure')
         require(not any(name.endswith(('.tar', '.tar.gz', '.zip')) for name in files),
                 'Historical archives must not enter the public evidence bundle')
-        lifecycle.public_evidence_module(resource_plan).validate_registration_bundle(root, reg, files)
+        lifecycle.public_contract_module(resource_plan).validate_registration_bundle(root, reg, files)
     if evaluation:
         files = {row['path']: row for row in reg['bundle']['files']}
         require(all(files.get(reg[key]['path']) == reg[key]
@@ -346,9 +373,9 @@ def lifecycle_merge(reg):
 def prepare_bundle(reg, root, state):
     """No recursive collection, symlinks, credentials, implicit pins or wall clock."""
     files = lifecycle.pins(reg['bundle']['files'], 256 * 1024**2)
-    if public_evidence_registration(reg):
-        shell = dict(reg, schema=lifecycle.PUBLIC_EVIDENCE_SCHEMA)
-        lifecycle.public_evidence_module(shell).validate_registration_bundle(root, reg, files)
+    if public_contract_registration(reg):
+        shell = dict(reg, schema=registration_plan_schema(reg))
+        lifecycle.public_contract_module(shell).validate_registration_bundle(root, reg, files)
     target = safe_path(root, reg['bundle']['local_path'])
     require(reg['bundle']['local_path'] not in files, 'Bundle cannot contain itself')
     for name in files:
@@ -372,7 +399,7 @@ def prepare_bundle(reg, root, state):
     bundle = dict(reg['bundle'], bytes=target.stat().st_size, sha256=lifecycle.digest(target),
                   unpacked_bytes=sum(p['bytes'] for p in files.values()))
     envelope = bound_json(root, reg['resource_envelope'])
-    cap = 128 * 1024**2 if evaluation_registration(reg) or public_evidence_registration(reg) else 32 * 1024**2
+    cap = 128 * 1024**2 if evaluation_registration(reg) or public_contract_registration(reg) else 32 * 1024**2
     require(bundle['bytes'] <= envelope['bundle_bytes_max'] <= cap, 'Bundle too large')
     lifecycle.authenticate_archive(target, bundle)
     return record(Path(state) / 'bundle-prepared.json', bundle)
@@ -587,7 +614,7 @@ def prepare_prerequisites(reg, registration_sha, state, client):
 
 def validate_final(reg, registration_sha, root, state, plan, approval, plan_sha, *, active=True):
     evaluation = evaluation_registration(reg)
-    public = public_evidence_registration(reg)
+    public = public_contract_registration(reg)
     require(active or evaluation or public, 'Historical final-plan admission requires a bounded profile')
     require(plan.get('schema') == registration_plan_schema(reg)
             and plan['identity'] == reg['identity'] and plan['iam'] == reg['iam']
@@ -934,9 +961,126 @@ def owned_prerequisite_cleanup(reg, registration_sha, state, client, plan=None, 
         cleanup_state='complete', retained_prefix_lifecycle_rules=True, s3_mutations=0))
 
 
+def retrieve_run_export(reg, registration_sha, state, client, plan, plan_sha):
+    """Recover export once without overwriting interrupted launch evidence."""
+    state, identity = Path(state), reg['identity']
+    require(public_work_registration(reg) and lifecycle.public_work_mode(plan)
+            and plan['identity'] == identity and lifecycle.SHA.fullmatch(plan_sha or ''),
+            'Retrieval requires the distinct bound public-work contract')
+    require(load(state / 'approval-consumed.json') ==
+            dict(run_id=identity['run_id'], plan_sha256=plan_sha),
+            'Retrieval requires exact consumed approval')
+    caller_matches(client, reg)
+    verify_compute_cleanup(reg, state, client, plan, plan_sha)
+    evidence = lifecycle.load_volume_identity(state, plan, plan_sha)
+    release = load(state / 'release.json')
+    require(release.get('run_id') == identity['run_id']
+            and release.get('plan_sha256') == plan_sha
+            and release.get('instance_id') == evidence['instance_id'],
+            'Retrieval release ownership differs')
+    destination = state / 'retrieved-export'
+    destination.mkdir()
+    record(destination / 'release.json', release)
+    record(state / 'export-retrieve-intent.json',
+        dict(schema='trid-public-work-export-retrieval-v1', registration_sha256=registration_sha,
+             run_id=identity['run_id'], plan_sha256=plan_sha, instance_id=evidence['instance_id'],
+             destination=destination.name))
+    result = lifecycle.collect_export(client, plan, plan_sha, destination, evidence['instance_id'])
+    return record(state / 'export-retrieved.json', result)
+
+
+def purge_run_s3(reg, registration_sha, state, client, plan, plan_sha):
+    """Explicit post-export purge; never alter retention or retry a mutation."""
+    state, identity = Path(state), reg['identity']
+    require(public_work_registration(reg) and lifecycle.public_work_mode(plan)
+            and plan['identity'] == identity and lifecycle.SHA.fullmatch(plan_sha or ''),
+            'S3 purge requires the distinct bound public-work contract')
+    prefixes = [identity['code_prefix'], identity['output_prefix']]
+    require(prefixes == ['code/' + identity['run_id'] + '/', 'outputs/' + identity['run_id'] + '/'],
+            'S3 purge permits only exact run code/outputs prefixes')
+    caller_matches(client, reg)
+    export_state = state / 'retrieved-export'
+    require(not export_state.is_symlink(), 'Symlink export state forbidden')
+    if not (export_state / 'local-export-authenticated.json').exists():
+        export_state = state
+    authentication = load(export_state / 'local-export-authenticated.json')
+    completion = load(export_state / 'completion.json')
+    evidence = lifecycle.load_volume_identity(state, plan, plan_sha)
+    require(authentication == dict(schema='trid-public-work-local-export-authentication-v1',
+                run_id=identity['run_id'], plan_sha256=plan_sha, instance_id=evidence['instance_id'],
+                completion_sha256=lifecycle.digest(export_state / 'completion.json'),
+                export=completion.get('export'), export_state=authentication.get('export_state'))
+            and authentication['export_state'] in ('authenticated_terminal', 'authenticated_partial')
+            and completion.get('run_id') == identity['run_id']
+            and completion.get('plan_sha256') == plan_sha
+            and completion.get('instance_id') == evidence['instance_id'],
+            'Local authenticated export identity differs; metadata-only completion cannot authorize purge')
+    pin = authentication['export']
+    require(isinstance(pin, dict) and set(pin) == {'bytes', 'sha256'}
+            and type(pin['bytes']) is int and 0 < pin['bytes'] <= lifecycle.export_limit(plan)
+            and isinstance(pin['sha256'], str) and lifecycle.SHA.fullmatch(pin['sha256']),
+            'Local authenticated export pin differs')
+    archive_path = export_state / 'export.tar'
+    require(archive_path.is_file() and not archive_path.is_symlink()
+            and archive_path.stat().st_size == pin['bytes']
+            and lifecycle.digest(archive_path) == pin['sha256'],
+            'Local authenticated export is missing or changed')
+    verify_compute_cleanup(reg, state, client, plan, plan_sha)
+    bucket = identity['bucket']
+    require(not client('s3api', 'get-bucket-versioning', '--bucket', bucket).get('Status'),
+            'Versioned/suspended bucket purge is not admitted')
+    before = client('s3api', 'get-bucket-lifecycle-configuration', '--bucket', bucket)
+    lifecycle.validate_lifecycle_configuration(plan, before)
+
+    def inventory(prefix):
+        listing = client('s3api', 'list-objects-v2', '--bucket', bucket,
+                         '--prefix', prefix, '--max-keys', '1000')
+        uploads = client('s3api', 'list-multipart-uploads', '--bucket', bucket,
+                         '--prefix', prefix, '--max-uploads', '1')
+        require(not listing.get('IsTruncated') and not uploads.get('IsTruncated')
+                and not uploads.get('Uploads'), 'Incomplete or multipart run inventory; preserve objects')
+        rows = listing.get('Contents', [])
+        require(isinstance(rows, list) and all(isinstance(row.get('Key'), str)
+                and row['Key'].startswith(prefix) for row in rows)
+                and len({row['Key'] for row in rows}) == len(rows), 'S3 prefix inventory differs')
+        return rows
+
+    inventories = {prefix: inventory(prefix) for prefix in prefixes}
+    record(state / 's3-purge-authorized.json',
+        dict(schema='trid-public-work-s3-purge-authorization-v1',
+             registration_sha256=registration_sha, run_id=identity['run_id'], plan_sha256=plan_sha,
+             instance_id=evidence['instance_id'], bucket=bucket, prefixes=prefixes,
+             local_export_authentication=authentication, inventory=inventories,
+             lifecycle_before=before, compute_cleanup='complete'))
+
+    def object_absent(key):
+        try:
+            client('s3api', 'head-object', '--bucket', bucket, '--key', key)
+        except lifecycle.AWSCallError as exc:
+            require(exc.code in ('404', 'NoSuchKey', 'NotFound'), 'Object absence unresolved: ' + key)
+            return dict(key=key, absent=True, error_code=exc.code)
+        raise RuntimeError('Object remains after purge: ' + key)
+
+    keys = sorted(row['Key'] for rows in inventories.values() for row in rows)
+    for index, key in enumerate(keys):
+        mutate(client, state, registration_sha, 's3-purge-object-' + str(index),
+               's3api', 'delete-object', ['--bucket', bucket, '--key', key],
+               lambda response, key=key: object_absent(key))
+    absence = {prefix: inventory(prefix) for prefix in prefixes}
+    require(all(not rows for rows in absence.values()), 'Run objects remain after purge')
+    after = client('s3api', 'get-bucket-lifecycle-configuration', '--bucket', bucket)
+    require(after == before, 'Bucket lifecycle rules changed during purge')
+    return record(state / 's3-purge-complete.json',
+        dict(schema='trid-public-work-s3-purge-receipt-v1', registration_sha256=registration_sha,
+             run_id=identity['run_id'], plan_sha256=plan_sha, bucket=bucket, prefixes=prefixes,
+             export=pin, deleted_keys=keys, s3_mutations=len(keys), absence_readback=absence,
+             cleanup_state='complete', retained_prefix_lifecycle_rules=True,
+             lifecycle_sha256=lifecycle.object_sha(after)))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('action', choices=('prepare', 'validate', 'prepare-prerequisites', 'stage', 'launch', 'reconcile', 'owned-prerequisite-cleanup'))
+    parser.add_argument('action', choices=('prepare', 'validate', 'prepare-prerequisites', 'stage', 'launch', 'reconcile', 'retrieve', 'owned-prerequisite-cleanup', 's3-purge'))
     parser.add_argument('--registration', required=True, type=Path)
     parser.add_argument('--registration-sha256', required=True)
     parser.add_argument('--root', required=True, type=Path)
@@ -956,7 +1100,7 @@ def main():
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         reg = lifecycle.read_bound(args.registration, args.registration_sha256)
         validate_registration(reg, args.root,
-                              launch_window=args.action not in ('reconcile', 'owned-prerequisite-cleanup'))
+                              launch_window=args.action not in ('reconcile', 'retrieve', 'owned-prerequisite-cleanup', 's3-purge'))
         binding = dict(registration_sha256=args.registration_sha256, identity=reg['identity'])
         binding_path = args.state / 'registration-consumed.json'
         if binding_path.exists():
@@ -984,7 +1128,7 @@ def main():
             result = stage(reg, args.registration_sha256, args.root, args.state, plan, args.plan_sha256, args.plan, client)
         elif args.action == 'launch':
             client.deadline = time.time() + lifecycle.lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
-            if lifecycle.sampling_mode(plan) or lifecycle.public_evidence_mode(plan):
+            if lifecycle.sampling_mode(plan) or lifecycle.public_contract_mode(plan):
                 client.deadline = min(client.deadline, lifecycle.absolute_deadline(plan))
             client.request_limit = plan['cost']['control_requests']
             result = lifecycle.launch(plan, approval, args.plan_sha256, args.root, args.state, client)
@@ -992,6 +1136,12 @@ def main():
             require(plan is not None, 'Final plan required for reconcile')
             caller_matches(client, reg)
             result = reconcile(plan, args.plan_sha256, args.state, client)
+        elif args.action == 'retrieve':
+            require(plan is not None, 'Final plan required for retrieval')
+            result = retrieve_run_export(reg, args.registration_sha256, args.state, client, plan, args.plan_sha256)
+        elif args.action == 's3-purge':
+            require(plan is not None, 'Final plan required for S3 purge')
+            result = purge_run_s3(reg, args.registration_sha256, args.state, client, plan, args.plan_sha256)
         else:
             result = owned_prerequisite_cleanup(reg, args.registration_sha256, args.state, client, plan, args.plan_sha256)
         print(json.dumps(result, ensure_ascii=False, indent=2))

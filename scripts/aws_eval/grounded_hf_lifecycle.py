@@ -53,6 +53,7 @@ EIGHT_SCHEMA = 'trid-eight-sft-experiment-v1'
 FRESH_SCHEMA = 'trid-fresh-eight-training-experiment-v2'
 EVALUATION_SCHEMA = 'trid-fresh-eight-cuda-evaluation-v1'
 PUBLIC_EVIDENCE_SCHEMA = 'trid-public-evidence-gpu-plan-v2'
+PUBLIC_WORK_SCHEMA = 'trid-public-work-gpu-plan-v1'
 SAMPLING_PROFILE = 'qwen3_nonthinking_sampling'
 SAMPLING_DEADLINE = '2026-11-16T23:00:00Z'
 OVERNIGHT_AUTHORIZATION = 'runs/mois-eight-cuda-evaluation-20261116T134815Z/overnight-gpu-authorization.json'
@@ -79,6 +80,25 @@ def public_evidence_module(plan):
     return public_evidence_experiment
 
 
+def public_work_mode(plan):
+    return plan.get('schema') == PUBLIC_WORK_SCHEMA
+
+
+def public_contract_mode(plan):
+    return public_evidence_mode(plan) or public_work_mode(plan)
+
+
+def public_contract_module(plan):
+    if public_evidence_mode(plan):
+        return public_evidence_module(plan)
+    require(public_work_mode(plan), 'Unknown public contract; generic fallback forbidden')
+    if __package__:
+        from . import public_work_experiment
+    else:
+        import public_work_experiment
+    return public_work_experiment
+
+
 def evaluation_mode(plan):
     return plan.get('schema') == EVALUATION_SCHEMA
 
@@ -88,7 +108,7 @@ def sampling_mode(plan):
 
 
 def absolute_deadline(plan):
-    if public_evidence_mode(plan):
+    if public_contract_mode(plan):
         value = plan.get('absolute_termination_deadline')
         require(isinstance(value, str) and value.endswith('Z'),
                 'Public evidence requires an explicit absolute UTC deadline')
@@ -100,8 +120,8 @@ def absolute_deadline(plan):
 
 def validate_launch_window(plan, now):
     """Reserve the entire four-hour envelope and one single-call dispatch margin."""
-    if public_evidence_mode(plan):
-        public_evidence_module(plan).validate_limits(plan)
+    if public_contract_mode(plan):
+        public_contract_module(plan).validate_limits(plan)
         require(now + plan['lifetime']['total_seconds'] + 60 < absolute_deadline(plan),
                 'Insufficient newly authorized launch window; no retry or extension')
     if sampling_mode(plan):
@@ -111,8 +131,8 @@ def validate_launch_window(plan, now):
 
 def work_deadline(plan, launch_time):
     deadline = launch_time + lifetime_seconds(plan)
-    if sampling_mode(plan) or public_evidence_mode(plan):
-        grace = plan['cost']['termination_grace_seconds'] if public_evidence_mode(plan) else 900
+    if sampling_mode(plan) or public_contract_mode(plan):
+        grace = plan['cost']['termination_grace_seconds'] if public_contract_mode(plan) else 900
         deadline = min(deadline, absolute_deadline(plan) - grace)
     return deadline
 
@@ -140,24 +160,24 @@ def fresh_module(plan):
 
 
 def bounded_mode(plan):
-    return inference_mode(plan) or eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan)
+    return inference_mode(plan) or eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan)
 
 
 def lifetime_seconds(plan):
     """Scheduled compute lease; fresh total also includes the cleanup grace."""
-    return plan['limits']['lifetime_seconds'] if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else LIMITS['lifetime_seconds']
+    return plan['limits']['lifetime_seconds'] if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan) else LIMITS['lifetime_seconds']
 
 
 def reserve_seconds(plan):
-    return plan['limits']['reserve_seconds'] if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else LIMITS['reserve_seconds']
+    return plan['limits']['reserve_seconds'] if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan) else LIMITS['reserve_seconds']
 
 
 def export_limit(plan):
-    return plan['cost']['export_bytes'] if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else MAX_EXPORT
+    return plan['cost']['export_bytes'] if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan) else MAX_EXPORT
 
 
 def output_limit(plan):
-    return plan['limits']['output_bytes'] if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else LIMITS['output_bytes']
+    return plan['limits']['output_bytes'] if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan) else LIMITS['output_bytes']
 
 
 def schedule_name(identity):
@@ -204,6 +224,8 @@ def inference_mode(plan):
 
 
 def success_field(plan):
+    if public_work_mode(plan):
+        return 'public_work_success'
     if public_evidence_mode(plan):
         return 'public_evidence_success'
     if evaluation_mode(plan):
@@ -586,8 +608,8 @@ def evaluation_cost_bound(plan):
 
 def cost_bound(plan):
     """Conservative bill model, not a claim that AWS exposes a spending hard cap."""
-    if public_evidence_mode(plan):
-        return public_evidence_module(plan).cost_bound(plan)
+    if public_contract_mode(plan):
+        return public_contract_module(plan).cost_bound(plan)
     cost = plan['cost']
     prices = cost['rates']
     require(set(prices) == {'ec2_hour', 'ipv4_hour', 'ebs_gb_month', 's3_gb_month',
@@ -706,7 +728,7 @@ def validate_worker_policy(plan):
         f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}*"]),
         dict(Effect='Allow', Action=['s3:PutObject'], Resource=[
         f"arn:aws:s3:::{identity['bucket']}/{identity['output_prefix']}*"])]
-    if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan):
         expected[0]['Resource'] = [f"arn:aws:s3:::{identity['bucket']}/{identity['code_prefix']}{name}"
             for name in ('plan.json', 'bundle.tar', 'approval-consumed.json', 'termination.json', 'release.json')]
         expected.append(dict(Effect='Allow', Action=['s3:ListBucket'],
@@ -732,7 +754,7 @@ def validate_worker_policy(plan):
 
 
 def validate_plan(plan, approval, plan_sha, *, now=None):
-    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA, FRESH_SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA), 'Unknown plan schema')
+    require(plan['schema'] in ('trid-grounded-hf-v1', INFERENCE_SCHEMA, FOLLOWUP_SCHEMA, EIGHT_SCHEMA, FRESH_SCHEMA, EVALUATION_SCHEMA, PUBLIC_EVIDENCE_SCHEMA, PUBLIC_WORK_SCHEMA), 'Unknown plan schema')
     ordered = inference_mode(plan)
     ident = plan['identity']
     run = ident['run_id']
@@ -752,9 +774,9 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         validate_fresh_lifetime(plan)
     if evaluation_mode(plan):
         evaluation_module(plan).validate_limits(plan)
-    if public_evidence_mode(plan):
-        public_evidence_module(plan).validate_limits(plan)
-    require((fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) or plan['limits'] == LIMITS) and plan['instance_type'] == 'g6e.2xlarge'
+    if public_contract_mode(plan):
+        public_contract_module(plan).validate_limits(plan)
+    require((fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan) or plan['limits'] == LIMITS) and plan['instance_type'] == 'g6e.2xlarge'
             and plan['vcpus'] == 8 and plan['host_mib'] == 65536
             and plan['architecture'] == 'x86_64', 'Fixed resource envelope differs')
     if ordered:
@@ -768,8 +790,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                     workload_sha256=object_sha(plan['workload']), limits=LIMITS,
                     ebs_kms_key_arn=key_arn, automatic_retry=False, approved=True),
                 'Exact USD20 inference-only approval is missing or mismatched')
-    elif public_evidence_mode(plan):
-        public_evidence_module(plan).validate_approval(plan, approval, plan_sha, ebs_key_arn(plan))
+    elif public_contract_mode(plan):
+        public_contract_module(plan).validate_approval(plan, approval, plan_sha, ebs_key_arn(plan))
     elif evaluation_mode(plan):
         key_arn = ebs_key_arn(plan)
         require(not ({'recipe', 'data', 'evaluation', 'aggregate_ledger'} & set(plan)),
@@ -824,7 +846,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         else:
             require('model' not in plan or plan['model'] == models['qwen8'], 'Initial model must be immutable 8B')
     else:
-        models = {'qwen8' if eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan) else 'qwen14': plan['model']}
+        models = {'qwen8' if eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan) else 'qwen14': plan['model']}
     file_count = 0
     for model_key, model in models.items():
         model_id, revision = ORDERED_MODELS[model_key]
@@ -861,7 +883,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                 and all(bundled.get(plan[key]['path']) == plan[key]
                         for key in ('resource_envelope', 'aggregate_ledger', 'authorization')),
                 'Fresh resource authorization and aggregate ledger must be sealed into the bounded bundle')
-    if evaluation_mode(plan) or public_evidence_mode(plan):
+    if evaluation_mode(plan) or public_contract_mode(plan):
         require(all(bundled.get(plan[key]['path']) == plan[key]
                     for key in ('resource_envelope', 'authorization')),
                 'CUDA evaluation resource envelope and fresh authorization must be bundled')
@@ -885,8 +907,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         required_sources = SOURCES | fresh_module(plan).SOURCE_NAMES | {'scripts/aws_eval/fresh_eight_launch.py'}
     if evaluation_mode(plan):
         required_sources = evaluation_module(plan).REQUIRED_SOURCES
-    if public_evidence_mode(plan):
-        required_sources = SOURCES | public_evidence_module(plan).SOURCE_NAMES | {'scripts/aws_eval/fresh_eight_launch.py'}
+    if public_contract_mode(plan):
+        required_sources = SOURCES | public_contract_module(plan).SOURCE_NAMES | {'scripts/aws_eval/fresh_eight_launch.py'}
     require(required_sources <= set(bundled) and set(plan['sources']) >= required_sources
             and {n for n in bundled if n.endswith(('.py', '.sh'))} <= set(plan['sources'])
             and all(bundled[k]['sha256'] == v for k, v in plan['sources'].items()),
@@ -905,8 +927,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
     elif evaluation_mode(plan):
         evaluation_module(plan).validate_workload(plan, bundled)
         validate_worker_policy(plan)
-    elif public_evidence_mode(plan):
-        public_evidence_module(plan).validate_workload(plan, bundled)
+    elif public_contract_mode(plan):
+        public_contract_module(plan).validate_workload(plan, bundled)
         validate_worker_policy(plan)
     else:
         data = plan['data']
@@ -960,8 +982,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
         required_outputs = fresh_module(plan).output_members(plan)
     if evaluation_mode(plan):
         required_outputs = evaluation_module(plan).output_members(plan)
-    if public_evidence_mode(plan):
-        required_outputs = public_evidence_module(plan).output_members(plan)
+    if public_contract_mode(plan):
+        required_outputs = public_contract_module(plan).output_members(plan)
     require(len(plan['output_allowlist']) == len(required_outputs)
             and set(plan['output_allowlist']) == required_outputs,
             'Exact registered export allowlist required')
@@ -1255,9 +1277,9 @@ def validate_evaluation_resources(root, plan):
 
 
 def validate_data(root, plan):
-    if public_evidence_mode(plan):
-        public_evidence_module(plan).validate_resources(root, plan)
-        return public_evidence_module(plan).validate_data(root, plan)
+    if public_contract_mode(plan):
+        public_contract_module(plan).validate_resources(root, plan)
+        return public_contract_module(plan).validate_data(root, plan)
     if evaluation_mode(plan):
         validate_evaluation_resources(root, plan)
         return evaluation_module(plan).validate_data(root, plan)
@@ -1485,7 +1507,7 @@ def cleanup_cutoff(plan, plan_sha, state):
         verify_schedule(receipt['schedule'], schedule_spec(plan, receipt['instance_id'], receipt['launch_time']))
         launch_times.append(receipt['launch_time'])
     cutoff = min(launch_times) + lifetime_seconds(plan) + plan['cost']['termination_grace_seconds']
-    return min(cutoff, absolute_deadline(plan)) if sampling_mode(plan) or public_evidence_mode(plan) else cutoff
+    return min(cutoff, absolute_deadline(plan)) if sampling_mode(plan) or public_contract_mode(plan) else cutoff
 
 
 def reconcile_compute(client, plan, plan_sha, state, expected, *, evidence,
@@ -1494,14 +1516,14 @@ def reconcile_compute(client, plan, plan_sha, state, expected, *, evidence,
     now = clock()
     deadline = now + plan['cost']['termination_grace_seconds']
     cutoff = cleanup_cutoff(plan, plan_sha, state) if bounded_mode(plan) else deadline
-    recovery = (sampling_mode(plan) or public_evidence_mode(plan)) and now >= cutoff
+    recovery = (sampling_mode(plan) or public_contract_mode(plan)) and now >= cutoff
     deadline = now + 300 if recovery else min(deadline, cutoff)
-    if sampling_mode(plan) or public_evidence_mode(plan):
+    if sampling_mode(plan) or public_contract_mode(plan):
         # The same client retains all charged request and retrieval counters.
         client.deadline = deadline
     result = reconcile(client, plan['identity'], expected, deadline, evidence=evidence,
                        evidence_path=evidence_path, clock=clock, pause=pause)
-    if sampling_mode(plan) or public_evidence_mode(plan):
+    if sampling_mode(plan) or public_contract_mode(plan):
         result.update(compute_cutoff=cutoff, post_deadline_recovery=recovery,
                       observation_deadline=deadline)
         if result['cleanup_state'] == 'complete':
@@ -1630,7 +1652,7 @@ def validate_lifecycle_configuration(plan, observed):
                 exact.append(rule)
         require(len(exact) == 1 and exact[0].get('Expiration') == {'Days': plan['cost']['retention_days']},
                 'Existing exact-prefix expiration closure missing; do not overwrite bucket rules')
-        if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
+        if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan):
             require(exact[0].get('AbortIncompleteMultipartUpload') == {'DaysAfterInitiation': 1},
                     'Fresh owned prefixes require one-day incomplete multipart cleanup')
     return observed
@@ -1966,8 +1988,8 @@ def bootstrap_text(plan, plan_sha, root):
                   REGION=plan['identity']['region'], CODE_PREFIX=plan['identity']['code_prefix'],
                   PLAN_SHA=plan_sha, BUNDLE_SHA=plan['bundle']['sha256'],
                   BUNDLE_BYTES=str(plan['bundle']['bytes']))
-    if sampling_mode(plan) or public_evidence_mode(plan):
-        grace = plan['cost']['termination_grace_seconds'] if public_evidence_mode(plan) else 900
+    if sampling_mode(plan) or public_contract_mode(plan):
+        grace = plan['cost']['termination_grace_seconds'] if public_contract_mode(plan) else 900
         values['ABSOLUTE_WORK_DEADLINE'] = str(int(absolute_deadline(plan) - grace))
     text = path.read_text().replace('# INJECT_BOUND_VALUES', '\n'.join(k + '=' + shlex.quote(v) for k, v in values.items()))
     require(len(text.encode()) <= 16384, 'Raw user-data exceeds EC2 limit')
@@ -2275,7 +2297,7 @@ def collect_export(client, plan, plan_sha, state, instance_id):
     """
     state = Path(state)
     identity = plan['identity']
-    if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan):
         client.retrieval_byte_limit = plan['cost']['controller_retrieval_bytes']
         exclusive_intent(state / 'export-retrieval-intent.json',
             dict(run_id=identity['run_id'], plan_sha256=plan_sha, instance_id=instance_id,
@@ -2349,15 +2371,15 @@ def collect_export(client, plan, plan_sha, state, instance_id):
                 'Eight independently retrieved dev/parent provenance differs')
             eight_module(plan).validate_dev_export(plan, plan_sha, receipt, destination)
             eight_module(plan).validate_completion(plan, plan_sha, completion, destination)
-    elif public_evidence_mode(plan):
+    elif public_contract_mode(plan):
         require(manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
                 'Public evidence terminal manifest status differs')
         if native:
-            public_evidence_module(plan).validate_terminal(plan, plan_sha, instance_id, completion)
-            destination = state / 'public-evidence-export'
+            public_contract_module(plan).validate_terminal(plan, plan_sha, instance_id, completion)
+            destination = state / ('public-work-export' if public_work_mode(plan) else 'public-evidence-export')
             authenticate_archive(path, dict(bytes=pin['bytes'], sha256=pin['sha256'],
                 unpacked_bytes=output_limit(plan), files=rows), destination)
-            public_evidence_module(plan).validate_export(destination, plan)
+            public_contract_module(plan).validate_export(destination, plan)
     elif evaluation_mode(plan):
         require('training_success' not in completion and 'inference_success' not in completion
                 and manifest['status'] == {k: v for k, v in completion.items() if k != 'export'},
@@ -2393,6 +2415,12 @@ def collect_export(client, plan, plan_sha, state, instance_id):
         for stage in [completion['runtime_unit'], *completion['stages']]:
             if (not bounded_mode(plan)) or 'gpu' in stage:
                 verify_gpu_observation(stage['gpu'], plan, bound['gpu'])
+    if public_work_mode(plan):
+        exclusive_intent(state / 'local-export-authenticated.json',
+            dict(schema='trid-public-work-local-export-authentication-v1',
+                 run_id=identity['run_id'], plan_sha256=plan_sha, instance_id=instance_id,
+                 completion_sha256=digest(completion_path), export=pin,
+                 export_state='authenticated_terminal' if native else 'authenticated_partial'))
     return dict(native_pipeline_success=native, semantic_acceptance='not_evaluated',
                 evidence_kind='authenticated_archive',
                 export_state='authenticated_terminal' if native else 'authenticated_partial',
@@ -2428,7 +2456,7 @@ def cleanup_schedule(client, identity, state, cleanup, *, plan=None, plan_sha=No
                 and created.get('ScheduleArn') == snapshot['Arn'],
                 'Ordered schedule successful creation provenance differs')
     deletion = None
-    if plan is not None and (eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan)):
+    if plan is not None and (eight_mode(plan) or fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan)):
         deletion = dict(run_id=identity['run_id'], plan_sha256=plan_sha,
             name=schedule_name(identity), group_name=identity['schedule_group'],
             schedule_readback_sha256=object_sha(snapshot),
@@ -2480,7 +2508,7 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
     state = Path(state)
     state.mkdir(parents=True, exist_ok=True)
     identity = plan['identity']
-    if fresh_mode(plan) or evaluation_mode(plan) or public_evidence_mode(plan):
+    if fresh_mode(plan) or evaluation_mode(plan) or public_contract_mode(plan):
         client.retrieval_byte_limit = plan['cost']['controller_retrieval_bytes']
     ordered = bounded_mode(plan)
     dispatch_root = Path(dispatch_state) if dispatch_state is not None else state
@@ -2506,13 +2534,13 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
                       quality_accepted=False, cloud_evaluation=False)
     if evaluation_mode(plan):
         result.update(completion_scope=evaluation_module(plan).COMPLETION_SCOPE, quality_accepted=False)
-    if public_evidence_mode(plan):
-        result.update(completion_scope=public_evidence_module(plan).COMPLETION_SCOPE, quality_accepted=False)
+    if public_contract_mode(plan):
+        result.update(completion_scope=public_contract_module(plan).COMPLETION_SCOPE, quality_accepted=False)
     evidence_path = state / 'volume-identity.json'
     evidence = volume_identity(identity, plan_sha, plan['ami']['RootDeviceName'])
     try:
         validate_plan(plan, approval, plan_sha, now=clock())
-        if sampling_mode(plan) or public_evidence_mode(plan):
+        if sampling_mode(plan) or public_contract_mode(plan):
             client.deadline = absolute_deadline(plan) - plan['cost']['termination_grace_seconds']
         authenticate_archive(Path(root) / plan['bundle']['local_path'], plan['bundle'])
         validate_data(root, plan)
@@ -2577,8 +2605,8 @@ def launch(plan, approval, plan_sha, root, state, client, *, dispatch_state=None
         observe_volume_identity(client, identity, rows[0], evidence, evidence_path)
         launch_time = timestamp(rows[0]['LaunchTime'])
         deadline = work_deadline(plan, launch_time)
-        if sampling_mode(plan) or public_evidence_mode(plan):
-            total_seconds = plan['lifetime']['total_seconds'] if public_evidence_mode(plan) else 14400
+        if sampling_mode(plan) or public_contract_mode(plan):
+            total_seconds = plan['lifetime']['total_seconds'] if public_contract_mode(plan) else 14400
             require(launch_time + total_seconds <= absolute_deadline(plan),
                     'Launch delay exceeded the authorized window; terminate without extension')
             client.deadline = min(deadline, work_deadline(plan, dispatch_record['at']))

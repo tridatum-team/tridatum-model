@@ -69,8 +69,13 @@ def _ids(value, expected, label):
 
 
 def validate_receipt(record, row, runtime):
-    require(record.get('generation_receipt') == 'public_work_hf_v1',
-            'Only source-bound public_work_hf_v1 receipts are native; external responses are not verified')
+    gpu = runtime.get('schema') == 'public_work_gpu_runtime_v1'
+    expected_receipt = 'public_work_gpu_hf_v1' if gpu else 'public_work_hf_v1'
+    require(record.get('generation_receipt') == expected_receipt,
+            'Only source-bound matching public-work receipts are native; external responses are not verified')
+    if gpu:
+        require(record.get('binding') == runtime.get('binding')
+                and record.get('context_truncated') is False, 'GPU binding/truncation policy mismatch')
     require(record.get('prompt_sha256') == object_sha(row['messages']), 'Response prompt hash mismatch')
     require(all(isinstance(record.get(key), str) for key in ('response', 'raw_output', 'finish_reason')),
             'Malformed response body/finish')
@@ -136,19 +141,32 @@ def load_arm(directory, rows, manifest_path, manifest, completion_sha256=None):
     require(completion_sha256 is None or completion_pin['sha256'] == completion_sha256,
             'Completion hash mismatch')
     completion = load_json(completion_path)
-    require(completion.get('schema') == 'public_work_hf_completion_v1', 'Unsupported completion receipt')
+    gpu = completion.get('schema') == 'public_work_gpu_completion_v1'
+    require(gpu or completion.get('schema') == 'public_work_hf_completion_v1',
+            'Unsupported completion receipt')
     runtime_path = pinned_path(directory, completion['runtime'])
     response_path = pinned_path(directory, completion['responses'])
     require(runtime_path.resolve() == directory / 'runtime.json'
             and response_path.resolve() == directory / 'responses.jsonl', 'Arm artifact location mismatch')
     runtime = load_json(runtime_path)
-    require(runtime.get('schema') == 'public_work_hf_runtime_v1', 'Unsupported native runtime')
+    require(runtime.get('schema') == ('public_work_gpu_runtime_v1' if gpu else 'public_work_hf_runtime_v1'),
+            'Unsupported native runtime')
+    if gpu:
+        from aws_eval.public_work_worker import validate_gpu_runtime
+        validate_gpu_runtime(directory, runtime)
     require(runtime.get('suite_scope', 'diagnostic') == manifest['scope'],
             'Runtime suite scope mismatch')
     suite_path = pinned_path(directory, runtime['suite_manifest'])
-    require(suite_path.resolve() == Path(manifest_path).resolve(), 'Runtime suite identity mismatch')
+    if gpu:
+        require(all(artifact_pin(suite_path)[key] == artifact_pin(manifest_path)[key]
+                    for key in ('bytes', 'sha256')), 'Runtime suite identity mismatch')
+    else:
+        require(suite_path.resolve() == Path(manifest_path).resolve(), 'Runtime suite identity mismatch')
     for key in ('source', 'inputs'):
-        pinned_path(directory, runtime[key])
+        # Cloud bundles deliberately contain no private source/reference bytes.
+        # Their metadata is authenticated by the locally verified suite manifest.
+        if not gpu or key == 'inputs':
+            pinned_path(directory, runtime[key])
         require(all(runtime[key][field] == manifest[key][field] for field in ('bytes', 'sha256')),
                 f'Runtime {key} pin mismatch')
     model_manifest = load_json(pinned_path(directory, runtime['model_manifest']))
@@ -225,7 +243,11 @@ def load_arm(directory, rows, manifest_path, manifest, completion_sha256=None):
                 and isinstance(adapter.get('files'), list), 'Invalid adapter/base identity')
         provenance_path = pinned_path(directory, adapter['provenance'])
         provenance = load_json(provenance_path)
-        require(provenance.get('schema') == 'trid-public-evidence-adapter-v2'
+        expected_provenance = 'trid-public-evidence-adapter-v2'
+        if gpu:
+            from aws_eval.public_work_experiment import ADAPTER_SCHEMA
+            expected_provenance = ADAPTER_SCHEMA
+        require(provenance.get('schema') == expected_provenance
                 and provenance.get('fresh') is True and provenance.get('merged') is False,
                 'Unsupported adapter provenance')
         provenance_root = provenance_path.parent.parent

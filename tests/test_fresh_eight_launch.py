@@ -65,6 +65,7 @@ class PublicEvidenceRegistrationBindingTests(unittest.TestCase):
     def test_only_registered_schemas_select_an_execution_profile(self):
         for schema, expected in (
                 (fresh.PUBLIC_EVIDENCE_SCHEMA, 'trid-public-evidence-gpu-plan-v2'),
+                (fresh.PUBLIC_WORK_SCHEMA, 'trid-public-work-gpu-plan-v1'),
                 (fresh.SCHEMA, fresh.lifecycle.FRESH_SCHEMA),
                 (fresh.EVALUATION_SCHEMA, fresh.lifecycle.EVALUATION_SCHEMA)):
             with self.subTest(schema=schema):
@@ -108,6 +109,180 @@ class PublicEvidenceRegistrationBindingTests(unittest.TestCase):
             plan[field] = {'unregistered': True} if field != 'absolute_termination_deadline' else '2030-01-03T00:00:00Z'
             with self.subTest(field=field), self.assertRaisesRegex(RuntimeError, 'differs from registration'):
                 fresh.validate_final(reg, 'a' * 64, '/missing', '/missing', plan, {}, 'b' * 64)
+
+
+class PublicWorkPurgeTests(unittest.TestCase):
+    def test_explicit_retrieval_preserves_launch_state_and_requires_cleanup(self):
+        fresh.record(self.state / 'approval-consumed.json',
+                     dict(run_id=self.identity['run_id'], plan_sha256=SHA))
+        release = dict(run_id=self.identity['run_id'], plan_sha256=SHA, instance_id='i-fixture')
+        fresh.record(self.state / 'release.json', release)
+        fresh.record(self.state / 'export-retrieval-intent.json', {'interrupted_launch': True})
+        events = []
+        with patch.object(fresh, 'verify_compute_cleanup', side_effect=lambda *args: events.append('cleanup')), \
+                patch.object(fresh.lifecycle, 'collect_export',
+                    side_effect=lambda *args: events.append('collect') or {'export_state': 'authenticated_terminal'}) as collect:
+            result = fresh.retrieve_run_export(self.reg, SHA, self.state, self.client, self.plan, SHA)
+        self.assertEqual(events, ['cleanup', 'collect'])
+        collect.assert_called_once_with(self.client, self.plan, SHA,
+                                        self.state / 'retrieved-export', 'i-fixture')
+        self.assertEqual(result['export_state'], 'authenticated_terminal')
+        self.assertEqual(fresh.load(self.state / 'retrieved-export' / 'release.json'), release)
+        self.assertEqual(fresh.load(self.state / 'export-retrieval-intent.json'), {'interrupted_launch': True})
+        with patch.object(fresh.lifecycle, 'collect_export') as collect:
+            with self.assertRaises(FileExistsError):
+                fresh.retrieve_run_export(self.reg, SHA, self.state, self.client, self.plan, SHA)
+            collect.assert_not_called()
+
+    def test_retrieval_rejects_wrong_profile_and_consumed_approval(self):
+        with patch.object(fresh.lifecycle, 'collect_export') as collect:
+            self.reg['schema'] = fresh.PUBLIC_EVIDENCE_SCHEMA
+            with self.assertRaisesRegex(RuntimeError, 'distinct bound public-work'):
+                fresh.retrieve_run_export(self.reg, SHA, self.state, self.client, self.plan, SHA)
+            self.reg['schema'] = fresh.PUBLIC_WORK_SCHEMA
+            fresh.record(self.state / 'approval-consumed.json',
+                         dict(run_id=self.identity['run_id'], plan_sha256='b' * 64))
+            with self.assertRaisesRegex(RuntimeError, 'exact consumed approval'):
+                fresh.retrieve_run_export(self.reg, SHA, self.state, self.client, self.plan, SHA)
+            collect.assert_not_called()
+
+    def test_purge_accepts_authenticated_explicit_retrieval(self):
+        destination = self.state / 'retrieved-export'
+        destination.mkdir()
+        for name in ('completion.json', 'export.tar', 'local-export-authenticated.json'):
+            (destination / name).write_bytes((self.state / name).read_bytes())
+        (self.state / 'export.tar').write_bytes(b'interrupted launch archive')
+        self.assertEqual(self.purge()['cleanup_state'], 'complete')
+
+    def test_work_and_evidence_dispatch_remain_distinct(self):
+        work = {'schema': fresh.lifecycle.PUBLIC_WORK_SCHEMA}
+        evidence = {'schema': fresh.lifecycle.PUBLIC_EVIDENCE_SCHEMA}
+        self.assertTrue(fresh.lifecycle.public_contract_mode(work))
+        self.assertFalse(fresh.lifecycle.public_evidence_mode(work))
+        self.assertFalse(fresh.lifecycle.public_work_mode(evidence))
+        self.assertEqual(fresh.lifecycle.success_field(work), 'public_work_success')
+        self.assertEqual(fresh.lifecycle.success_field(evidence), 'public_evidence_success')
+        with self.assertRaisesRegex(RuntimeError, 'distinct schema'):
+            fresh.lifecycle.public_evidence_module(work)
+        with self.assertRaisesRegex(RuntimeError, 'generic fallback forbidden'):
+            fresh.lifecycle.public_contract_module({'schema': 'unknown'})
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.state = Path(temporary.name)
+        self.identity = dict(run_id='public-work-fixture', bucket='fixture-bucket',
+            code_prefix='code/public-work-fixture/', output_prefix='outputs/public-work-fixture/')
+        self.reg = dict(schema=fresh.PUBLIC_WORK_SCHEMA, identity=self.identity)
+        self.plan = dict(schema=fresh.lifecycle.PUBLIC_WORK_SCHEMA, identity=self.identity,
+                         cost={'export_bytes': 1024})
+        archive = self.state / 'export.tar'
+        archive.write_bytes(b'authenticated archive fixture')
+        self.pin = dict(bytes=archive.stat().st_size, sha256=fresh.lifecycle.digest(archive))
+        completion = dict(run_id=self.identity['run_id'], instance_id='i-fixture',
+                          plan_sha256=SHA, export=self.pin)
+        fresh.record(self.state / 'completion.json', completion)
+        fresh.record(self.state / 'local-export-authenticated.json',
+            dict(schema='trid-public-work-local-export-authentication-v1',
+                 run_id=self.identity['run_id'], plan_sha256=SHA, instance_id='i-fixture',
+                 completion_sha256=fresh.lifecycle.digest(self.state / 'completion.json'),
+                 export=self.pin, export_state='authenticated_terminal'))
+        self.keys = {self.identity['code_prefix'] + 'plan.json',
+                     self.identity['output_prefix'] + 'export.tar'}
+        self.calls = []
+        self.versioning = {}
+        self.multipart = {}
+        self.retain_deleted = False
+        for module, name, value in (
+                (fresh, 'caller_matches', None),
+                (fresh, 'verify_compute_cleanup', None),
+                (fresh.lifecycle, 'load_volume_identity', {'instance_id': 'i-fixture'}),
+                (fresh.lifecycle, 'validate_lifecycle_configuration', None)):
+            patcher = patch.object(module, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def client(self, service, operation, *args):
+        self.calls.append((service, operation, args))
+        if operation == 'get-bucket-versioning':
+            return self.versioning
+        if operation == 'get-bucket-lifecycle-configuration':
+            return {'Rules': [{'ID': 'preserved-unrelated-rule'}]}
+        if operation == 'list-multipart-uploads':
+            return self.multipart
+        if operation == 'list-objects-v2':
+            prefix = args[args.index('--prefix') + 1]
+            return {'Contents': [{'Key': key} for key in sorted(self.keys) if key.startswith(prefix)]}
+        if operation in ('delete-object', 'head-object'):
+            key = args[args.index('--key') + 1]
+            if operation == 'delete-object':
+                if not self.retain_deleted:
+                    self.keys.remove(key)
+                return {}
+            if key not in self.keys:
+                raise missing(service, operation, '404')
+            return {}
+        self.fail('Unexpected AWS operation: ' + operation)
+
+    def purge(self):
+        return fresh.purge_run_s3(self.reg, SHA, self.state, self.client, self.plan, SHA)
+
+    def test_purge_journals_exact_keys_and_preserves_lifecycle(self):
+        expected = sorted(self.keys)
+        result = self.purge()
+        self.assertEqual(result['deleted_keys'], expected)
+        self.assertEqual(result['s3_mutations'], 2)
+        self.assertTrue(result['retained_prefix_lifecycle_rules'])
+        self.assertFalse(self.keys)
+        for index in range(2):
+            for suffix in ('intent', 'response', 'readback'):
+                self.assertTrue((self.state / f's3-purge-object-{index}-{suffix}.json').is_file())
+        self.assertFalse(any(op == 'put-bucket-lifecycle-configuration' for _, op, _ in self.calls))
+        with self.assertRaises(FileExistsError):
+            self.purge()
+        self.assertEqual(sum(op == 'delete-object' for _, op, _ in self.calls), 2)
+
+    def test_changed_local_export_blocks_all_cloud_access(self):
+        (self.state / 'export.tar').write_bytes(b'changed')
+        with self.assertRaisesRegex(RuntimeError, 'missing or changed'):
+            self.purge()
+        self.assertEqual(self.calls, [])
+
+    def test_compute_cleanup_failure_prevents_s3_mutation(self):
+        with patch.object(fresh, 'verify_compute_cleanup', side_effect=RuntimeError('compute remains')):
+            with self.assertRaisesRegex(RuntimeError, 'compute remains'):
+                self.purge()
+        self.assertEqual(self.calls, [])
+
+    def test_rejects_evidence_profile_and_nonexact_prefix(self):
+        self.reg['schema'] = fresh.PUBLIC_EVIDENCE_SCHEMA
+        with self.assertRaisesRegex(RuntimeError, 'distinct bound public-work'):
+            self.purge()
+        self.reg['schema'] = fresh.PUBLIC_WORK_SCHEMA
+        self.identity['output_prefix'] = 'outputs/public-work-fixture/extra/'
+        with self.assertRaisesRegex(RuntimeError, 'only exact run'):
+            self.purge()
+        self.assertEqual(self.calls, [])
+
+    def test_versioning_and_incomplete_uploads_block_deletion(self):
+        self.versioning = {'Status': 'Suspended'}
+        with self.assertRaisesRegex(RuntimeError, 'Versioned/suspended'):
+            self.purge()
+        self.versioning = {}
+        self.multipart = {'Uploads': [{'Key': self.identity['code_prefix'] + 'bundle.tar'}]}
+        with self.assertRaisesRegex(RuntimeError, 'multipart run inventory'):
+            self.purge()
+        self.assertFalse(any(op == 'delete-object' for _, op, _ in self.calls))
+
+    def test_absence_failure_is_not_retried(self):
+        self.retain_deleted = True
+        with self.assertRaisesRegex(RuntimeError, 'Object remains'):
+            self.purge()
+        self.assertTrue((self.state / 's3-purge-object-0-intent.json').is_file())
+        self.assertFalse((self.state / 's3-purge-object-0-readback.json').exists())
+        with self.assertRaises(FileExistsError):
+            self.purge()
+        self.assertEqual(sum(op == 'delete-object' for _, op, _ in self.calls), 1)
 
 
 def registration(root):
