@@ -730,6 +730,100 @@ class PreadLoaderTests(unittest.TestCase):
                 self.assertEqual([s['file'] for s in report['shards']], ['model.safetensors'])
                 self.assertGreater(report['bytes_loaded'], 0)
 
+    def test_opted_in_shard_advice_follows_owned_tensor_copies_and_preserves_values(self):
+        tensors = self.unique_tensors()
+        items = list(tensors.items())
+        first, second = dict(items[:len(items) // 2]), dict(items[len(items) // 2:])
+        folder = self.sharded_copy('advised-two-consumed-shards', first, second)
+        expected = {'model-00001-of-00002.safetensors': len(first),
+                    'model-00002-of-00002.safetensors': len(second)}
+        paths = {name: folder / name for name in expected}
+        copied = {name: 0 for name in expected}
+        advised, events = [], []
+        copy_tensor = trainer._copy_pread_tensor
+
+        def observed_copy(source, offset, tensor, source_dtype, budget):
+            name = Path(source.name).name
+            if name == 'model-00002-of-00002.safetensors':
+                self.assertEqual(advised, ['model-00001-of-00002.safetensors'])
+            result = copy_tensor(source, offset, tensor, source_dtype, budget)
+            copied[name] += 1
+            events.append(('copied', name))
+            return result
+
+        def advise(fd, offset, length, advice):
+            stat = trainer.os.fstat(fd)
+            name = next(name for name, path in paths.items()
+                        if (path.stat().st_dev, path.stat().st_ino) == (stat.st_dev, stat.st_ino))
+            self.assertEqual((offset, length, advice), (0, 0, 4))
+            self.assertEqual(copied[name], expected[name])
+            self.assertEqual(events[-1], ('copied', name))
+            advised.append(name)
+            events.append(('advised', name))
+
+        with unittest.mock.patch.object(trainer.sys, 'platform', 'linux'), \
+                unittest.mock.patch.object(trainer.os, 'POSIX_FADV_DONTNEED', 4, create=True), \
+                unittest.mock.patch.object(trainer.os, 'posix_fadvise', side_effect=advise, create=True), \
+                unittest.mock.patch.object(trainer, '_copy_pread_tensor', side_effect=observed_copy):
+            model, report = trainer.load_qwen3_pread(folder, torch.bfloat16, 'cpu',
+                                                      cache_policy='drop_after_shard')
+        self.assert_equivalent(model, self.canonical(folder, torch.bfloat16), torch.bfloat16, name_or_path=folder)
+        self.assertEqual(advised, list(expected))
+        self.assertEqual(report['cache_advice'], {
+            'policy': 'drop_after_shard', 'advice': 'POSIX_FADV_DONTNEED', 'requests': 2,
+            'bytes_requested': sum(path.stat().st_size for path in paths.values()), 'reclaim_guaranteed': False})
+        for shard in report['shards']:
+            self.assertEqual(shard['cache_advice'],
+                             {'offset': 0, 'length': 0, 'bytes_requested': paths[shard['file']].stat().st_size})
+
+    def test_default_loader_never_requests_linux_cache_advice(self):
+        with unittest.mock.patch.object(trainer.os, 'posix_fadvise', create=True) as advice:
+            model, report = trainer.load_qwen3_pread(self.model_dir, torch.bfloat16, 'cpu')
+        advice.assert_not_called()
+        self.assertNotIn('cache_advice', report)
+        self.assert_equivalent(model, self.canonical(self.model_dir, torch.bfloat16), torch.bfloat16)
+
+    def test_opted_in_cache_advice_requires_supported_linux_cpu_before_copy(self):
+        for platform, device, advice in [('darwin', 'cpu', lambda *args: None),
+                                         ('linux', 'mps', lambda *args: None), ('linux', 'cpu', None)]:
+            with self.subTest(platform=platform, device=device), \
+                    unittest.mock.patch.object(trainer.sys, 'platform', platform), \
+                    unittest.mock.patch.object(trainer.os, 'posix_fadvise', advice, create=True), \
+                    unittest.mock.patch.object(trainer.os, 'POSIX_FADV_DONTNEED', 4, create=True), \
+                    unittest.mock.patch.object(trainer, '_copy_pread_tensor') as copy:
+                with self.assertRaisesRegex(RuntimeError, 'requires Linux CPU'):
+                    trainer.load_qwen3_pread(self.model_dir, torch.bfloat16, device,
+                                             cache_policy='drop_after_shard')
+                copy.assert_not_called()
+
+    def test_shard_advice_failure_propagates_and_closes_descriptor(self):
+        failure = OSError('cache advice denied')
+        descriptors, copied = [], []
+        copy_tensor = trainer._copy_pread_tensor
+
+        def observed_copy(*args):
+            result = copy_tensor(*args)
+            copied.append(args[0].fileno())
+            return result
+
+        def fail_advice(fd, *_args):
+            self.assertTrue(copied)
+            self.assertTrue(all(item == fd for item in copied))
+            descriptors.append(fd)
+            raise failure
+
+        with unittest.mock.patch.object(trainer.sys, 'platform', 'linux'), \
+                unittest.mock.patch.object(trainer.os, 'POSIX_FADV_DONTNEED', 4, create=True), \
+                unittest.mock.patch.object(trainer.os, 'posix_fadvise', side_effect=fail_advice, create=True), \
+                unittest.mock.patch.object(trainer, '_copy_pread_tensor', side_effect=observed_copy):
+            with self.assertRaises(OSError) as raised:
+                trainer.load_qwen3_pread(self.model_dir, torch.bfloat16, 'cpu', cache_policy='drop_after_shard')
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(len(descriptors), 1)
+        for fd in descriptors:
+            with self.assertRaises(OSError):
+                trainer.os.fstat(fd)
+
     @unittest.skipUnless(sys.platform == 'darwin', 'Darwin per-descriptor uncached reads')
     def test_uncached_setup_failure_propagates_and_closes_unread_payload(self):
         import errno

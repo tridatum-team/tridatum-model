@@ -1,8 +1,10 @@
 """Linux-only, fail-closed owned-process watchdog; no model imports or retries.
 
 RSS is a sampled process-group sum, not a hard allocation limit. Run this guard
-and its child in a dedicated systemd cgroup with MemoryMax=6G,
+and its child in a dedicated systemd cgroup with MemoryMax=6G by default,
 MemorySwapMax=0 and RuntimeMaxSec, plus an independent instance lifetime limit.
+The explicit public8b_cpu profile instead requires exactly 32 GiB and permits
+up to 3600 seconds, with 40 GiB admission availability and an 8 GiB host reserve.
 The cgroup limits are checked, not installed here. Optional --gpu-uuid monitoring
 also bounds whole-device memory and rejects foreign compute users. All group
 signals precede leader reap.
@@ -27,6 +29,20 @@ RSS_LIMIT = 6 * GIB
 ADMISSION_AVAILABLE = 8 * GIB
 RUNTIME_AVAILABLE = 6 * GIB
 MAX_SECONDS = 900
+RESOURCE_PROFILES = {
+    'legacy': (RSS_LIMIT, ADMISSION_AVAILABLE, RUNTIME_AVAILABLE, MAX_SECONDS),
+    'public8b_cpu': (32 * GIB, 40 * GIB, 8 * GIB, 3600),
+    # Same 8 GiB host reserve under a tighter job cap, for hosts whose co-tenants leave < 40 GiB.
+    'public8b_cpu_24g': (24 * GIB, 32 * GIB, 8 * GIB, 3600),
+}
+EXACT_CPU_PROFILES = ('public8b_cpu', 'public8b_cpu_24g')
+
+
+def resource_profile(name):
+    """Named immutable limits; historical callers retain the original envelope."""
+    if name not in RESOURCE_PROFILES:
+        raise ValueError('Unknown resource profile')
+    return RESOURCE_PROFILES[name]
 GRACE_SECONDS = 2.0
 SAMPLE_SECONDS = 0.25
 GPU_MEMORY_LIMIT = 6 * GIB
@@ -66,9 +82,10 @@ def unsigned(value):
     return int(value)
 
 
-def validate_seconds(value):
-    if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= MAX_SECONDS:
-        raise ValueError('seconds must be finite and in (0, 900]')
+def validate_seconds(value, *, profile='legacy'):
+    maximum = resource_profile(profile)[3]
+    if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= maximum:
+        raise ValueError(f'seconds must be finite and in (0, {maximum}]')
     return float(value)
 
 
@@ -171,7 +188,7 @@ def owned_cgroup():
     return root
 
 
-def cgroup_metrics(root):
+def cgroup_metrics(root, *, profile='legacy'):
     maximum = unsigned((root / 'memory.max').read_text().strip())
     swap_maximum = unsigned((root / 'memory.swap.max').read_text().strip())
     swap_current = unsigned((root / 'memory.swap.current').read_text().strip())
@@ -183,8 +200,11 @@ def cgroup_metrics(root):
         events[parts[0]] = unsigned(parts[1])
     if not {'oom', 'oom_kill'} <= events.keys():
         raise ValueError('Missing cgroup OOM counters')
-    if not 0 < maximum <= RSS_LIMIT or swap_maximum != 0 or swap_current != 0:
-        raise ValueError('Required 6 GiB/no-swap cgroup boundary is absent')
+    ceiling = resource_profile(profile)[0]
+    if not 0 < maximum <= ceiling or swap_maximum != 0 or swap_current != 0:
+        raise ValueError(f'Required {ceiling // GIB} GiB/no-swap cgroup boundary is absent')
+    if profile in EXACT_CPU_PROFILES and maximum != ceiling:
+        raise ValueError(f'{profile} requires an exact {ceiling // GIB} GiB cgroup')
     return {'memory_max_bytes': maximum, 'swap_max_bytes': swap_maximum,
             'swap_current_bytes': swap_current, 'events': events}
 
@@ -326,10 +346,12 @@ def pressure_diagnostics(root, *, cgroup_mount=Path('/sys/fs/cgroup'),
     return result
 
 
-def resource_reason(metrics, baseline, rss, admission=False):
+def resource_reason(metrics, baseline, rss, admission=False, *, profile='legacy'):
+    ceiling, admission_available, runtime_available, _seconds = resource_profile(profile)
     available = metrics['memory_bytes']['MemAvailable']
-    if available < (ADMISSION_AVAILABLE if admission else RUNTIME_AVAILABLE):
-        return 'admission_mem_available_below_8GiB' if admission else 'mem_available_below_6GiB'
+    if available < (admission_available if admission else runtime_available):
+        return (f'admission_mem_available_below_{admission_available // GIB}GiB' if admission
+                else f'mem_available_below_{runtime_available // GIB}GiB')
     full = metrics['memory_psi']['full']['total']
     if baseline is not None:
         previous = baseline['memory_psi']['full']['total']
@@ -337,8 +359,8 @@ def resource_reason(metrics, baseline, rss, admission=False):
             return 'memory_psi_full_counter_regressed'
         if full > previous:
             return 'memory_psi_full_increased'
-    if rss >= RSS_LIMIT:
-        return 'group_rss_at_6GiB'
+    if rss >= ceiling:
+        return f'group_rss_at_{ceiling // GIB}GiB'
     return None
 
 
@@ -536,8 +558,11 @@ def validate_gpu_receipt(record, expected_uuid):
 
 
 class Guard:
-    def __init__(self, argv, receipt, seconds, *, gpu_uuid=None):
-        self.seconds = validate_seconds(seconds)
+    def __init__(self, argv, receipt, seconds, *, gpu_uuid=None, profile='legacy'):
+        self.profile = profile
+        self.seconds = validate_seconds(seconds, profile=profile)
+        if profile in EXACT_CPU_PROFILES and gpu_uuid is not None:
+            raise ValueError(f'{profile} forbids GPU monitoring/inference')
         self.gpu_uuid = validate_gpu_uuid(gpu_uuid) if gpu_uuid is not None else None
         if not argv or any(not isinstance(arg, str) or '\0' in arg for arg in argv) or not argv[0]:
             raise ValueError('Nonempty literal child argv required')
@@ -561,6 +586,8 @@ class Guard:
                        'rss_peak_bytes': 0, 'samples': [], 'signals': [],
                        'pressure_diagnostics': [],
                        'cleanup_errors': [], 'cleanup_state': 'not_started'}
+        if profile != 'legacy':
+            self.record['resource_profile'] = profile
         if self.gpu_uuid is not None:
             self.record['gpu'] = {'schema': 'trid-gpu-guard-v1', 'expected_uuid': self.gpu_uuid,
                                   'memory_limit_bytes': GPU_MEMORY_LIMIT,
@@ -630,7 +657,8 @@ class Guard:
         rss = sum(row['rss_bytes'] for row in rows)
         self.record['rss_peak_bytes'] = max(self.record['rss_peak_bytes'], rss)
         cgroup_started = time.monotonic()
-        boundary = cgroup_metrics(cgroup)  # Still mandatory and fail-closed.
+        boundary = (cgroup_metrics(cgroup) if self.profile == 'legacy' else
+                    cgroup_metrics(cgroup, profile=self.profile))  # Mandatory and fail-closed.
         cgroup_finished = time.monotonic()
         sample = {'elapsed_seconds': cgroup_started - self.started,
                   'host': metrics, 'members': rows, 'rss_bytes': rss,
@@ -808,7 +836,7 @@ class Guard:
             self.record['cgroup_path'] = str(cgroup)
             initial = self.sample(cgroup, phase='admission')
             baseline = initial['host']
-            reason = resource_reason(baseline, None, 0, admission=True)
+            reason = resource_reason(baseline, None, 0, admission=True, profile=self.profile)
             if self.gpu_uuid is not None:
                 reason = reason or gpu_resource_reason(initial['gpu'], initial['gpu'], [], admission=True)
             if not self.owner_alive(owner):
@@ -830,7 +858,8 @@ class Guard:
                 if os.getpgid(self.child.pid) != self.pgid:
                     raise RuntimeError('Dedicated child process group not established')
                 ready = self.sample(cgroup, phase='pre_exec')
-                reason = resource_reason(ready['host'], baseline, ready['rss_bytes'], admission=True)
+                reason = resource_reason(ready['host'], baseline, ready['rss_bytes'],
+                                         admission=True, profile=self.profile)
                 if self.gpu_uuid is not None:
                     reason = reason or gpu_resource_reason(
                         ready['gpu'], initial['gpu'], ready['members'], admission=True)
@@ -850,7 +879,8 @@ class Guard:
                 self.write_fd = None
                 while self.record['first_stop_reason'] is None:
                     current = self.sample(cgroup, phase='runtime')
-                    reason = resource_reason(current['host'], baseline, current['rss_bytes'])
+                    reason = resource_reason(current['host'], baseline, current['rss_bytes'],
+                                             profile=self.profile)
                     if self.gpu_uuid is not None:
                         reason = reason or gpu_resource_reason(
                             current['gpu'], initial['gpu'], resolve_gpu_ownership(
@@ -907,11 +937,13 @@ def main(argv=None):
     parser.add_argument('--receipt', type=Path, required=True)
     parser.add_argument('--seconds', type=float, required=True)
     parser.add_argument('--gpu-uuid', help='Require exclusive, monitored use of this NVIDIA GPU UUID')
+    parser.add_argument('--profile', choices=tuple(RESOURCE_PROFILES), default='legacy')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     try:
-        guard = Guard(command, args.receipt, args.seconds, gpu_uuid=args.gpu_uuid)
+        options = {} if args.profile == 'legacy' else {'profile': args.profile}
+        guard = Guard(command, args.receipt, args.seconds, gpu_uuid=args.gpu_uuid, **options)
     except ValueError as error:
         parser.error(str(error))
     record = guard.run()

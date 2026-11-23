@@ -1389,5 +1389,90 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(result['reaped'])
 
 
+class PublicCpuProfileTests(unittest.TestCase):
+    def test_named_profile_does_not_mutate_historical_limits(self):
+        public = guard.Guard(['python', 'worker.py'], Path('public.json'), 1800, profile='public8b_cpu')
+        self.assertEqual(public.record['resource_profile'], 'public8b_cpu')
+        self.assertEqual(guard.validate_seconds(3600, profile='public8b_cpu'), 3600)
+        self.assertEqual(guard.RSS_LIMIT, 6 * guard.GIB)
+        self.assertEqual(guard.MAX_SECONDS, 900)
+        legacy = guard.Guard(['python', 'old.py'], Path('legacy.json'), 900)
+        self.assertNotIn('resource_profile', legacy.record)
+        with self.assertRaises(ValueError):
+            guard.validate_seconds(1800)
+        for value in (0, True, math.nan, math.inf, 3600.001):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                guard.validate_seconds(value, profile='public8b_cpu')
+        with self.assertRaises(ValueError):
+            guard.Guard(['python'], Path('gpu.json'), 1800, profile='public8b_cpu', gpu_uuid=GPU_UUID)
+
+    def test_public_profile_requires_exact_32g_no_swap_legacy_stays_6g(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, value in {'memory.max': str(32 * guard.GIB), 'memory.swap.max': '0',
+                                'memory.swap.current': '0', 'memory.events': 'oom 0\noom_kill 0\n'}.items():
+                (root / name).write_text(value)
+            self.assertEqual(guard.cgroup_metrics(root, profile='public8b_cpu')['memory_max_bytes'],
+                             32 * guard.GIB)
+            with self.assertRaises(ValueError):
+                guard.cgroup_metrics(root)
+            for name, value in [('memory.max', str(31 * guard.GIB)), ('memory.swap.max', '1'),
+                                ('memory.swap.current', '1')]:
+                old = (root / name).read_text()
+                (root / name).write_text(value)
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    guard.cgroup_metrics(root, profile='public8b_cpu')
+                (root / name).write_text(old)
+
+    def test_public_host_reserve_and_pressure_remain_fail_closed(self):
+        baseline = metrics(40 * guard.GIB)
+        self.assertIsNone(guard.resource_reason(baseline, None, 0, admission=True, profile='public8b_cpu'))
+        self.assertEqual(guard.resource_reason(metrics(40 * guard.GIB - 1), None, 0,
+                                              admission=True, profile='public8b_cpu'),
+                         'admission_mem_available_below_40GiB')
+        self.assertIsNone(guard.resource_reason(metrics(8 * guard.GIB), baseline, 32 * guard.GIB - 1,
+                                               profile='public8b_cpu'))
+        self.assertEqual(guard.resource_reason(metrics(8 * guard.GIB - 1), baseline, 0,
+                                              profile='public8b_cpu'), 'mem_available_below_8GiB')
+        self.assertEqual(guard.resource_reason(baseline, baseline, 32 * guard.GIB,
+                                              profile='public8b_cpu'), 'group_rss_at_32GiB')
+        self.assertEqual(guard.resource_reason(metrics(40 * guard.GIB, full=101), baseline, 0,
+                                              profile='public8b_cpu'), 'memory_psi_full_increased')
+        self.assertEqual(guard.resource_reason(metrics(8 * guard.GIB), None, 6 * guard.GIB),
+                         'group_rss_at_6GiB')
+
+    def test_tighter_24g_profile_keeps_reserve_and_rejects_32g_cgroup(self):
+        name = 'public8b_cpu_24g'
+        self.assertIsNone(guard.resource_reason(metrics(32 * guard.GIB), None, 0, admission=True, profile=name))
+        self.assertEqual(guard.resource_reason(metrics(32 * guard.GIB - 1), None, 0, admission=True, profile=name),
+                         'admission_mem_available_below_32GiB')
+        baseline = metrics(32 * guard.GIB)
+        self.assertEqual(guard.resource_reason(metrics(8 * guard.GIB - 1), baseline, 0, profile=name),
+                         'mem_available_below_8GiB')
+        self.assertEqual(guard.resource_reason(baseline, baseline, 24 * guard.GIB, profile=name),
+                         'group_rss_at_24GiB')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for file, value in {'memory.max': str(24 * guard.GIB), 'memory.swap.max': '0',
+                                'memory.swap.current': '0', 'memory.events': 'oom 0\noom_kill 0\n'}.items():
+                (root / file).write_text(value)
+            self.assertEqual(guard.cgroup_metrics(root, profile=name)['memory_max_bytes'], 24 * guard.GIB)
+            with self.assertRaises(ValueError):
+                guard.cgroup_metrics(root, profile='public8b_cpu')
+            (root / 'memory.max').write_text(str(32 * guard.GIB))
+            with self.assertRaises(ValueError):
+                guard.cgroup_metrics(root, profile=name)
+        with self.assertRaises(ValueError):
+            guard.Guard(['python'], Path('gpu.json'), 1800, profile=name, gpu_uuid=GPU_UUID)
+
+    def test_cli_public_profile_is_explicit(self):
+        with patch.object(guard, 'Guard') as constructor, patch('builtins.print'):
+            constructor.return_value.run.return_value = {'guard_exit_code': 0}
+            self.assertEqual(guard.main(['--receipt', 'receipt.json', '--seconds', '1800',
+                                         '--profile', 'public8b_cpu', '--', 'python', 'job.py']), 0)
+            constructor.assert_called_once_with(['python', 'job.py'], Path('receipt.json'), 1800.0,
+                                                gpu_uuid=None, profile='public8b_cpu')
+
+
 if __name__ == '__main__':
     unittest.main()

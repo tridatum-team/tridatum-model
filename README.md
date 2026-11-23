@@ -688,6 +688,67 @@ Mac의 메모리 한도를 낮추거나 같은 로드를 반복하지 않고, �
 - **역할·승인 경계:** 개발 서버는 장기 보관과 CPU 전처리·분석의 작업 공간이며, AWS는 새로 승인한 GPU 작업에만 사용합니다. 원격 개발 서버 RAM을 AWS GPU 메모리로 공유하지 않습니다. AWS에도 작업 중 자체 RAM·임시 디스크가 필요하며, 자동 클라우드 실행 파이프라인을 구성한 것은 아닙니다. 과거 승인은 재사용하지 않고 새 실행의 승인된 공개 bundle만 전송합니다. private reference를 포함한 연구 공간 전체를 AWS로 복사하지 않습니다.
 - **품질·증거:** 후보의 판정은 여전히 **5/7 통과·일반 능력 보존 실패·연구 전용**입니다. 서비스 모델 교체나 새 GPU 기동은 하지 않았습니다. 이관 근거는 `runs/devserver-research-handoff-20261120T045058Z/`의 `server-inventory.json`, `windows-host-inventory.json`, `handoff-manifest.json`, `restore-receipt.json`, `receiver-review.json`, `model-acquisition-receipt.json`, `model-directory-layout-correction.json`, `model-identity-validation.json`, `workspace-verification.json`에 있습니다. 가중치·실행 자료는 Git에 올리지 않습니다.
 
+<!-- public_work_v1:start -->
+#### 2026-11-21 `public_work_v1` · 공공기관·공기업 업무용 오프라인 실행 진단
+
+**구현된 연구 경로이지, 학습 완료 제품이나 품질 합격 모델 발표가 아닙니다.** `public_work_v1`은 자연스러운 한국어 설명·부분 답변·확인 질문·문서 초안·일반 대화와 산술을 다룹니다. 요청에 따라 Markdown·목록·표·계산을 허용하며, 계산의 원문 입력·가정·단위를 설명해야 합니다. 문서는 지시가 아닌 근거로 취급하고, 근거 없는 조건·예외·출처를 만들거나 확인하지 않은 업무 수행을 주장하지 않습니다. 근거 부족·충돌은 드러내되 답할 수 있는 부분까지 일괄 보류하지 않는 계약입니다. 이는 **요구 동작**이며 모델이 이를 충족했다는 관측은 아닙니다.
+
+- **기존 계약과 분리:** 과거 `public_evidence_v1`의 `paragraphs/text/sources` 출력·학습·봉인 평가와 판정은 그대로 보존합니다. 새 자연어 profile로 과거 답변을 재채점하거나 step615 후보의 일반 능력 보존 실패를 해제하지 않습니다.
+- **자료와 검증 범위:** `data/public-work-v1/diagnostics.json`은 **15과제·24개 합성 개발 진단**입니다. 사실·조건·예외·표 계산·다중문서·적용 시점·설명·근거 부족/충돌·부분 답변·확인 질문·초안·일반 대화/산술·제공된 도구 결과 사용을 포함합니다. 도구 결과는 입력 문맥이지 실제 검색/도구 실행이 아닙니다. 출력 전 A/B AI 주석 검토로 원천의 모호성 5건을 수정했지만 전문가 골드·미노출 시험·학습 승인 자료는 아닙니다. 관련 **테스트 265개 통과는 구현 검증**이지 모델 정확도·순위의 증거가 아닙니다.
+- **비교 대상:** 원본 `Qwen/Qwen3-8B` (`b968826d9c46dd6066d109eabc6255188de91218`), 그 원본에 **변경하지 않은 step615 LoRA**를 올린 연구 후보, `Qwen/Qwen3-4B-Instruct-2507` (`cdbee75f17c01a7cc42f958dc650907174af0554`)의 native CPU 경로입니다. CPU 의존성 설치와 4B 확보는 추론 품질 검증과 다릅니다. 파라미터 수가 크거나 작다는 이유로 우위를 정하지 않습니다.
+- **후보 조사와 제약:** 로컬 연구 기록 `runs/public-model-development-20261121T060754Z/portable-candidate-primary-evidence.json`에 1차 출처·revision·구조·라이선스 근거를 보존합니다. [Inkling-2-Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)는 확보하지 않았고, `inkling2_loop`·혼합 NVFP4/MXFP8 구조이므로 이 Qwen3 BF16 backend에서 실행할 수 없습니다. Apache-2.0 표기만으로 기관 사용을 승인하지 않으며 연결된 AUP의 권리·사회서비스 자동 결정 등 제한과 별도 backend를 검토해야 합니다. [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B)와 [4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507)의 공개 설명 역시 한국 공공업무 품질 보증이 아닙니다.
+
+**실제 CLI 계약:** 아래는 저장소 루트 기준 사용법이며 실행 완료 결과가 아닙니다. `SUITE`는 새 suite 경로, `MODEL_MANIFEST`/`MODEL_ROOT`는 사전 확보한 모델 manifest/디렉터리, `ARM_OUTPUT`은 입력 트리 밖의 새 출력 경로로 지정합니다. 출력의 부모 디렉터리는 미리 있어야 합니다. `SUITE_SHA256`과 `MODEL_MANIFEST_SHA256`에는 각 manifest **파일 바이트의 정확한 64자리 SHA-256**을 별도로 고정합니다(`shasum -a 256 "$SUITE/manifest.json"` 등). 모델 이름이나 revision만으로 이 pin을 대체할 수 없습니다.
+
+```bash
+python scripts/prepare_public_work.py \
+  --source data/public-work-v1/diagnostics.json --output "$SUITE"
+
+python scripts/evaluate_public_model.py \
+  --suite-manifest "$SUITE/manifest.json" --manifest-sha256 "$SUITE_SHA256" \
+  --model-manifest "$MODEL_MANIFEST" --model-manifest-sha256 "$MODEL_MANIFEST_SHA256" \
+  --model-root "$MODEL_ROOT" --output "$ARM_OUTPUT" \
+  --threads 4 --max-new-tokens 512 --context-limit 4096 --seconds 1800
+```
+
+Suite 생성은 새 디렉터리에 `inputs.json`, `source.private.json`, `references.private.json`, `manifest.json`을 기록하며 원천·공개 입력·비공개 정답의 경로/바이트/SHA를 결박합니다. 추론에는 공개 메시지만 전달합니다. LoRA arm은 같은 8B 기반 모델을 명시하고 runner에 `--adapter "$ADAPTER" --adapter-provenance "$PROVENANCE" --adapter-provenance-sha256 "$PROVENANCE_SHA256"`을 함께 추가합니다. 봉인 export의 `training/provenance.json`, `training/training.json`, `training/adapter/` 배치를 유지해야 하며, provenance는 정확한 기반 revision·학습 step·adapter 설정/가중치 바이트에 결박됩니다. 과거 절대 경로를 고치려고 `adapter_config.json`을 수정하지 않습니다. BF16 원본과 병합하지 않은 FP32 PEFT adapter를 동결·eval로 로딩합니다.
+
+Runner는 임의 셸에서 자원 제한을 설치해 주지 않습니다. **비특권 Linux 사용자·root 소유 전용 systemd service/cgroup**, `MemoryMax=32G`, `MemorySwapMax=0`, `CPUQuota=400%`, `PrivateNetwork=yes`와 유한 실행 기한을 먼저 갖춰야 합니다. 한 번에 모델 프로세스 하나만 실행하며, `public8b_cpu` guard는 정확히 32GiB/no-swap·CPU 4스레드·입장 시 호스트 가용 40GiB·실행 중 8GiB 여유 및 메모리 압력을 검사합니다. 위 arm 기한은 1,800초이며 profile 최대는 3,600초입니다. **기존 6GiB/900초 기본 profile은 보존**합니다. 고정 CPU 패키지와 local-only tokenizer/가중치를 요구하고 외부 통신·remote code·CUDA fallback 없이 실행합니다.
+
+공동 사용 호스트에서 가용 메모리가 40GiB에 못 미치면 `--profile public8b_cpu_24g`와 `MemoryMax=24G`를 함께 지정합니다. 이 profile은 정확히 24GiB/no-swap·입장 시 가용 32GiB·실행 중 8GiB 여유를 요구하므로 호스트 여유는 같고 작업 상한만 더 엄격합니다. 가중치 파일은 신원 검증 뒤와 shard 복사 뒤에 `POSIX_FADV_DONTNEED`로 캐시 해제를 요청하며(회수 보장은 아님), 이를 지원하지 않는 환경에서는 대체 경로 없이 실패합니다.
+
+각 arm은 같은 공개 메시지·greedy 생성·seed 0·문맥/출력 예산을 사용합니다. 공식 tokenizer/template의 실제 렌더링과 토큰 ID는 기록하되 서로 다른 모델에 같은 토큰 ID를 강요하지 않습니다. 전체 입력을 사전 검사하고 문맥 자르기·재시도·답변 수정을 하지 않습니다. 원본 출력·행별 관측 시간은 `responses.jsonl`, 모델/adapter/runtime pin은 `runtime.json`, 종료·누락 기록은 `completion.json`에 남깁니다.
+
+**블라인드 진단은 두 arm씩** 만듭니다. `ARM_A`/`ARM_B`는 위 출력 디렉터리, 각각의 `*_SHA256`은 **해당 `completion.json` 파일 SHA-256**, `PACKET`은 새 비공개 디렉터리, `REPORT`는 새 JSON 파일 경로입니다. 세 모델을 한 packet으로 묶지 않고 사전에 정한 쌍별로 같은 suite를 사용합니다.
+
+```bash
+python scripts/evaluate_public_work.py blind-packet \
+  --manifest "$SUITE/manifest.json" --manifest-sha256 "$SUITE_SHA256" \
+  --arm-a "$ARM_A" --arm-a-sha256 "$ARM_A_SHA256" \
+  --arm-b "$ARM_B" --arm-b-sha256 "$ARM_B_SHA256" --output "$PACKET"
+python scripts/evaluate_public_work.py score \
+  --packet "$PACKET/packet.private.json" --mapping "$PACKET/mapping.private.json" \
+  --output "$REPORT"
+```
+
+위 `score`는 의미 판정 없이 완료·형식·인용 구조만 집계합니다. 의미 검토를 하려면 생성된 `judgments.schema.json`에 따라 모든 `judgment_required` 응답의 `semantic_pass`, `critical_error`, 답변별 구체적 `reason`을 작성하고 packet hash에 결박한 파일을 `--judgments "$JUDGMENTS"`로 제공해야 합니다. 모델/arm을 숨긴 packet과 식별 mapping은 분리 보관합니다. 인용 표기 통과는 원문 지지·의미 정답이 아니며, 외부 판정 입력도 전문가 인증을 자동 부여하지 않습니다.
+
+**중단·누락·길이 제한·예외는 24문항의 고정 분모에 남깁니다.** 없는 답변을 만들거나 완료된 일부만으로 성공률을 보고하지 않습니다. 과제·기관·업무군과 일반 능력을 분리 보고하고, 완전한 의미 판정이 있을 때만 쌍별 개선/퇴행을 집계합니다. 진단 보고는 항상 `research_only:true`, `quality_accepted:false`입니다. [공공업무 벤치마크 규격](docs/PUBLIC_BENCHMARK_PROTOCOL.md)의 기관/문서 계열 분리·진짜 전문가 골드·일반 능력 보존을 대체하지 않습니다. 새 GPU/클라우드 실행·추가 학습·운영 모델/서비스 변경은 없습니다. 가중치·실행 자료·비공개 packet은 Git 게시 대상이 아닙니다.
+
+**2026-11-23 개발 서버 실측(합성 24문항·연구 전용·품질 불합격 상태 유지).** 세 arm 모두 `public8b_cpu_24g`, CPU 4스레드, 오프라인, swap 0으로 24/24 응답을 생성했습니다. 의미 판정은 모델을 가린 packet에 대한 **독립 AI 검토 2건의 보수적 합의**(둘 다 통과해야 통과, 한쪽이라도 지적하면 중대 오류)이며 전문가 판정이 아닙니다. `수용`은 의미 통과·중대 오류 없음·형식·인용·정상 종료를 모두 만족한 문항 수입니다.
+
+| arm | 정상 종료 | 형식 | 인용 | 의미 통과 | 중대 오류 | 수용 | 생성 시간 합 | RSS 최대 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 원본 Qwen3-8B | 24 | 22 | 18 | 13 | 7 | 10 | 1,335초 | 17.2GiB |
+| 8B + step615 LoRA | 24 | 24 | 12 | 14 | 2 | 9 | 1,128초 | 17.2GiB |
+| Qwen3-4B-Instruct-2507 | 22 (길이 제한 2) | 10 | 20 | 15 | 7 | 6 | 1,632초 | 9.1GiB |
+
+- **쌍별 의미 변화(원본 8B 기준):** step615 LoRA는 개선 0·퇴행 1(`work-13`), 4B는 개선 1·퇴행 5입니다. 24문항으로는 어느 모델의 우위도 주장하지 않습니다. 검토자 불일치는 8B 쌍 48응답 중 5건이며 `review-agreement.json`에 남겼습니다. 4B 판정은 같은 응답에 대한 앞선 별도 검토(불일치 0건)를 그대로 결박한 것이어서 검토 회차 간 엄격도 차이가 있을 수 있습니다.
+- **관측된 실패 유형:** 자료에 없는 의무·원칙·제재를 덧붙임, "정보 없음"을 "기한 없음"으로 단정, 기한·상한 조건을 바꿔 서술, 필요한 확인 질문 생략, 인용 누락입니다. LoRA 후보는 중대 오류가 적었지만 인용 표기는 12/24로 가장 낮았습니다.
+- **실행 중 확인·수정한 문제:** 첫 8B 실행은 가중치(익명 17.5GB)와 파일 캐시(16.8GB)가 함께 32GiB에 도달해 guard가 응답 전 중단했습니다(OOM·swap 없음). 캐시 해제 경로 추가 뒤 cgroup 최대 사용은 18.7GB였습니다. 이후 공동 서비스 재시작으로 가용 메모리가 39.1GiB가 되어 40GiB 입장 조건에 걸렸고, 제한을 낮추는 대신 위 24GiB profile을 추가했습니다. 8B와 4B는 재실행에서 24/24 응답이 바이트 단위로 같았습니다.
+- **근거:** `runs/public-model-development-20261121T060754Z/`의 `base8b-preflight-failure.json`, `profile24g-*-execution-artifacts.json`, `base8b-vs-adapter8b/`, `base8b-vs-compact4b/`(`semantic-report.json`, `review-agreement.json`, `judgment-rebinding.json`). 실행 자료는 Git에 올리지 않습니다.
+<!-- public_work_v1:end -->
+
 ### Packed-head 학습 엔진
 
 `train_open_weight_lora.chunked_answer_loss`는 backbone의 문맥 계산을 유지하면서, 각 행에서 실제로 감독되는 토큰만 모아 vocabulary head를 계산합니다. 기존 호출 인터페이스와 손실의 행별 소유권은 유지하며, logits 작업 공간은 기존과 같은 `batch_size × LOGIT_CHUNK` 토큰 이내입니다. 모두 마스킹된 SFT 입력은 기존 head 계산 경로를 유지하여 trainable head에도 0 기울기가 전달됩니다.

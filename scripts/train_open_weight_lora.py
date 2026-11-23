@@ -85,6 +85,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import random
 import re
 import sys
@@ -376,7 +377,7 @@ def _copy_pread_tensor(source, offset, tensor, source_dtype, chunk_bytes):
 
 
 @torch.no_grad()
-def load_qwen3_pread(model_dir, dtype, device):
+def load_qwen3_pread(model_dir, dtype, device, *, cache_policy='default'):
     """Qwen3ForCausalLM from a local safetensors directory, one final device allocation per tensor.
     Safetensors validates headers without materializing weights. Its 0.8 CPU pread slicing reads a whole tensor,
     so payloads instead use unbuffered readinto on validated byte offsets, with one reusable CPU buffer
@@ -389,7 +390,18 @@ def load_qwen3_pread(model_dir, dtype, device):
     and eval mode follow from_pretrained. A tied output key (`lm_head.weight`) present in the checkpoint is only
     shape-checked; its bytes are never read, because tie_weights() would discard them. Any missing unique parameter,
     unexpected key or shape mismatch raises before loading: nothing is ever initialised in place of a weight.
+    cache_policy='drop_after_shard' is an explicit Linux CPU-only opt-in: after every consumed shard's
+    tensors are copied into owned allocations, request POSIX_FADV_DONTNEED for that file before reading
+    the next shard. Unsupported advice or an advice error fails closed. Requests/bytes are recorded,
+    not claimed reclaimed memory: the OS may retain pages. Default historical cache behavior is unchanged.
     Returns (model, report) with report listing per-shard keys and bytes read/skipped."""
+    if cache_policy not in ('default', 'drop_after_shard'):
+        raise ValueError('Unknown pread cache policy')
+    if cache_policy == 'drop_after_shard' and (
+            sys.platform != 'linux' or str(device) != 'cpu'
+            or not callable(getattr(os, 'posix_fadvise', None))
+            or not hasattr(os, 'POSIX_FADV_DONTNEED')):
+        raise RuntimeError('drop_after_shard requires Linux CPU POSIX_FADV_DONTNEED support')
     from accelerate import init_empty_weights
     from safetensors import safe_open
     from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
@@ -449,6 +461,9 @@ def load_qwen3_pread(model_dir, dtype, device):
                   staging_chunk_bytes=PREAD_CHUNK_BYTES, staging_peak_bytes=0, staging_chunks=0,
                   tied_output_keys=sorted(redundant), input_key=input_key,
                   shards=[], parameters=0, bytes_loaded=0, bytes_skipped=0, cast=0)
+    if cache_policy == 'drop_after_shard':
+        report['cache_advice'] = dict(policy=cache_policy, advice='POSIX_FADV_DONTNEED',
+                                     requests=0, bytes_requested=0, reclaim_guaranteed=False)
     for entry in plan:
         wanted = [k for k in entry['keys'] if k not in redundant]
         skipped = [k for k in entry['keys'] if k in redundant]
@@ -476,6 +491,12 @@ def load_qwen3_pread(model_dir, dtype, device):
                 report['parameters'] += 1
                 report['bytes_loaded'] += entry['bytes'][key]
                 del tensor
+            if cache_policy == 'drop_after_shard':
+                size = os.fstat(source.fileno()).st_size
+                os.posix_fadvise(source.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+                record['cache_advice'] = dict(offset=0, length=0, bytes_requested=size)
+                report['cache_advice']['requests'] += 1
+                report['cache_advice']['bytes_requested'] += size
     model.tie_weights()
     still_meta = [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.device.type == 'meta']
     if still_meta:
