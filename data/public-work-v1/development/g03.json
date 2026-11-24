@@ -1,0 +1,1093 @@
+{
+  "schema": "trid-public-work-development-batch-v1",
+  "batch": "g03",
+  "split": "train",
+  "business_group": "일반",
+  "institutions": [],
+  "cases": [
+    {
+      "id": "dev-g03-01",
+      "task": "general_dialogue",
+      "domain": "글 요약",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-summary"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래 메모를 두 문장으로 요약해 주세요. \"안내문 초안은 완성했다. 첨부 그림은 아직 받지 못했다. 그림이 오면 배치를 마무리할 수 있다. 배포 날짜는 아직 정하지 않았고, 팀 검토가 끝난 뒤 결정하기로 했다.\"",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "안내문 초안은 완성했으며, 첨부 그림을 받으면 배치를 마무리할 수 있습니다. 배포 날짜는 아직 정해지지 않았으며 팀 검토 후 결정합니다.",
+      "rubric": {
+        "required_claims": [
+          "초안 완성과 그림 수령 대기 상태를 담는다.",
+          "배포 날짜는 팀 검토 후 결정한다고 두 문장 안에 요약한다."
+        ],
+        "forbidden_claims": [
+          "안내문 배포가 완료됐다고 말한다.",
+          "배포 날짜를 임의로 정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-02",
+      "task": "general_dialogue",
+      "domain": "개념 설명",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-version-name"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "파일 이름에 버전을 붙인다는 게 무슨 뜻인가요? 처음 해 보는 사람도 알기 쉽게 설명해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "파일 이름에 버전을 붙인다는 것은 수정된 순서를 알아볼 수 있도록 이름에 번호 등을 넣는 것입니다. 예를 들어 안내문_v1을 수정한 파일은 안내문_v2로 저장하면 이전 파일과 구분하기 쉽습니다.",
+      "rubric": {
+        "required_claims": [
+          "파일 수정 순서를 구분하기 위한 표시라고 설명한다.",
+          "쉽고 짧은 파일 이름 예시를 든다."
+        ],
+        "forbidden_claims": [
+          "버전 이름만 붙이면 이전 내용이 자동 복구된다고 설명한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-03",
+      "task": "general_dialogue",
+      "domain": "문장 교정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-proofread"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "뜻은 그대로 두고 맞춤법과 띄어쓰기만 고쳐 주세요. 고친 문장만 주세요. \"자료를 검토한뒤 수정할 부분이 있는 지 알려주시면 감사하겠읍니다.\"",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "자료를 검토한 뒤 수정할 부분이 있는지 알려주시면 감사하겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "검토한 뒤, 있는지, 감사하겠습니다로 고친 문장만 제시한다."
+        ],
+        "forbidden_claims": [
+          "문장에 답변 기한을 추가한다.",
+          "교정 설명을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-04",
+      "task": "general_dialogue",
+      "domain": "말투 조정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-polite-reminder"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "\"아직 답이 없네요. 오늘 안에 답 주세요.\"를 상대를 탓하지 않는 정중한 문장으로 바꿔 주세요. 오늘 안에 답을 받고 싶다는 뜻은 남겨 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "앞서 드린 문의에 대해 오늘 안에 답변해 주시면 감사하겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "오늘 안에 답변을 요청한다.",
+          "상대를 탓하는 표현 없이 정중하게 쓴다."
+        ],
+        "forbidden_claims": [
+          "답변 기한을 삭제한다.",
+          "회신 지연에 대한 비난을 남긴다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-05",
+      "task": "general_dialogue",
+      "domain": "안내문 작성",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-room-notice"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상의 사무실 안내문을 두 문장으로 써 주세요. 내일 오전에는 회의실 바닥을 청소하니 이용하지 말아 달라고 하고, 오후부터 이용할 수 있다고 안내하면 됩니다.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "내일 오전에는 바닥 청소로 회의실 이용을 삼가 주시기 바랍니다. 회의실은 오후부터 이용하실 수 있습니다.",
+      "rubric": {
+        "required_claims": [
+          "내일 오전 청소로 이용을 삼가 달라고 요청한다.",
+          "오후부터 이용할 수 있다고 두 문장으로 안내한다."
+        ],
+        "forbidden_claims": [
+          "구체적인 시각이나 담당자 연락처를 만든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-06",
+      "task": "general_dialogue",
+      "domain": "제목 만들기",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-guide-title"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "처음 온 동료에게 공유 폴더 위치와 회의실 예약 방법을 알려 주는 짧은 글입니다. 내용이 드러나는 제목 하나만 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "처음 온 동료를 위한 공유 폴더 위치와 회의실 예약 안내",
+      "rubric": {
+        "required_claims": [
+          "공유 폴더 위치와 회의실 예약을 모두 드러내는 제목 하나만 제시한다."
+        ],
+        "forbidden_claims": [
+          "제목 후보를 여러 개 제시한다.",
+          "본문까지 작성한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-07",
+      "task": "general_dialogue",
+      "domain": "선택 비교",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-meeting-option"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "회의 방식 A는 이동이 없지만 화면을 오래 봐야 하고, B는 이동이 필요하지만 실물 견본을 같이 볼 수 있어요. 이번에는 견본의 질감을 함께 살피는 게 가장 중요합니다. 어떤 방식이 더 맞을까요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이번에는 실물 견본을 함께 볼 수 있는 B가 더 맞습니다. 이동은 필요하지만, 가장 중요한 목표인 견본의 질감을 함께 살피는 데 더 적합합니다.",
+      "rubric": {
+        "required_claims": [
+          "질감 확인이라는 우선순위를 근거로 B를 추천한다.",
+          "B에 이동이 필요하다는 점을 반영한다."
+        ],
+        "forbidden_claims": [
+          "B의 비용이나 소요 시간을 만들어 비교한다.",
+          "이동이 없다는 이유만으로 A를 추천한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-08",
+      "task": "general_dialogue",
+      "domain": "체크리스트",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-handoff-list"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "휴가 전 인수인계 체크리스트를 마크다운 목록으로 4개만 만들어 주세요. 진행 상황, 파일 위치, 다음 할 일, 문의할 사람을 넣어 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 진행 중인 업무의 현재 상황을 정리합니다.\n- 관련 파일의 저장 위치를 공유합니다.\n- 다음에 해야 할 일을 적습니다.\n- 업무별로 문의할 사람을 적습니다.",
+      "rubric": {
+        "required_claims": [
+          "요청한 네 가지 항목을 각각 하나의 목록 항목으로 작성한다."
+        ],
+        "forbidden_claims": [
+          "특정 담당자 이름이나 파일 경로를 지어낸다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-09",
+      "task": "general_dialogue",
+      "domain": "회의록 정리",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-minutes"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래 가상 회의 메모를 구분과 내용 두 열의 마크다운 표로 정리해 주세요. \"논의: 안내문 분량 줄이기. 결정: 본문은 한 쪽으로 줄이고 상세 설명은 별첨. 미정: 배포 날짜. 다음 할 일: 편집 담당이 축약 초안 작성.\"",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 구분 | 내용 |\n| --- | --- |\n| 논의 | 안내문 분량 줄이기 |\n| 결정 | 본문은 한 쪽으로 줄이고 상세 설명은 별첨 |\n| 미정 | 배포 날짜 |\n| 다음 할 일 | 편집 담당이 축약 초안 작성 |",
+      "rubric": {
+        "required_claims": [
+          "논의, 결정, 미정, 다음 할 일을 구분한다.",
+          "한 쪽 본문과 상세 설명 별첨이라는 결정을 보존한다."
+        ],
+        "forbidden_claims": [
+          "배포 날짜나 담당자 실명을 만든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-10",
+      "task": "general_dialogue",
+      "domain": "작성 방법",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-report-structure"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "업무 진행 상황 보고를 처음 씁니다. 길게 말고, 어떤 순서로 쓰면 되는지 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "현재 진행 상황, 완료한 일, 남은 일, 필요한 지원 순서로 쓰면 됩니다. 맨 앞에는 일정대로 진행 중인지 핵심 상태를 한 문장으로 적고, 뒤에는 그 판단에 필요한 내용만 붙입니다.",
+      "rubric": {
+        "required_claims": [
+          "진행 상황 보고의 간단한 구성 순서를 제시한다."
+        ],
+        "forbidden_claims": [
+          "특정 기관의 의무 서식이라고 주장한다.",
+          "보고서 작성 전에 문서를 제출하라고 요구한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-11",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-small-talk"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "오늘 할 일을 다 마쳐서 뿌듯해요. 이제 차 한 잔 마시려고요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "할 일을 다 마치셔서 뿌듯하시겠습니다. 차 한 잔과 함께 편안하게 쉬시기 바랍니다.",
+      "rubric": {
+        "required_claims": [
+          "일을 마치고 차 한 잔 마시려는 말에 짧고 자연스럽게 응답한다."
+        ],
+        "forbidden_claims": [
+          "남은 시간에도 일을 더 하라고 권한다.",
+          "생산성 관리법을 길게 설명한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-12",
+      "task": "general_dialogue",
+      "domain": "짧은 번역",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-translate"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "\"편하실 때 초안을 검토해 주세요.\"를 정중한 영어 한 문장으로 번역해 주세요. 번역만 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "Please review the draft when you have a chance.",
+      "rubric": {
+        "required_claims": [
+          "편할 때 초안을 검토해 달라는 뜻을 정중한 영어 한 문장으로 번역한다."
+        ],
+        "forbidden_claims": [
+          "회신 기한이나 긴급하다는 뜻을 추가한다.",
+          "번역 해설을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-13",
+      "task": "general_dialogue",
+      "domain": "할 일 추출",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-chat-actions"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래 가상 대화에서 할 일과 담당자만 마크다운 목록으로 뽑아 주세요. \"기획 담당: 문구는 제가 다시 쓰겠습니다. 디자인 담당: 새 문구를 받으면 그림을 배치하겠습니다. 기획 담당: 배포 일정은 아직 정하지 말고 다음 회의에서 얘기하죠.\"",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 기획 담당: 문구를 다시 작성합니다.\n- 디자인 담당: 새 문구를 받은 뒤 그림을 배치합니다.",
+      "rubric": {
+        "required_claims": [
+          "기획 담당의 문구 수정과 디자인 담당의 그림 배치를 추출한다.",
+          "그림 배치가 새 문구를 받은 뒤 진행된다는 조건을 보존한다."
+        ],
+        "forbidden_claims": [
+          "담당자가 지정되지 않은 배포 일정 논의를 특정 담당자의 할 일로 만든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-14",
+      "task": "general_dialogue",
+      "domain": "안건 제안",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-agenda"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "팀에서 안내문 초안을 처음 검토하려고 합니다. 내용 누락, 어려운 표현, 다음 수정 작업을 논의할 수 있도록 회의 안건 3개를 마크다운 목록으로 제안해 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 안내문에 빠진 내용이 있는지 확인합니다.\n- 이해하기 어려운 표현을 찾아 쉬운 말로 바꿀 방향을 정합니다.\n- 다음 수정 작업의 범위와 담당을 정합니다.",
+      "rubric": {
+        "required_claims": [
+          "내용 누락, 어려운 표현, 다음 수정 작업을 각각 안건으로 제안한다."
+        ],
+        "forbidden_claims": [
+          "이미 수정 담당이 확정됐다고 말한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-15",
+      "task": "general_dialogue",
+      "domain": "간단한 계획",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-desk-plan"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "책상 위 종이, 컴퓨터 바탕화면 파일, 내일 할 일을 차례로 정리하고 싶어요. 이 순서대로 간단한 계획을 마크다운 목록 세 줄로 써 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 책상 위 종이를 필요한 것과 정리할 것으로 나눕니다.\n- 바탕화면 파일을 용도별 폴더로 옮깁니다.\n- 내일 할 일을 적고 먼저 할 일을 표시합니다.",
+      "rubric": {
+        "required_claims": [
+          "종이, 바탕화면 파일, 내일 할 일 순서를 지킨다.",
+          "마크다운 목록 세 항목으로 간단한 계획을 작성한다."
+        ],
+        "forbidden_claims": [
+          "파일을 모두 삭제하라고 권한다.",
+          "정리 순서를 임의로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-16",
+      "task": "general_dialogue",
+      "domain": "이력 기반 수정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-history-shortening"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "초안을 공유했고 금요일까지 검토 의견을 받고 싶습니다. 메일에 넣을 정중한 한 문장을 써 주세요."
+        },
+        {
+          "role": "assistant",
+          "content": "공유드린 초안을 검토하신 후 금요일까지 의견을 전달해 주시면 감사하겠습니다."
+        }
+      ],
+      "question": "같은 뜻으로 더 짧게 한 문장만 써 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "공유드린 초안을 금요일까지 검토하고 의견을 주시면 감사하겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "이력의 초안 검토 및 의견 요청을 보존한다.",
+          "금요일까지라는 기한을 유지하며 더 짧은 한 문장으로 쓴다."
+        ],
+        "forbidden_claims": [
+          "기한을 생략한다.",
+          "어떤 문장을 줄일지 다시 묻는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-17",
+      "task": "general_dialogue",
+      "domain": "이력 기반 일정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-history-schedule"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "서로 가능한 회의 시간대를 추렸더니 화요일 오후와 수요일 오전이 남았어요. 아직 확정은 하지 않았습니다."
+        },
+        {
+          "role": "assistant",
+          "content": "현재 후보는 화요일 오후와 수요일 오전이며, 아직 확정된 일정은 아닙니다."
+        }
+      ],
+      "question": "그중 화요일 오후는 이제 안 됩니다. 남은 후보만 한 문장으로 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "남은 후보는 수요일 오전입니다.",
+      "rubric": {
+        "required_claims": [
+          "이력의 두 후보 중 화요일 오후를 제외하고 수요일 오전만 제시한다."
+        ],
+        "forbidden_claims": [
+          "새로운 요일이나 시간대를 제안한다.",
+          "회의가 수요일 오전으로 확정됐다고 말한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-18",
+      "task": "general_dialogue",
+      "domain": "순서 추론",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-dependency-order"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "작업 규칙이 이렇습니다. 원고가 확정돼야 편집할 수 있고, 편집본이 나와야 검토할 수 있으며, 검토가 끝나야 배포할 수 있습니다. 지금 원고는 확정됐고 편집은 시작 전입니다. 다음에 할 작업만 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "다음에 할 작업은 편집입니다.",
+      "rubric": {
+        "required_claims": [
+          "원고 확정 직후 해야 하는 작업인 편집만 답한다."
+        ],
+        "forbidden_claims": [
+          "검토나 배포를 바로 진행하라고 말한다.",
+          "전체 순서를 불필요하게 늘어놓는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-19",
+      "task": "general_arithmetic",
+      "domain": "할인 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-discount"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 인쇄 견적이 80,000원인데 전체 금액에서 15%를 할인해 준다고 합니다. 할인 후 금액을 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "견적 80,000원에 할인율 15%를 적용하면 80,000 × (1 − 15 ÷ 100) = 68,000원입니다. 할인 후 금액은 68,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "80,000원과 15%를 입력값으로 할인 후 금액 68,000원을 계산한다."
+        ],
+        "forbidden_claims": [
+          "할인액 12,000원을 최종 결제액으로 답한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "80000*(1-15/100)",
+          "result": "68000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-20",
+      "task": "general_arithmetic",
+      "domain": "비율 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-page-ratio"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "안내 책자 총 72쪽을 본문과 부록으로 나누는데 비율이 5 대 1입니다. 부록은 몇 쪽인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "전체 72쪽에서 부록의 비율은 1 ÷ (5 + 1)이므로, 72 × 1 ÷ (5 + 1) = 12쪽입니다. 부록은 12쪽입니다.",
+      "rubric": {
+        "required_claims": [
+          "전체 비율의 합 6을 사용해 부록 12쪽을 구한다."
+        ],
+        "forbidden_claims": [
+          "72를 5로 나누어 부록 쪽수를 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "72*1/(5+1)",
+          "result": "12",
+          "unit": "쪽"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-21",
+      "task": "general_arithmetic",
+      "domain": "단위 변환",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-hour-minute"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "온라인 교육 재생 시간이 2.75시간입니다. 분으로 바꿔 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "1시간은 60분이므로 2.75시간 × 60분/시간 = 165분입니다.",
+      "rubric": {
+        "required_claims": [
+          "2.75시간에 60을 곱해 165분으로 변환한다."
+        ],
+        "forbidden_claims": [
+          "2.75시간을 2시간 75분으로 해석한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "2.75*60",
+          "result": "165",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-22",
+      "task": "general_arithmetic",
+      "domain": "시간 차이",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-meeting-duration"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "같은 날 오전 9시 40분에 시작해서 오전 11시 15분에 끝난 회의는 몇 분 진행한 건가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "시작 시각은 9 × 60 + 40 = 580분, 종료 시각은 11 × 60 + 15 = 675분입니다. 회의 시간은 675 − 580 = 95분입니다.",
+      "rubric": {
+        "required_claims": [
+          "시작과 종료 시각을 분으로 환산한다.",
+          "회의 시간 95분을 구한다."
+        ],
+        "forbidden_claims": [
+          "시간과 분을 소수처럼 빼서 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(11*60+15)-(9*60+40)",
+          "result": "95",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-23",
+      "task": "general_arithmetic",
+      "domain": "평균 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-review-average"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "원고 네 건을 검토하는 데 각각 18분, 24분, 30분, 20분이 걸렸습니다. 한 건당 평균 검토 시간은 얼마인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "총 검토 시간은 18 + 24 + 30 + 20 = 92분입니다. 네 건의 평균 검토 시간은 92 ÷ 4 = 23분입니다.",
+      "rubric": {
+        "required_claims": [
+          "네 건의 시간을 합산하고 4로 나누어 평균 23분을 구한다."
+        ],
+        "forbidden_claims": [
+          "최솟값과 최댓값만 평균 내어 답한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(18+24+30+20)/4",
+          "result": "23",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-24",
+      "task": "general_arithmetic",
+      "domain": "비례 배분",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-budget-split"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 공동행사 비용 420,000원을 준비팀과 진행팀이 참여 인원 비율대로 나눠 냅니다. 준비팀 3명, 진행팀 4명입니다. 두 팀의 부담액을 계산식과 함께 마크다운 표로 보여 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 팀 | 계산식 | 부담액 |\n| --- | --- | --- |\n| 준비팀 | 420,000 × 3 ÷ (3 + 4) | 180,000원 |\n| 진행팀 | 420,000 × 4 ÷ (3 + 4) | 240,000원 |",
+      "rubric": {
+        "required_claims": [
+          "참여 인원 합계 7명으로 비례 배분한다.",
+          "준비팀 180,000원과 진행팀 240,000원을 표로 제시한다."
+        ],
+        "forbidden_claims": [
+          "두 팀에 비용을 절반씩 배분한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "420000*3/(3+4)",
+          "result": "180000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-25",
+      "task": "general_arithmetic",
+      "domain": "복합 금액 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-printing-delivery"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 주문에서 소책자 25부를 부당 3,200원에 인쇄합니다. 인쇄비만 10% 할인하고 배송비 4,500원은 별도로 전액 냅니다. 총 결제액은요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "인쇄비는 25부 × 3,200원 = 80,000원이며, 할인 후에는 80,000 × (1 − 10 ÷ 100) = 72,000원입니다. 배송비 4,500원을 더하면 총 결제액은 72,000 + 4,500 = 76,500원입니다.",
+      "rubric": {
+        "required_claims": [
+          "인쇄비에만 10% 할인을 적용한다.",
+          "배송비를 더한 총 결제액 76,500원을 구한다."
+        ],
+        "forbidden_claims": [
+          "배송비까지 할인한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "25*3200*(1-10/100)+4500",
+          "result": "76500",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-26",
+      "task": "general_arithmetic",
+      "domain": "올림 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-box-rounding"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "서류철 97개를 상자에 담습니다. 한 상자에는 최대 24개가 들어가고, 남는 서류철이 하나라도 있으면 상자를 하나 더 써야 합니다. 필요한 상자 수를 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "97개 ÷ 24개/상자 = 4상자에 나머지 1개입니다. 남는 1개에도 상자가 필요하므로 올림하여 4 + 1 = 5상자가 필요합니다.",
+      "rubric": {
+        "required_claims": [
+          "97개를 24개씩 나누면 4상자에 나머지 1개임을 밝힌다.",
+          "나머지가 있으면 올림하는 규칙에 따라 5상자를 구한다."
+        ],
+        "forbidden_claims": [
+          "나머지를 버리고 4상자로 답한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "4+1",
+          "result": "5",
+          "unit": "상자"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-27",
+      "task": "general_arithmetic",
+      "domain": "역산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-original-count"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "문장 84개를 검토했는데 전체 문장의 70%라고 합니다. 전체 문장은 몇 개인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "전체의 70%가 84개이므로 전체 문장 수는 84 ÷ (70 ÷ 100) = 120개입니다.",
+      "rubric": {
+        "required_claims": [
+          "84개를 0.7로 나누어 전체 120개를 구한다."
+        ],
+        "forbidden_claims": [
+          "84에 70%를 곱해 전체 수를 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "84*100/70",
+          "result": "120",
+          "unit": "개"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-28",
+      "task": "general_arithmetic",
+      "domain": "작업 속도",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-constant-speed"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "같은 속도로 쉬지 않고 작업한다고 가정할게요. 자료 45쪽을 정리하는 데 30분이 걸리면 120쪽에는 몇 분이 걸리나요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "45쪽에 30분이 걸리므로 쪽당 소요 시간은 30 ÷ 45분입니다. 같은 속도로 120쪽을 정리하는 시간은 120 × 30 ÷ 45 = 80분입니다.",
+      "rubric": {
+        "required_claims": [
+          "일정한 작업 속도 조건으로 120쪽에 80분을 계산한다."
+        ],
+        "forbidden_claims": [
+          "쉬는 시간이나 다른 작업 시간을 임의로 더한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "120*30/45",
+          "result": "80",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-29",
+      "task": "general_arithmetic",
+      "domain": "상한 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-reimbursement-cap"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 모임 규칙은 재료비의 60%를 돌려주되 한 사람에게 최대 25,000원까지만 지급하는 것입니다. 제가 쓴 재료비는 48,000원입니다. 비율 적용액과 실제 지급액을 계산식이 있는 마크다운 목록 두 줄로 써 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 비율 적용액: 48,000원 × 60% = 28,800원입니다.\n- 실제 지급액: min(28,800원, 25,000원) = 25,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "재료비 48,000원의 60%인 28,800원을 계산한다.",
+          "개인 상한을 적용해 실제 지급액 25,000원을 제시한다."
+        ],
+        "forbidden_claims": [
+          "상한을 무시하고 28,800원을 지급액으로 답한다.",
+          "재료비 자체를 25,000원으로 제한한 뒤 60%를 곱한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min(48000*60/100,25000)",
+          "result": "25000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g03-30",
+      "task": "general_arithmetic",
+      "domain": "일정 배분",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g03-session-blocks"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "전체 회의 시간은 150분입니다. 도입 15분, 중간 휴식 15분, 마무리 10분을 빼고 남은 시간을 같은 길이의 발표 5개에 나누려고 합니다. 발표에 쓸 총시간과 발표 하나당 시간을 마크다운 목록 두 줄로 계산해 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 발표에 쓸 총시간: 150 − 15 − 15 − 10 = 110분입니다.\n- 발표 하나당 시간: 110 ÷ 5 = 22분입니다.",
+      "rubric": {
+        "required_claims": [
+          "도입, 휴식, 마무리 총 40분을 빼서 발표 총시간 110분을 구한다.",
+          "5개 발표에 균등 배분하여 하나당 22분을 구한다."
+        ],
+        "forbidden_claims": [
+          "휴식 시간을 두 번 빼거나 마무리 시간을 빼지 않는다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(150-15-15-10)/5",
+          "result": "22",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g03 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    }
+  ]
+}

@@ -31,6 +31,8 @@ service = [
 # - pdftotext (poppler): PDF text for the same module and script.
 # datasets (Apache-2.0): scripts/evaluate_kobest.py가 skt/kobest_v1(CC BY-SA 4.0)을 고정 revision으로 받을 때만 사용.
 eval = ["datasets==5.1.0"]
+# scripts/evaluate_local_eight.py --decoder-profile json-schema only; MIT, no model/API dependency.
+local-eight-schema = ["lm-format-enforcer==0.11.3"]
 # scripts/benchmark_retrieval.py (개발 측정용). bm25s: MIT, kiwipiepy: Apache-2.0, sentence-transformers: Apache-2.0
 # (KURE-v1 가중치 MIT, 개발 측정 전용·제품 미포함)
 # scripts/train_retrieval_head.py(BM25 hard negative)·evaluate_retrieval_head.py(bm25_kiwi 비교)도 bm25s·kiwipiepy만 사용;

@@ -1,0 +1,1103 @@
+{
+  "schema": "trid-public-work-development-batch-v1",
+  "batch": "g01",
+  "split": "train",
+  "business_group": "일반",
+  "institutions": [],
+  "cases": [
+    {
+      "id": "dev-g01-01",
+      "task": "general_dialogue",
+      "domain": "업무 요약",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-handover-summary"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "다음 내용을 두 문장으로 요약해 주세요. “이번 주에는 신규 문의 분류표를 만들었다. 기존 문의 40건으로 시험해 보니 중복 분류가 5건 나왔다. 분류 기준을 고친 뒤 다음 주에 다시 시험할 예정이다. 담당자 교육은 재시험이 끝난 뒤 진행한다.”",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "신규 문의 분류표를 기존 문의 40건에 시험한 결과 중복 분류가 5건 발생했습니다. 기준을 수정해 다음 주에 재시험하고, 그 후 담당자 교육을 진행할 예정입니다.",
+      "rubric": {
+        "required_claims": [
+          "중복 분류 5건을 포함해 시험 결과를 요약한다.",
+          "기준 수정, 다음 주 재시험, 이후 교육 순서를 두 문장으로 제시한다."
+        ],
+        "forbidden_claims": [
+          "재시험이나 교육이 이미 완료됐다고 쓴다.",
+          "요약 앞에 공감이나 평가를 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-02",
+      "task": "general_dialogue",
+      "domain": "개념 설명",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-version-control"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "문서 버전 관리가 뭔지 신입 직원에게 설명하듯 쉽게 세 문장 안으로 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "문서 버전 관리는 문서를 고칠 때마다 변경 이력을 남겨 어느 것이 최신본인지 구분하는 방법입니다. 파일명에 날짜나 버전 번호를 붙이고 수정 내용을 기록하면 됩니다. 이전 내용을 확인하거나 잘못 수정한 부분을 되돌릴 때 도움이 됩니다.",
+      "rubric": {
+        "required_claims": [
+          "변경 이력과 최신본 구분이라는 뜻을 쉽게 설명한다.",
+          "날짜나 버전 번호 등 구체적인 예를 든다."
+        ],
+        "forbidden_claims": [
+          "특정 프로그램 사용이 의무라고 말한다.",
+          "관련 자료를 먼저 제출하라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-03",
+      "task": "general_dialogue",
+      "domain": "문장 교정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-spacing-correction"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "맞춤법과 띄어쓰기만 고쳐서 문장만 주세요: 회의가 끝난후 정리한 내용을 보내드릴께요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "회의가 끝난 후 정리한 내용을 보내드릴게요.",
+      "rubric": {
+        "required_claims": [
+          "끝난후를 끝난 후로 고친다.",
+          "보내드릴께요를 보내드릴게요로 고친다."
+        ],
+        "forbidden_claims": [
+          "원문에 없는 마감이나 전달 방법을 추가한다.",
+          "교정 설명을 붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-04",
+      "task": "general_dialogue",
+      "domain": "말투 수정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-polite-request"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“자료 아직 안 왔어요. 빨리 보내 주세요.”를 재촉하는 느낌은 줄이고 정중하게 바꿔 주세요. 요청 문장만요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "자료 전달 가능 시점을 알려 주시면 감사하겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "자료 전달에 관한 정중한 요청으로 바꾼다."
+        ],
+        "forbidden_claims": [
+          "오늘까지 등 새로운 기한을 만든다.",
+          "사과나 감정 설명을 답변 앞에 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-05",
+      "task": "general_dialogue",
+      "domain": "안내문 작성",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-meeting-room-notice"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 사무실 공지입니다. 회의실 정리 때문에 금요일 15시부터 16시까지 이용할 수 없다는 안내를 두 문장으로 써 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "회의실 정리로 금요일 15시부터 16시까지 회의실 이용이 불가합니다. 이용에 참고해 주시기 바랍니다.",
+      "rubric": {
+        "required_claims": [
+          "금요일 15시부터 16시까지 이용 불가라고 안내한다.",
+          "이용 제한 사유를 회의실 정리로 쓴다."
+        ],
+        "forbidden_claims": [
+          "구체적인 날짜나 담당자 연락처를 지어낸다.",
+          "안내를 실제 게시했다고 말한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-06",
+      "task": "general_dialogue",
+      "domain": "제목 작성",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-sharing-session-title"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "팀원들이 업무에서 배운 작은 요령을 나누는 모임의 제목 하나만 지어 주세요. 딱딱하지 않게요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "작은 요령, 함께 나누는 시간",
+      "rubric": {
+        "required_claims": [
+          "업무 요령을 함께 나누는 취지의 제목 하나만 제시한다."
+        ],
+        "forbidden_claims": [
+          "여러 후보나 선정 이유를 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-07",
+      "task": "general_dialogue",
+      "domain": "선택지 비교",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-lunch-options"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "점심 장소 A는 걸어서 3분이고 1인 12,000원, B는 걸어서 10분이고 1인 9,000원입니다. 주어진 정보만 표로 비교해 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 항목 | A | B |\n|---|---|---|\n| 도보 이동 시간 | 3분 | 10분 |\n| 1인 가격 | 12,000원 | 9,000원 |",
+      "rubric": {
+        "required_claims": [
+          "A와 B의 이동 시간과 1인 가격을 정확히 표에 담는다."
+        ],
+        "forbidden_claims": [
+          "맛, 혼잡도, 예약 가능 여부를 추측한다.",
+          "근거 없이 한 장소를 추천한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-08",
+      "task": "general_dialogue",
+      "domain": "체크리스트",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-meeting-preparation"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "내일 온라인 회의를 진행합니다. 접속 문제와 자료 누락을 줄이기 위한 준비 체크리스트를 4개 항목으로 만들어 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 회의 링크가 열리는지 확인합니다.\n- 마이크와 카메라 작동을 확인합니다.\n- 참석자에게 회의 링크와 자료를 공유했는지 확인합니다.\n- 화면 공유할 자료가 최신본이고 열리는지 확인합니다.",
+      "rubric": {
+        "required_claims": [
+          "접속 및 장비 확인을 포함한다.",
+          "자료 공유와 최신본 확인을 포함한 4개 항목을 제시한다."
+        ],
+        "forbidden_claims": [
+          "특정 유료 도구를 반드시 구매하라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-09",
+      "task": "general_dialogue",
+      "domain": "회의록 정리",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-meeting-notes"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래 메모를 결정 사항과 후속 작업으로 나눠 목록형 회의록으로 정리해 주세요. “안내문은 한 장으로 만들기로 함. 초안은 기획 담당이 수요일까지 작성. 검토는 운영 담당이 목요일까지. 배포일은 아직 못 정함.”",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "결정 사항\n- 안내문은 한 장으로 작성합니다.\n\n후속 작업\n- 기획 담당: 수요일까지 초안을 작성합니다.\n- 운영 담당: 목요일까지 검토합니다.\n- 배포일: 미정입니다.",
+      "rubric": {
+        "required_claims": [
+          "안내문 한 장 작성 결정을 보존한다.",
+          "초안과 검토의 담당 및 기한을 구분한다.",
+          "배포일은 미정으로 표시한다."
+        ],
+        "forbidden_claims": [
+          "배포일을 금요일로 정한다.",
+          "회의 참석자나 장소를 만들어 넣는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-10",
+      "task": "general_dialogue",
+      "domain": "작성 방법",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-report-structure"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "처음 쓰는 업무 보고서는 어떤 순서로 구성하면 읽기 좋을까요? 짧게 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "핵심 결론을 먼저 쓰고, 배경과 목적, 진행 내용, 결과와 근거, 다음 할 일 순으로 구성하면 읽기 좋습니다. 독자의 결정이 필요한 사항은 결론 부분에 함께 적으면 됩니다.",
+      "rubric": {
+        "required_claims": [
+          "결론을 먼저 제시하는 구체적인 구성 순서를 안내한다."
+        ],
+        "forbidden_claims": [
+          "특정 기관의 공식 서식이라고 주장한다.",
+          "보고서 작성을 위해 내부 문서를 반드시 요구한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-11",
+      "task": "general_dialogue",
+      "domain": "가벼운 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-friday-chat"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "금요일 오후라 그런지 조금 들뜨네요. 오늘 할 일은 거의 끝냈어요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "할 일을 거의 마쳐서 더 들뜨시겠습니다. 남은 일만 가볍게 정리하고 기분 좋게 주말을 맞으시면 좋겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "짧고 자연스럽게 대화를 이어 간다."
+        ],
+        "forbidden_claims": [
+          "장문의 생산성 조언을 한다.",
+          "아직 끝나지 않은 일을 모두 끝냈다고 단정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-12",
+      "task": "general_dialogue",
+      "domain": "번역",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-short-translation"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“Please let me know if the schedule changes.”를 자연스러운 한국어 업무 문장으로 번역만 해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "일정이 변경되면 알려 주시기 바랍니다.",
+      "rubric": {
+        "required_claims": [
+          "일정 변경 시 알려 달라는 의미를 정중하게 번역한다."
+        ],
+        "forbidden_claims": [
+          "일정이 이미 변경됐다고 번역한다.",
+          "번역 외 설명이나 인사를 붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-13",
+      "task": "general_dialogue",
+      "domain": "실행 항목 추출",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-chat-actions"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "이 가상 대화에서 할 일만 담당자와 함께 목록으로 뽑아 주세요. “기획 담당: 제가 월요일까지 설문 초안을 만들겠습니다. 운영 담당: 초안 받으면 화요일까지 문항을 검토하겠습니다. 기획 담당: 이전 설문은 응답률이 낮았어요.”",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 기획 담당: 월요일까지 설문 초안을 작성합니다.\n- 운영 담당: 초안을 받은 뒤 화요일까지 문항을 검토합니다.",
+      "rubric": {
+        "required_claims": [
+          "두 담당자의 할 일과 기한을 정확히 추출한다."
+        ],
+        "forbidden_claims": [
+          "이전 설문 응답률을 새로운 실행 항목으로 만든다.",
+          "설문 발송이나 응답 독려를 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-14",
+      "task": "general_dialogue",
+      "domain": "회의 안건 제안",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-meeting-agenda"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "새 팀원이 합류한 뒤 첫 팀 회의를 합니다. 20분 회의용 안건을 시간 배분과 함께 목록으로 제안해 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 서로 소개하고 맡은 역할 공유: 5분\n- 진행 중인 주요 업무와 우선순위 확인: 7분\n- 협업 방식과 연락 방법 공유: 5분\n- 질문과 다음 할 일 정리: 3분",
+      "rubric": {
+        "required_claims": [
+          "새 팀원 소개와 업무 및 협업 방식 공유를 포함한다.",
+          "시간 배분의 합이 20분이다."
+        ],
+        "forbidden_claims": [
+          "실제 조직의 확정된 절차라고 설명한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-15",
+      "task": "general_dialogue",
+      "domain": "간단한 일정 계획",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-work-block-plan"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "오늘 14시부터 한 시간 동안 메일 정리 15분, 자료 읽기 30분, 내일 할 일 정리 15분을 이 순서대로 하려고 합니다. 시간표를 표로 써 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 시간 | 할 일 |\n|---|---|\n| 14:00~14:15 | 메일 정리 |\n| 14:15~14:45 | 자료 읽기 |\n| 14:45~15:00 | 내일 할 일 정리 |",
+      "rubric": {
+        "required_claims": [
+          "주어진 순서와 소요 시간을 지킨 시간표를 제시한다."
+        ],
+        "forbidden_claims": [
+          "요청하지 않은 휴식이나 다른 업무를 끼워 넣는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-16",
+      "task": "general_dialogue",
+      "domain": "후속 문장 수정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-history-note"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "검토해 준 동료에게 짧게 감사 문장을 써 주세요."
+        },
+        {
+          "role": "assistant",
+          "content": "귀한 시간을 내어 검토해 주셔서 감사합니다."
+        }
+      ],
+      "question": "방금 문장에서 “귀한”은 빼고 조금 더 담백하게 써 주세요. 문장만 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "시간을 내어 검토해 주셔서 감사합니다.",
+      "rubric": {
+        "required_claims": [
+          "이전 감사 문장에서 귀한만 제거한 담백한 문장을 제시한다."
+        ],
+        "forbidden_claims": [
+          "이전 문장을 다시 알려 달라고 한다.",
+          "새로운 보답이나 약속을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-17",
+      "task": "general_dialogue",
+      "domain": "후속 선택",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-history-location"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "가상 모임 공간을 고르고 있습니다. 첫 번째는 도보 5분에 대여료 30,000원, 두 번째는 도보 15분에 대여료 20,000원입니다. 이동 거리가 중요하면 어디가 낫나요?"
+        },
+        {
+          "role": "assistant",
+          "content": "이동 거리가 중요하면 도보 5분인 첫 번째 공간이 적합합니다."
+        }
+      ],
+      "question": "그럼 비용을 더 중요하게 보면 어느 쪽인가요? 이유도 한 문장으로요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "비용을 더 중요하게 보면 대여료가 20,000원으로 더 저렴한 두 번째 공간이 적합합니다.",
+      "rubric": {
+        "required_claims": [
+          "이전 대화의 두 번째 공간을 가격 기준으로 선택한다.",
+          "대여료 20,000원을 근거로 한 문장으로 답한다."
+        ],
+        "forbidden_claims": [
+          "가까운 첫 번째 공간이 더 싸다고 한다.",
+          "추가 교통비를 추정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-18",
+      "task": "general_dialogue",
+      "domain": "짧은 응원",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-presentation-encouragement"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "첫 발표를 앞두고 긴장돼요. 힘이 되는 말 두 문장만 해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "첫 발표라 긴장되시겠습니다. 완벽하게 하려 하기보다 준비한 내용을 하나씩 전한다는 마음으로 시작해 보시면 좋겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "두 문장으로 과장 없는 응원을 한다."
+        ],
+        "forbidden_claims": [
+          "반드시 성공하거나 모두가 칭찬한다고 보장한다.",
+          "긴장하면 안 된다고 훈계한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-19",
+      "task": "general_arithmetic",
+      "domain": "할인 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-discount"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "정가 48,000원인 업무용 가방을 15% 할인해서 사면 얼마인가요? 배송비는 없습니다.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "정가 48,000원에 할인율 15%를 적용하면 48,000 × (1 − 0.15) = 40,800원입니다.",
+      "rubric": {
+        "required_claims": [
+          "정가 48,000원과 할인율 15%를 사용한다.",
+          "할인 후 가격을 계산식과 함께 40,800원으로 제시한다."
+        ],
+        "forbidden_claims": [
+          "할인액 7,200원을 최종 결제 금액이라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "48000*(1-0.15)",
+          "result": "40800",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-20",
+      "task": "general_arithmetic",
+      "domain": "비율 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-ratio"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "워크숍 참석자 84명을 오전반과 오후반에 2:5로 나눕니다. 오전반은 몇 명인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "전체 84명 중 오전반의 비율은 2 ÷ (2 + 5)입니다. 따라서 오전반은 84 × 2 ÷ 7 = 24명입니다.",
+      "rubric": {
+        "required_claims": [
+          "비율의 합 7을 분모로 사용한다.",
+          "오전반 인원을 24명으로 계산한다."
+        ],
+        "forbidden_claims": [
+          "84명에 2/5를 곱한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "84*2/(2+5)",
+          "result": "24",
+          "unit": "명"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-21",
+      "task": "general_arithmetic",
+      "domain": "단위 환산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-storage-conversion"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "이 계산에서는 1GB를 1,024MB로 정합니다. 2.75GB짜리 자료는 몇 MB인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "1GB = 1,024MB 기준으로 2.75 × 1,024 = 2,816MB입니다.",
+      "rubric": {
+        "required_claims": [
+          "사용자가 지정한 1GB = 1,024MB를 적용한다.",
+          "2.75GB를 2,816MB로 환산한다."
+        ],
+        "forbidden_claims": [
+          "1GB를 1,000MB로 바꿔 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "2.75*1024",
+          "result": "2816",
+          "unit": "MB"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-22",
+      "task": "general_arithmetic",
+      "domain": "시간 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-overnight-duration"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "자료 전송을 밤 22시 45분에 시작해 바로 다음 날 새벽 1시 20분에 끝냈습니다. 중단 없이 걸린 시간을 분으로 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "22시 45분부터 자정까지는 75분이고, 자정부터 다음 날 1시 20분까지는 80분입니다. 총 소요 시간은 (24 × 60 − (22 × 60 + 45)) + (1 × 60 + 20) = 155분입니다.",
+      "rubric": {
+        "required_claims": [
+          "자정을 넘는 시간을 반영한다.",
+          "75분과 80분을 합해 155분으로 계산한다."
+        ],
+        "forbidden_claims": [
+          "시각을 같은 날로 처리해 음수로 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(24*60-(22*60+45))+(1*60+20)",
+          "result": "155",
+          "unit": "분"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-23",
+      "task": "general_arithmetic",
+      "domain": "평균 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-daily-average"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "나흘 동안 문의를 각각 75건, 90건, 105건, 110건 처리했습니다. 하루 평균 몇 건을 처리한 건가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "나흘간 처리한 문의는 총 75 + 90 + 105 + 110 = 380건입니다. 하루 평균은 380 ÷ 4 = 95건입니다.",
+      "rubric": {
+        "required_claims": [
+          "네 날의 처리 건수 합계 380건을 사용한다.",
+          "평균을 4로 나눠 95건으로 계산한다."
+        ],
+        "forbidden_claims": [
+          "하루 최대 처리량을 평균이라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(75+90+105+110)/4",
+          "result": "95",
+          "unit": "건"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-24",
+      "task": "general_arithmetic",
+      "domain": "비례 배분",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-weighted-cost"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "공동 구매 비용 126,000원을 세 팀 A, B, C가 사용량 비율 2:3:4로 부담합니다. B팀 부담액만 계산식과 함께 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "B팀 부담액은 전체 비용 126,000원 × 3 ÷ (2 + 3 + 4) = 42,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "전체 비율 합계 9 중 B팀의 비율 3을 적용한다.",
+          "B팀 부담액만 계산식과 함께 42,000원으로 제시한다."
+        ],
+        "forbidden_claims": [
+          "세 팀이 같은 금액을 부담한다고 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "126000*3/(2+3+4)",
+          "result": "42000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-25",
+      "task": "general_arithmetic",
+      "domain": "복합 금액 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-discount-tax"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "물품 4개를 개당 36,000원에 삽니다. 물품 합계에서 10% 할인한 뒤, 할인된 금액에 부가세 10%를 더하기로 했습니다. 다른 비용은 없을 때 최종 금액은요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "물품 합계는 36,000 × 4 = 144,000원이고, 10% 할인 후 금액은 144,000 × 0.9 = 129,600원입니다. 할인된 금액에 부가세 10%를 더하면 129,600 × 1.1 = 142,560원입니다.",
+      "rubric": {
+        "required_claims": [
+          "개당 가격과 수량으로 물품 합계를 구한다.",
+          "할인된 금액을 기준으로 부가세를 더해 142,560원을 계산한다."
+        ],
+        "forbidden_claims": [
+          "10% 할인과 10% 부가세가 서로 상쇄된다고 한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "36000*4*(1-0.1)*(1+0.1)",
+          "result": "142560",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-26",
+      "task": "general_arithmetic",
+      "domain": "상한 적용",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-reimbursement-cap"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 동호회가 교육비의 70%를 지원하되 1회 지원금은 최대 100,000원으로 정했습니다. 교육비가 156,000원이면 이번 지원금은 얼마인가요?",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "교육비 156,000원의 70%는 156,000 × 0.7 = 109,200원입니다. 지원금은 min(109,200, 100,000) = 100,000원으로, 1회 지원금 상한을 적용합니다.",
+      "rubric": {
+        "required_claims": [
+          "교육비의 70%인 109,200원을 계산한다.",
+          "1회 지원금 상한을 적용해 100,000원을 제시한다."
+        ],
+        "forbidden_claims": [
+          "교육비 자체를 100,000원으로 제한한 뒤 70%를 계산한다.",
+          "상한을 연간 상한으로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min(156000*0.7,100000)",
+          "result": "100000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-27",
+      "task": "general_arithmetic",
+      "domain": "증감 비교",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-percentage-point"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "지난달 설문 응답률은 65%, 이번 달은 72%였습니다. 응답률이 몇 퍼센트포인트 올랐는지 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "지난달 65%에서 이번 달 72%로 변했으므로, 72 − 65 = 7퍼센트포인트 상승했습니다.",
+      "rubric": {
+        "required_claims": [
+          "두 응답률의 차이를 계산한다.",
+          "상승 폭을 7퍼센트포인트로 표시한다."
+        ],
+        "forbidden_claims": [
+          "상승 폭을 7%라고만 표시한다.",
+          "상대 증가율을 퍼센트포인트로 제시한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "72-65",
+          "result": "7",
+          "unit": "퍼센트포인트"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-28",
+      "task": "general_arithmetic",
+      "domain": "묶음 구매",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-round-up-packs"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "파일 53개가 필요합니다. 파일은 8개들이 묶음으로만 팔고 묶음당 1,500원입니다. 필요한 묶음 수는 소수점이 나오면 올림합니다. 최소 구매 비용을 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "필요한 묶음 수는 53 ÷ 8 = 6.625묶음이므로 올림해 7묶음입니다. 최소 구매 비용은 7 × 1,500 = 10,500원입니다.",
+      "rubric": {
+        "required_claims": [
+          "53개를 8개씩 나누고 올림해 7묶음을 구한다.",
+          "묶음당 1,500원을 적용해 10,500원을 계산한다."
+        ],
+        "forbidden_claims": [
+          "6묶음만 구매한다고 한다.",
+          "소수 묶음을 구매할 수 있다고 계산한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "7*1500",
+          "result": "10500",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-29",
+      "task": "general_arithmetic",
+      "domain": "구매 합계",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-purchase-table"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 팀 행사 준비물로 펜 12개를 개당 800원에, 수첩 5개를 개당 2,400원에 삽니다. 추가 비용은 없습니다. 품목별 계산식과 금액, 총액을 표로 정리해 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 품목 | 계산식 | 금액 |\n|---|---|---|\n| 펜 | 12개 × 800원/개 | 9,600원 |\n| 수첩 | 5개 × 2,400원/개 | 12,000원 |\n| 합계 | 9,600원 + 12,000원 | 21,600원 |",
+      "rubric": {
+        "required_claims": [
+          "펜 9,600원과 수첩 12,000원을 각각 계산한다.",
+          "총액 21,600원을 계산식이 있는 표로 제시한다."
+        ],
+        "forbidden_claims": [
+          "주어지지 않은 세금이나 배송비를 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "12*800+5*2400",
+          "result": "21600",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-g01-30",
+      "task": "general_arithmetic",
+      "domain": "균등 분담",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "g01-shared-expenses-table"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "점심값 63,000원과 음료값 21,000원을 7명이 똑같이 나눕니다. 점심과 음료 각각의 1인 부담액, 1인 총 부담액을 계산식과 함께 표로 보여 주세요.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 항목 | 계산식 | 1인 부담액 |\n|---|---|---|\n| 점심 | 63,000원 ÷ 7명 | 9,000원 |\n| 음료 | 21,000원 ÷ 7명 | 3,000원 |\n| 합계 | (63,000원 + 21,000원) ÷ 7명 | 12,000원 |",
+      "rubric": {
+        "required_claims": [
+          "점심과 음료의 1인 부담액을 각각 9,000원, 3,000원으로 계산한다.",
+          "1인 총 부담액 12,000원을 계산식이 있는 표로 제시한다."
+        ],
+        "forbidden_claims": [
+          "전체 비용 84,000원을 1인 부담액으로 제시한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(63000+21000)/7",
+          "result": "12000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author g01 (development batch)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    }
+  ]
+}

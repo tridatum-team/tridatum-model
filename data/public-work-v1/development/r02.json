@@ -1,0 +1,1103 @@
+{
+  "schema": "trid-public-work-development-batch-v1",
+  "batch": "r02",
+  "split": "train",
+  "business_group": "일반",
+  "institutions": [],
+  "cases": [
+    {
+      "id": "dev-r02-01",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-file-request"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“수정한 파일을 오늘 오후 3시까지 나한테 보내 줘.”를 정중한 한 문장으로만 바꿔 주세요. 상대에게 보내 달라는 뜻은 그대로 두세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "수정한 파일을 오늘 오후 3시까지 제게 보내 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대에게 수정한 파일을 오늘 오후 3시까지 자신에게 보내 달라고 정중하게 요청한다."
+        ],
+        "forbidden_claims": [
+          "자신이 파일을 보내겠다는 약속으로 바꾼다.",
+          "기한이나 파일의 수정 여부를 바꾸거나 설명을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-02",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-refusal"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래 거절을 정중하게 두 문장으로 바꿔 주세요. 사유나 대안은 새로 넣지 마세요. “내일 모임에는 못 가. 추가 준비도 맡을 수 없어.”",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "내일 모임에는 참석하기 어렵습니다. 추가 준비도 맡기 어렵습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 내일 모임 참석과 추가 준비 담당을 모두 거절한다."
+        ],
+        "forbidden_claims": [
+          "참석이나 준비를 수락하거나 조건부 수락으로 바꾼다.",
+          "거절 사유나 대안을 새로 만든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-03",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-question"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“예약을 취소하면 낸 돈 전부 돌려받아?”를 공손한 질문 한 문장으로만 고쳐 주세요. 답변을 해 달라는 건 아닙니다.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "예약을 취소하면 납부한 금액 전부를 돌려받을 수 있습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 예약 취소 시 납부 금액 전액을 돌려받는지 묻는다."
+        ],
+        "forbidden_claims": [
+          "전액 환불이 된다고 답하거나 환불을 요구하는 문장으로 바꾼다.",
+          "환불 조건을 새로 붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-04",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-conditional-request"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“변경된 부분이 있으면 표시해 줘. 없으면 없다고 알려 줘.”를 정중한 두 문장으로 바꿔 주세요. 두 조건을 그대로 남겨 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "변경된 부분이 있으면 표시해 주시겠습니까? 변경된 부분이 없으면 없다고 알려 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 변경 부분이 있는 경우의 표시 요청과 없는 경우의 알림 요청을 구분한다."
+        ],
+        "forbidden_claims": [
+          "변경 사항이 없다고 단정한다.",
+          "조건 중 하나를 빼거나 자신이 표시하겠다고 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-05",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-availability-question"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“화요일 오전은 비어 있어? 안 되면 목요일 오후는 어때?”를 격식 있는 질문 두 문장으로만 바꿔 주세요. 일정을 확정하지는 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "화요일 오전에 시간이 가능하십니까? 화요일 오전이 어려우시면 목요일 오후는 가능하십니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 화요일 오전의 가능 여부를 먼저 묻고, 어려울 경우 목요일 오후의 가능 여부를 묻는다."
+        ],
+        "forbidden_claims": [
+          "화요일이나 목요일로 일정을 확정한다.",
+          "목요일 오후를 무조건적인 추가 일정으로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-06",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-lending-refusal"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“이번 주에는 내 자전거를 빌려줄 수 없어.”를 정중한 한 문장으로 바꿔 주세요. 다른 주에 빌려주겠다는 말은 넣지 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이번 주에는 제 자전거를 빌려드리기 어렵습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 이번 주 자신의 자전거를 빌려주기 어렵다는 거절을 정중하게 유지한다."
+        ],
+        "forbidden_claims": [
+          "다른 주에 빌려주겠다고 약속한다.",
+          "상대에게 자전거를 빌려 달라는 요청으로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-07",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-recheck-request"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“합계만 다시 봐 줘. 항목 이름은 건드리지 마.”를 공손한 두 문장으로만 바꿔 주세요. 확인 범위를 넓히면 안 됩니다.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "합계만 다시 확인해 주시겠습니까? 항목 이름은 변경하지 말아 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 상대에게 합계만 다시 확인하고 항목 이름은 변경하지 말아 달라고 요청한다."
+        ],
+        "forbidden_claims": [
+          "전체 내용을 검토하거나 항목 이름을 수정해 달라고 바꾼다.",
+          "자신이 검토하겠다고 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-08",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-rewrite-return-question"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“이 책은 어디에 반납해야 해?”를 정중한 질문 한 문장으로만 바꿔 주세요. 장소를 추측하지 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이 책은 어디에 반납하면 되겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 책의 반납 장소를 정중하게 묻는다."
+        ],
+        "forbidden_claims": [
+          "반납 장소를 임의로 제시한다.",
+          "책을 반납하겠다는 통보로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-09",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-concept-painting-tone"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "그림 수업에서 선생님이 “명도를 낮춰 보세요”라고 했어요. 여기서 명도가 뭔지 두 문장으로 설명해 주세요. 간단한 예시는 하나만 넣어 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "그림에서 명도는 색이 얼마나 밝거나 어두운지를 뜻하며, 명도를 낮추라는 말은 색을 더 어둡게 하라는 뜻입니다. 예를 들어 밝은 회색을 짙은 회색으로 바꾸면 명도가 낮아집니다.",
+      "rubric": {
+        "required_claims": [
+          "그림의 맥락에서 명도를 색의 밝고 어두운 정도로 설명하고 낮추기는 더 어둡게 만들기라고 설명한다.",
+          "정확히 두 문장에 간단한 예시를 하나만 포함한다."
+        ],
+        "forbidden_claims": [
+          "명도를 색의 선명함이나 채도로 설명한다.",
+          "그림과 무관한 뜻을 설명하거나 예시를 여러 개 든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-10",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-concept-cooking-reduction"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "소스 조리법의 “졸이기”가 무슨 뜻인지 두 문장으로 설명해 주세요. 국물이나 소스를 만드는 상황으로, 쉬운 예 하나만요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "조리에서 졸이기는 국물이나 소스를 가열해 수분을 줄이고 맛을 진하게 만드는 과정입니다. 예를 들어 묽은 간장 소스를 약한 불로 끓여 양을 줄이면 더 진한 소스가 됩니다.",
+      "rubric": {
+        "required_claims": [
+          "조리 맥락에서 가열로 수분을 줄여 맛을 진하게 만드는 과정이라고 설명한다.",
+          "정확히 두 문장으로 설명하며 쉬운 예시를 하나만 든다."
+        ],
+        "forbidden_claims": [
+          "불을 끄고 식히는 과정이나 단순히 재료를 섞는 과정이라고 설명한다.",
+          "실제 조리법의 분량이나 시간을 임의로 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-11",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-concept-music-tempo"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "음악 시간에 나온 “템포”를 두 문장으로 알려 주세요. 연주할 때의 뜻과 쉬운 예 하나면 돼요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "음악에서 템포는 곡을 연주하는 빠르기입니다. 예를 들어 같은 노래를 더 빠르게 연주하면 템포가 빨라집니다.",
+      "rubric": {
+        "required_claims": [
+          "연주 맥락에서 템포를 빠르기로 설명한다.",
+          "정확히 두 문장에 예시를 하나만 넣는다."
+        ],
+        "forbidden_claims": [
+          "템포를 음의 높이나 소리의 크기로 설명한다.",
+          "음악 외의 상황을 중심으로 설명한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-12",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-concept-sports-personal-best"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "달리기 모임에서 말하는 “개인 최고 기록”이 뭔지 두 문장으로 설명해 주세요. 5km 달리기 예시 하나만 넣어 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "달리기에서 개인 최고 기록은 자신이 같은 거리를 달린 기록 중 가장 빠른 기록입니다. 예를 들어 이전 5km 최고 기록이 30분이었는데 이번에 28분에 완주했다면 28분이 새 개인 최고 기록입니다.",
+      "rubric": {
+        "required_claims": [
+          "달리기의 개인 최고 기록을 같은 거리에서 자신의 가장 빠른 기록으로 설명한다.",
+          "정확히 두 문장에 5km 예시 하나만 제시하며 이전 최고 기록보다 짧은 완주 시간이 새 개인 최고 기록임을 보여 준다."
+        ],
+        "forbidden_claims": [
+          "모임 구성원 중 가장 빠른 사람의 기록이라고 설명한다.",
+          "달린 시간이 길수록 좋은 기록이라고 설명한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-13",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-priority-user-first"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "회의 자료는 오탈자, 날짜, 합계 세 가지를 확인해야 해요. 마감은 같고 저는 합계를 제일 먼저, 날짜를 그다음, 오탈자를 마지막에 보고 싶어요. 그 순서만 한 문장으로 정리해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "합계, 날짜, 오탈자 순으로 확인합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 합계 → 날짜 → 오탈자 순서만 제시한다."
+        ],
+        "forbidden_claims": [
+          "더 쉬운 일이나 중요하다고 판단한 일을 임의로 앞세운다.",
+          "이유나 확인 요령을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-14",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-priority-deadline-order"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "세 작업의 마감이 모두 오늘이에요. 자료 업로드는 오후 4시, 예약 확인은 오전 11시, 명단 정리는 오후 1시예요. 마감이 빠른 순서만 한 문장으로 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "예약 확인, 명단 정리, 자료 업로드 순으로 진행합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 오전 11시 예약 확인 → 오후 1시 명단 정리 → 오후 4시 자료 업로드 순서를 제시한다."
+        ],
+        "forbidden_claims": [
+          "질문에 나열된 순서대로 답한다.",
+          "작업량이나 중요도를 추측해 순서를 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-15",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-priority-specified-override"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아직 둘 다 마감까지 여유가 있어요. 안내문 교정은 내일 마감이고 연락처 검토는 모레 마감이지만, 이번에는 연락처 검토부터 하고 안내문 교정을 하려고 해요. 제가 정한 작업 순서만 한 문장으로 써 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "연락처 검토를 먼저 하고 안내문 교정을 합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 사용자가 지정한 연락처 검토 → 안내문 교정 순서를 제시한다."
+        ],
+        "forbidden_claims": [
+          "마감이 더 빠르다는 이유로 안내문 교정을 먼저 하도록 바꾼다.",
+          "추가 작업이나 조언을 제시한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-16",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-priority-cross-date"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "신청서 제출은 7월 9일 오전 10시, 참가비 납부는 7월 8일 오후 5시, 준비물 확인은 7월 9일 오전 9시까지예요. 같은 해 일정이고 마감이 빠른 순서로 할 거예요. 작업 이름만 한 문장으로 정리해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "참가비 납부, 준비물 확인, 신청서 제출 순입니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 참가비 납부 → 준비물 확인 → 신청서 제출 순서만 제시한다."
+        ],
+        "forbidden_claims": [
+          "날짜를 무시하고 시각만 비교한다.",
+          "마감이나 작업 이름을 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-17",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-history-notice-count"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "모임은 토요일 오전 10시, 장소는 2층 연습실이에요. 이 사실만으로 안내를 두 문장으로 써 주세요."
+        },
+        {
+          "role": "assistant",
+          "content": "모임은 토요일 오전 10시에 열립니다. 장소는 2층 연습실입니다."
+        }
+      ],
+      "question": "내용은 그대로 두고 이번에는 한 문장으로 합쳐 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "모임은 토요일 오전 10시에 2층 연습실에서 열립니다.",
+      "rubric": {
+        "required_claims": [
+          "이전 요청의 토요일 오전 10시와 2층 연습실을 모두 유지한다.",
+          "변경된 한 문장 제한을 지킨다."
+        ],
+        "forbidden_claims": [
+          "이전의 두 문장 제한을 그대로 따른다.",
+          "준비물이나 참석 의무를 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-18",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-history-acknowledgement-length"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "친구들 앞에서 연주할 생각에 긴장돼요. 제 마음을 먼저 한 문장으로 헤아려 주고, 짧게 응원해 주세요. 연습 방법은 말고 총 세 문장으로요."
+        },
+        {
+          "role": "assistant",
+          "content": "친구들 앞에서 연주할 생각에 긴장되시는군요. 준비해 온 만큼 차분히 연주하시기를 바랍니다. 응원합니다."
+        }
+      ],
+      "question": "같은 요청인데 세 문장 말고 두 문장으로 줄여 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "친구들 앞에서 연주할 생각에 긴장되시는군요. 준비해 온 만큼 차분히 연주하시기를 응원합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 줄이면서 사용자가 요청한 긴장에 대한 마음 헤아림을 유지한다.",
+          "짧게 응원하고 연습 방법은 제안하지 않는다."
+        ],
+        "forbidden_claims": [
+          "마음 헤아림을 삭제한다.",
+          "성공을 보장하거나 연습 방법을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-19",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-history-remove-solution"
+      ],
+      "documents": [],
+      "history": [
+        {
+          "role": "user",
+          "content": "계획대로 방을 정리하지 못해서 답답해요. 제 마음을 한 문장으로 헤아려 주고 해결법 하나를 한 문장으로 말해 주세요. 총 두 문장으로요."
+        },
+        {
+          "role": "assistant",
+          "content": "계획대로 방을 정리하지 못해 답답하시군요. 오늘 정리할 공간을 책상 한 곳으로 좁혀 보시기 바랍니다."
+        }
+      ],
+      "question": "마음은 한 문장으로 헤아려 주되, 이번에는 해결법은 말고 응원만 한 문장 덧붙여 주세요. 총 두 문장은 유지해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "계획대로 정리하지 못해 답답하시군요. 오늘의 아쉬움에 너무 오래 묶이지 않으시기를 응원합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 답하며 첫 문장은 사용자가 요청한 답답한 마음의 인정이다.",
+          "변경된 요청에 따라 둘째 문장은 응원만 하고 해결 방법은 제시하지 않는다."
+        ],
+        "forbidden_claims": [
+          "이전 답변의 해결법을 반복하거나 다른 해결법을 제시한다.",
+          "감정 인정 대신 상황을 평가하거나 탓한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-20",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-notice-elevator"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "적은 사실만 사용해서 안내문을 두 문장으로 써 주세요. 6월 12일 오전 9시부터 11시까지 승강기 점검, 해당 시간 승강기 운행 중지. 다른 이용 방법이나 문의처는 넣지 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "6월 12일 오전 9시부터 11시까지 승강기를 점검합니다. 해당 시간에는 승강기 운행을 중지합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 6월 12일 오전 9시부터 11시까지 점검하며 그 시간 운행을 중지한다고 안내한다."
+        ],
+        "forbidden_claims": [
+          "계단 이용 등 대체 방법이나 문의처를 추가한다.",
+          "운행 중지 시간을 늘리거나 점검 목적을 꾸민다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-21",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-notice-book-exchange"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "책 교환 모임 공지를 한 문장으로 써 주세요. 사실은 “8월 21일 오후 2시”, “작은방”, “책 한 권 지참”뿐이에요. 참가비나 신청 안내는 넣지 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "책 교환 모임은 8월 21일 오후 2시에 작은방에서 열리며, 책 한 권을 지참해 주시기 바랍니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 8월 21일 오후 2시, 작은방, 책 한 권 지참을 모두 안내한다."
+        ],
+        "forbidden_claims": [
+          "참가비, 신청 방식, 모집 인원 등 주어지지 않은 사실을 추가한다.",
+          "책의 종류나 상태에 관한 조건을 붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-22",
+      "task": "general_dialogue",
+      "domain": "일상 대화",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-notice-lost-umbrella"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "분실물 안내를 두 문장으로만 만들어 주세요. 확인된 건 “11월 3일 발견”, “1층 휴게실에서 발견”, “파란 우산”, “관리실 보관”이에요. 소유자 확인 방식은 알 수 없으니 쓰지 마세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "11월 3일 1층 휴게실에서 파란 우산을 발견했습니다. 해당 우산은 관리실에 보관 중입니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 발견일 11월 3일, 발견 장소 1층 휴게실, 파란 우산, 관리실 보관을 모두 안내한다."
+        ],
+        "forbidden_claims": [
+          "소유자 확인 방식이나 수령 가능 시간, 연락처를 꾸민다.",
+          "보관 기한이나 폐기 방침을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-23",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-annual-remaining-cap"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 취미 지원 규칙이에요. 수강료의 60%를 지원하되 1년 지원 총액은 70,000원을 넘을 수 없어요. 올해 이미 20,000원을 받았고 이번 수강료는 150,000원이에요. 이번에 받을 수 있는 금액을 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이번에 받을 수 있는 지원금은 50,000원입니다. 수강료 기준 지원금은 150,000원 × 60% = 90,000원이고 연간 잔여 한도는 70,000원 − 20,000원 = 50,000원이므로, 이번 지원금은 min(90,000원, 50,000원) = 50,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "수강료의 60%인 90,000원과 올해 남은 한도 50,000원을 구분한다.",
+          "두 금액 중 작은 금액인 50,000원을 이번 지원금으로 제시하고 입력값과 식을 보여 준다."
+        ],
+        "forbidden_claims": [
+          "이미 받은 20,000원을 무시하고 70,000원을 지급한다고 계산한다.",
+          "수강료 자체에서 기존 지원금을 뺀 후 지원율을 적용한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min(150000*0.6,70000-20000)",
+          "result": "50000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-24",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-eligible-cost-cap"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 동호회에서는 재료 구입비 중 최대 90,000원까지만 지원 대상 비용으로 인정하고, 인정된 비용의 80%를 돌려줘요. 재료비로 120,000원을 썼다면 환급액은 얼마인가요? 식도 보여 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "환급액은 72,000원입니다. 인정 비용은 min(120,000원, 90,000원) = 90,000원이고, 환급액은 90,000원 × 80% = 72,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "지원 대상 비용을 90,000원으로 제한한 다음 80%를 적용한다.",
+          "입력값과 계산식을 제시하고 환급액을 72,000원으로 계산한다."
+        ],
+        "forbidden_claims": [
+          "120,000원에 80%를 먼저 곱한 뒤 환급액에 90,000원 상한을 적용한다.",
+          "지원 대상 비용 상한 90,000원을 환급액으로 답한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min(120000,90000)*0.8",
+          "result": "72000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-25",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-shipping-after-coupon"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 상점에서 18,000원짜리 물건 두 개와 12,000원짜리 물건 한 개를 사고 6,000원 쿠폰을 썼어요. 무료배송은 쿠폰을 뺀 상품 금액이 45,000원 이상일 때만 적용되고, 미만이면 배송비가 3,000원이에요. 다른 비용은 없을 때 총 결제액을 식과 함께 알려 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "총 결제액은 45,000원입니다. 쿠폰 적용 후 상품 금액은 18,000원 × 2 + 12,000원 − 6,000원 = 42,000원으로 무료배송 기준인 45,000원 미만입니다. 따라서 배송비를 포함한 결제액은 42,000원 + 3,000원 = 45,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "쿠폰 차감 후 상품 금액 42,000원을 무료배송 기준과 비교한다.",
+          "배송비 3,000원을 더해 총 결제액 45,000원을 계산하고 입력값과 식을 제시한다."
+        ],
+        "forbidden_claims": [
+          "쿠폰 차감 전 48,000원을 기준으로 무료배송을 적용한다.",
+          "배송비를 더한 결제액으로 무료배송 여부를 다시 판단한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "18000*2+12000-6000+3000",
+          "result": "45000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-26",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-each-day-cap"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 행사에서 식비는 하루 실제 지출액을 돌려주되 하루 한도는 18,000원이고, 남는 한도를 다른 날로 옮길 수 없어요. 사흘 동안 각각 23,000원, 14,000원, 19,000원을 썼어요. 총 환급액을 식과 함께 계산해 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "총 환급액은 50,000원입니다. 날짜별 한도를 적용하면 min(23,000원, 18,000원) + min(14,000원, 18,000원) + min(19,000원, 18,000원) = 18,000원 + 14,000원 + 18,000원 = 50,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "하루별 실제 지출액에 18,000원 상한을 각각 적용한다.",
+          "입력값과 식을 제시하고 사흘 총 환급액을 50,000원으로 계산한다."
+        ],
+        "forbidden_claims": [
+          "전체 지출액에 사흘 합산 한도 54,000원만 적용한다.",
+          "둘째 날의 남은 한도를 다른 날에 옮긴다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min(23000,18000)+min(14000,18000)+min(19000,18000)",
+          "result": "50000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-27",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-adult-headcount-threshold"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 체험장의 입장료는 성인 15,000원, 어린이 8,000원이에요. 성인이 10명 이상이면 성인 입장료만 20% 할인되고, 어린이는 인원 기준에도 포함되지 않고 할인도 없어요. 성인 8명과 어린이 4명이 가면 총 입장료는 얼마인가요? 계산 과정도요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "총 입장료는 152,000원입니다. 할인 기준에 포함되는 성인은 8명으로 10명 미만이므로 성인 할인은 적용되지 않습니다. 총 입장료는 15,000원 × 8명 + 8,000원 × 4명 = 120,000원 + 32,000원 = 152,000원입니다.",
+      "rubric": {
+        "required_claims": [
+          "할인 기준 인원은 전체 12명이 아니라 성인 8명이므로 할인이 없다고 판단한다.",
+          "성인과 어린이 요금을 각각 계산해 총 152,000원을 입력값과 식으로 제시한다."
+        ],
+        "forbidden_claims": [
+          "어린이를 포함한 12명으로 할인 조건을 충족한다고 판단한다.",
+          "어린이 입장료에도 할인을 적용한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "15000*8+8000*4",
+          "result": "152000",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-28",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-excess-net-payment"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 적립 행사예요. 반품액을 뺀 최종 상품 결제액 중 50,000원을 넘는 부분의 10%만 적립하고, 적립금은 최대 3,000원이에요. 처음 86,000원을 결제한 뒤 12,000원을 반품했다면 적립금은 얼마인가요? 식도 부탁해요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "적립금은 2,400원입니다. 최종 상품 결제액은 86,000원 − 12,000원 = 74,000원이고, 적립금은 min((74,000원 − 50,000원) × 10%, 3,000원) = 2,400원입니다.",
+      "rubric": {
+        "required_claims": [
+          "반품 후 결제액 74,000원 중 기준 초과분 24,000원에만 10%를 적용한다.",
+          "적립금 상한 3,000원과 비교해 2,400원을 답하고 입력값과 식을 보여 준다."
+        ],
+        "forbidden_claims": [
+          "반품 전 금액으로 적립한다.",
+          "최종 결제액 전체에 10%를 적용하거나 적립금이 항상 3,000원이라고 답한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "min((86000-12000-50000)*0.1,3000)",
+          "result": "2400",
+          "unit": "원"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-29",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-leap-elapsed"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 독서 기록을 계산하려고 해요. 2028년 2월 27일에 시작해서 3월 3일에 끝났어요. 시작일은 세지 않고 종료일은 세며, 주말도 포함하면 며칠인가요? 날짜를 나눈 계산식도 써 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "경과 일수는 5일입니다. 2028년 2월은 29일까지이므로 시작일인 2월 27일을 제외한 2월 28~29일의 2일과 3월 1~3일의 3일을 더하면 (29 − 27)일 + 3일 = 5일입니다.",
+      "rubric": {
+        "required_claims": [
+          "2028년 2월 29일을 포함하되 시작일 2월 27일은 제외하고 종료일 3월 3일은 포함한다.",
+          "날짜 구간별 입력값과 식을 제시하며 경과 일수를 5일로 계산한다."
+        ],
+        "forbidden_claims": [
+          "윤일을 누락하거나 시작일을 포함해 센다.",
+          "주말을 제외한다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(29-27)+3",
+          "result": "5",
+          "unit": "일"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r02-30",
+      "task": "general_arithmetic",
+      "domain": "일상 계산",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r02-arithmetic-return-calendar-date"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 물품 대여 규칙상 반납일은 대여일의 다음 날부터 6일째 되는 날이에요. 주말이나 휴일이어도 미루지 않아요. 2027년 4월 28일에 빌렸다면 반납일은 언제인가요? 며칠씩 세었는지도 식으로 보여 주세요.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "반납일은 2027년 5월 4일입니다. 대여일인 4월 28일을 제외하고 4월 29~30일의 2일과 5월 1~4일의 4일을 세면 (30 − 28)일 + 4일 = 6일이 됩니다.",
+      "rubric": {
+        "required_claims": [
+          "대여일을 제외하고 다음 날부터 달력상 6일을 세어 2027년 5월 4일을 답한다.",
+          "4월의 2일과 5월의 4일을 더한 6일을 입력값 및 식과 함께 제시한다."
+        ],
+        "forbidden_claims": [
+          "대여일을 첫날로 세어 5월 3일로 답한다.",
+          "주말이나 휴일을 이유로 반납일을 미룬다."
+        ],
+        "required_citations": [],
+        "calculation": {
+          "expression": "(30-28)+4",
+          "result": "6",
+          "unit": "일"
+        }
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r02 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    }
+  ]
+}
