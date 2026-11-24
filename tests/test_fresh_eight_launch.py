@@ -1,15 +1,18 @@
 """Offline only: no subprocesses, credentials, AWS requests or paid resources."""
 import copy
 import hashlib
+from datetime import datetime, timezone
 import json
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
-from types import FunctionType
+from types import FunctionType, SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from scripts.aws_eval import fresh_eight_launch as fresh
+from scripts.aws_eval import public_work_operator_inputs as operator
 
 
 SHA = 'a' * 64
@@ -59,6 +62,379 @@ def pin(root, name, content):
     raw = content if isinstance(content, bytes) else json.dumps(content).encode()
     path.write_bytes(raw)
     return dict(path=name, bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+
+
+class PublicWorkOperatorSafetyTests(unittest.TestCase):
+    """Fresh synthetic receipts only; no published run artifacts or AWS process."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.run = self.root / 'fresh'
+        self.reference = self.root / 'reference'
+        self.run.mkdir()
+        self.reference.mkdir()
+        self.old_run = 'public-work-historical'
+        self.new_run = 'public-work-fresh'
+        self.identity = dict(run_id=self.new_run, region='ap-northeast-2',
+                             account='123456789012')
+        self.started = '2030-01-01T00:00:00Z'
+        self.completed = '2030-01-01T00:00:01Z'
+        self.clock = datetime(2030, 1, 1, 0, 5, tzinfo=timezone.utc)
+        pin(self.root, 'reference/plan.json',
+            {'approved': True, 'authorization': 'historical-grant'})
+        pin(self.root, 'fresh/projection.json', {'cloud_authorized': False})
+        self.args = SimpleNamespace(
+            allow_read_only_aws=True, profile='fresh-operator',
+            reference_run_dir=self.reference, run_dir=self.run,
+            projection=self.run / 'projection.json', run_id=self.new_run,
+            observations_sha256=None, error_review=None,
+            approve_fresh_one_run=False,
+            approve_ancillary_retention_network_cost_review=False,
+            absolute_deadline_utc='2030-01-01T08:00:00Z')
+        self.queries = {
+            'instances': ['aws', 'ec2', 'describe-instances', '--filters',
+                'Name=tag:trid:run,Values=' + self.old_run,
+                'Name=instance-state-name,Values=pending,running,stopping,stopped',
+                '--region', 'ap-northeast-2', '--profile', 'historical-profile',
+                '--output', 'json'],
+            'new_security_group_absent': ['aws', 'ec2', 'describe-security-groups',
+                '--filters', 'Name=group-name,Values=' + self.old_run + '-sg',
+                'Name=vpc-id,Values=vpc-synthetic', '--region', 'ap-northeast-2',
+                '--output', 'json'],
+            'code_prefix_empty': ['aws', 's3api', 'list-objects-v2',
+                '--bucket', 'synthetic-bucket', '--prefix', 'code/' + self.old_run + '/',
+                '--region', 'ap-northeast-2', '--output', 'json'],
+            'instance_role_absent': ['aws', 'iam', 'get-role',
+                '--role-name', self.old_run + '-worker', '--output', 'json'],
+        }
+        historical = {}
+        for name, query in self.queries.items():
+            historical[name] = pin(self.root, 'reference/' + name + '.json',
+                dict(query=query, started_at='2020-01-01T00:00:00Z',
+                     completed_at='2020-01-01T00:00:01Z', exit_code=0,
+                     response={'approved': True, 'authorization': 'historical-grant'}))
+        self.ctx = (self.root, self.run, {'approved': True}, {'approved': True},
+                    self.identity, {self.old_run: self.new_run},
+                    {'cloud_authorized': False}, {'observations': historical})
+
+    def collect(self, runner=None):
+        runner = runner or Mock(return_value=SimpleNamespace(
+            returncode=0, stdout='{"current": true}', stderr=''))
+        count = len(self.queries) + 1
+        with patch.object(operator.subprocess, 'run', runner), \
+                patch.object(operator, 'now', side_effect=[self.started, self.completed] * count), \
+                patch('builtins.print'):
+            operator.observe(self.args, self.ctx)
+        self.args.observations_sha256 = operator.pin(
+            self.root, self.run / 'operator-observations.json')['sha256']
+        return runner, fresh.load(self.run / 'operator-observations.json')
+
+    def load_observations(self):
+        with patch.object(operator, 'datetime', wraps=datetime) as clock:
+            clock.now.return_value = self.clock
+            return operator.observations(self.args, self.root, self.run, self.identity)
+
+    def rewrite_receipt(self, name, **changes):
+        ledger = fresh.load(self.run / 'operator-observations.json')
+        relative = ledger['observations'][name]['path']
+        receipt = fresh.load(self.root / relative)
+        receipt.update(changes)
+        ledger['observations'][name] = pin(self.root, relative, receipt)
+        self.args.observations_sha256 = pin(
+            self.root, 'fresh/operator-observations.json', ledger)['sha256']
+
+    def test_readonly_rejects_mutation_shell_and_indirect_inputs(self):
+        forbidden = (
+            ['aws', 'ec2', 'run-instances'],
+            ['aws', 'ec2', 'terminate-instances'],
+            ['aws', 'iam', 'create-role'],
+            ['aws', 's3api', 'put-object'],
+            ['aws', 'scheduler', 'create-schedule'],
+            ['aws', 'sts', 'get-session-token'],
+            ['aws', 'sts', 'get-federation-token'],
+            ['aws', 'ecr', 'get-authorization-token'],
+            ['aws', 'ecr', 'get-login-password'],
+            ['aws', 'sso', 'get-role-credentials'],
+            ['aws', 'redshift-serverless', 'get-credentials'],
+            ['sh', '-c', 'aws ec2 describe-instances'],
+            ['aws', 'ec2', 'describe-instances', '--cli-input-json', 'file://request.json'],
+            ['aws', 'ec2', 'describe-instances', '--cli-input-json', 'fileb://request.json'],
+            ['aws', 'ec2', 'describe-instances', '--endpoint-url', 'https://example.invalid'],
+            ['aws', 'ec2', 'describe-instances', '--no-sign-request'],
+            ['aws', 'ec2', 'describe-instances', '--endpoint-url=https://example.invalid'],
+            ['aws', 'ec2', 'describe-instances', '--no-sign-request=true'],
+            ['aws', 'ec2', 'describe-instances', '--cli-input-json=file://request.json'],
+            ['aws', 'ec2', 'describe-instances', '--cli-input-json=fileb://request.json'],
+        )
+        with patch.object(operator.subprocess, 'run') as runner:
+            for query in forbidden:
+                with self.subTest(query=query), self.assertRaises(RuntimeError):
+                    operator.readonly(query)
+            runner.assert_not_called()
+
+    def test_inspector_batch_read_exception_is_exact_and_never_allows_batch_mutations(self):
+        query = ['aws', 'inspector2', 'batch-get-account-status',
+                 '--account-ids', '123456789012', '--region', 'ap-northeast-2',
+                 '--profile', 'fresh-operator', '--output', 'json']
+        with patch.object(operator.subprocess, 'run') as runner:
+            self.assertIs(operator.readonly(query), query)
+            for service, operation in (
+                    ('inspector', 'batch-get-account-status'),
+                    ('ec2', 'batch-get-account-status'),
+                    ('inspector2', 'batch-update-member-ec2-deep-inspection-status'),
+                    ('inspector2', 'batch-get-account-status-extra'),
+                    ('dynamodb', 'batch-write-item'),
+                    ('codebuild', 'batch-delete-builds'),
+                    ('glue', 'batch-delete-table')):
+                with self.subTest(service=service, operation=operation):
+                    with self.assertRaises(RuntimeError):
+                        operator.readonly(['aws', service, operation])
+            runner.assert_not_called()
+
+    def test_exact_critical_filters_and_transport_are_preserved(self):
+        def run(query, **kwargs):
+            inventory = fresh.load(self.run / 'readonly-calls.json')
+            self.assertIn(query, inventory['calls'].values())
+            self.assertFalse(inventory['cloud_mutations'])
+            self.assertEqual(kwargs['env']['AWS_PROFILE'], 'fresh-operator')
+            self.assertEqual(kwargs['env']['AWS_MAX_ATTEMPTS'], '1')
+            self.assertEqual(kwargs['env']['AWS_PAGER'], '')
+            self.assertEqual(kwargs['env']['AWS_IGNORE_CONFIGURED_ENDPOINT_URLS'], 'true')
+            self.assertEqual({key: value for key, value in kwargs.items() if key != 'env'},
+                             dict(capture_output=True, text=True, timeout=180, check=False))
+            return SimpleNamespace(returncode=0, stdout='{"current": true}', stderr='')
+
+        runner, ledger = self.collect(Mock(side_effect=run))
+        expected = [
+            ['aws', 'ec2', 'describe-instances', '--filters',
+             'Name=tag:trid:run,Values=public-work-fresh',
+             'Name=instance-state-name,Values=pending,running,stopping,stopped',
+             '--region', 'ap-northeast-2', '--profile', 'fresh-operator', '--output', 'json'],
+            ['aws', 'ec2', 'describe-security-groups', '--filters',
+             'Name=group-name,Values=public-work-fresh-sg', 'Name=vpc-id,Values=vpc-synthetic',
+             '--region', 'ap-northeast-2', '--output', 'json', '--profile', 'fresh-operator'],
+            ['aws', 's3api', 'list-objects-v2', '--bucket', 'synthetic-bucket',
+             '--prefix', 'code/public-work-fresh/', '--region', 'ap-northeast-2',
+             '--output', 'json', '--profile', 'fresh-operator'],
+            ['aws', 'iam', 'get-role', '--role-name', 'public-work-fresh-worker',
+             '--output', 'json', '--profile', 'fresh-operator'],
+            ['aws', 'sts', 'get-caller-identity', '--profile', 'fresh-operator',
+             '--region', 'ap-northeast-2', '--output', 'json', '--no-cli-pager',
+             '--cli-connect-timeout', '5', '--cli-read-timeout', '30'],
+        ]
+        self.assertEqual([call.args[0] for call in runner.call_args_list], expected)
+        self.assertEqual(len(ledger['observations']), len(expected))
+        self.assertFalse(ledger['old_observations_reused'])
+        self.assertFalse(ledger['cloud_mutations'])
+        for receipt_pin in ledger['observations'].values():
+            receipt = fresh.bound_json(self.root, receipt_pin)
+            self.assertEqual(receipt['started_at'], self.started)
+            self.assertEqual(receipt['completed_at'], self.completed)
+            self.assertEqual(receipt['response'], {'current': True})
+            self.assertEqual(receipt['exit_code'], 0)
+            self.assertIsNone(receipt['error_code'])
+        for name in ('authorization.json', 'approval.json', 'plan.json', 'registration.json'):
+            self.assertFalse((self.run / name).exists())
+
+    def test_permission_and_entire_inventory_are_checked_before_any_call(self):
+        with patch.object(operator.subprocess, 'run') as runner:
+            self.args.allow_read_only_aws = False
+            with self.assertRaisesRegex(RuntimeError, 'allow-read-only-aws'):
+                operator.observe(self.args, self.ctx)
+            self.assertFalse((self.run / 'observations').exists())
+            self.args.allow_read_only_aws = True
+            self.ctx[-1]['observations']['unsafe_last'] = pin(
+                self.root, 'reference/unsafe.json', {'query': ['aws', 'iam', 'delete-role']})
+            with self.assertRaisesRegex(RuntimeError, 'read-only'):
+                operator.observe(self.args, self.ctx)
+            runner.assert_not_called()
+        self.assertFalse((self.run / 'operator-observations.json').exists())
+
+    def test_observation_replay_never_calls_aws_or_changes_receipts(self):
+        self.collect()
+        before = (self.run / 'operator-observations.json').read_bytes()
+        with patch.object(operator.subprocess, 'run') as runner:
+            with self.assertRaisesRegex(RuntimeError, 'never replay'):
+                operator.observe(self.args, self.ctx)
+            runner.assert_not_called()
+        self.assertEqual((self.run / 'operator-observations.json').read_bytes(), before)
+
+    def test_successful_blank_bucket_acceleration_response_is_an_empty_object(self):
+        query = ['aws', 's3api', 'get-bucket-accelerate-configuration',
+                 '--bucket', 'synthetic-bucket', '--region', 'ap-northeast-2',
+                 '--output', 'json']
+        self.queries['bucket_acceleration'] = query
+        self.ctx[-1]['observations']['bucket_acceleration'] = pin(
+            self.root, 'reference/bucket-acceleration.json', {'query': query})
+
+        def run(argv, **kwargs):
+            stdout = '' if argv[1:3] == ['s3api', 'get-bucket-accelerate-configuration'] else '{}'
+            return SimpleNamespace(returncode=0, stdout=stdout, stderr='')
+
+        runner, ledger = self.collect(Mock(side_effect=run))
+        receipt = fresh.bound_json(self.root, ledger['observations']['bucket_acceleration'])
+        self.assertEqual(receipt['stdout'], '')
+        self.assertEqual(receipt['response'], {})
+        self.assertEqual(receipt['exit_code'], 0)
+        self.assertIsNone(receipt['error_code'])
+        self.assertEqual(runner.call_count, len(self.queries) + 1)
+        _, _, rows, _, _ = self.load_observations()
+        self.assertEqual(rows['bucket_acceleration']['response'], {})
+
+    def test_timeout_and_invalid_json_never_publish_complete_observation_ledger(self):
+        for failure in (subprocess.TimeoutExpired(['aws'], 180), None):
+            with self.subTest(failure=type(failure).__name__):
+                self.run = self.root / ('timeout' if failure else 'invalid-json')
+                self.run.mkdir()
+                ctx = (self.root, self.run, *self.ctx[2:])
+                runner = Mock(side_effect=failure) if failure else Mock(
+                    return_value=SimpleNamespace(returncode=0, stdout='not JSON', stderr=''))
+                with patch.object(operator.subprocess, 'run', runner), \
+                        patch.object(operator, 'now', return_value=self.started):
+                    with self.assertRaises(subprocess.TimeoutExpired if failure else json.JSONDecodeError):
+                        operator.observe(self.args, ctx)
+                self.assertEqual(runner.call_count, 1)
+                self.assertFalse((self.run / 'operator-observations.json').exists())
+                self.assertFalse((self.run / 'authorization.json').exists())
+
+    def test_paginated_response_is_retained_but_never_completes_collection(self):
+        response = {'Reservations': [], 'NextToken': 'unread-page'}
+        runner = Mock(return_value=SimpleNamespace(
+            returncode=0, stdout=json.dumps(response), stderr=''))
+        with patch.object(operator.subprocess, 'run', runner), \
+                patch.object(operator, 'now', side_effect=[self.started, self.completed]):
+            with self.assertRaisesRegex(RuntimeError, 'Incomplete AWS observation'):
+                operator.observe(self.args, self.ctx)
+        self.assertEqual(runner.call_count, 1)
+        receipt = fresh.load(self.run / 'observations' / 'instances.json')
+        self.assertEqual(receipt['response'], response)
+        self.assertEqual(receipt['exit_code'], 0)
+        self.assertFalse((self.run / 'operator-observations.json').exists())
+        self.assertFalse((self.run / 'authorization.json').exists())
+
+    def test_reviewed_receipts_cannot_hide_incomplete_pagination(self):
+        self.collect()
+        for key, value in (
+                ('NextToken', 'next'), ('next_token', 'next'), ('NextMarker', 'next'),
+                ('NextContinuationToken', 'next'), ('nextPageToken', 'next'),
+                ('IsTruncated', True)):
+            with self.subTest(key=key):
+                self.rewrite_receipt('instances', response={key: value})
+                with self.assertRaisesRegex(RuntimeError, 'Incomplete AWS observation'):
+                    self.load_observations()
+        self.rewrite_receipt('instances', response={'IsTruncated': False, 'NextToken': None})
+        self.load_observations()
+
+    def test_successful_receipts_require_json_objects_without_error_codes(self):
+        self.collect()
+        for response in (None, [], 'not an object'):
+            with self.subTest(response=response):
+                self.rewrite_receipt('instances', response=response)
+                with self.assertRaisesRegex(RuntimeError, 'JSON object'):
+                    self.load_observations()
+        self.rewrite_receipt('instances', response={}, error_code='AccessDenied')
+        with self.assertRaisesRegex(RuntimeError, 'Successful observation contains an error'):
+            self.load_observations()
+
+    def test_error_receipts_preserve_denial_and_never_treat_it_as_absence(self):
+        def run(query, **kwargs):
+            if query[1:3] == ['iam', 'get-role']:
+                return SimpleNamespace(returncode=254, stdout='', stderr=(
+                    'An error occurred (AccessDenied) when calling the GetRole operation: denied'))
+            return SimpleNamespace(returncode=0, stdout='{}', stderr='')
+        runner, ledger = self.collect(Mock(side_effect=run))
+        receipt = fresh.bound_json(self.root, ledger['observations']['instance_role_absent'])
+        self.assertEqual(receipt['error_code'], 'AccessDenied')
+        self.assertEqual(receipt['exit_code'], 254)
+        self.assertIsNone(receipt['response'])
+        self.assertEqual(runner.call_count, len(self.queries) + 1)
+        with self.assertRaisesRegex(RuntimeError, 'Unresolved read-only observation failure'):
+            self.load_observations()
+        self.rewrite_receipt('instance_role_absent', error_code='NoSuchEntity')
+        with self.assertRaisesRegex(RuntimeError, 'does not match actual stderr'):
+            self.load_observations()
+
+    def test_recognized_absence_requires_exact_service_error(self):
+        self.collect()
+        self.rewrite_receipt('instance_role_absent', exit_code=254, response=None,
+            error_code='NoSuchEntity', stderr=(
+                'An error occurred (NoSuchEntity) when calling the GetRole operation: absent'))
+        _, _, rows, earliest, latest = self.load_observations()
+        self.assertEqual(rows['instance_role_absent']['error_code'], 'NoSuchEntity')
+        self.assertEqual((earliest, latest), (self.started, self.completed))
+
+    def test_reviewed_digest_projection_and_original_time_window_are_required(self):
+        self.collect()
+        actual_sha = self.args.observations_sha256
+        self.args.observations_sha256 = '0' * 64
+        with self.assertRaisesRegex(RuntimeError, 'reviewed observation SHA'):
+            self.load_observations()
+        self.args.observations_sha256 = actual_sha
+        original_clock = self.clock
+        self.clock = datetime(2030, 1, 1, 1, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(RuntimeError, 'window expired'):
+            self.load_observations()
+        self.clock = datetime(2029, 12, 31, 23, 59, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(RuntimeError, 'Invalid observation timing'):
+            self.load_observations()
+        self.clock = original_clock
+        self.rewrite_receipt('instances', completed_at='2029-12-31T23:59:59Z')
+        with self.assertRaisesRegex(RuntimeError, 'Invalid observation timing'):
+            self.load_observations()
+        self.rewrite_receipt('instances', completed_at='2030-01-01T00:06:00Z')
+        with self.assertRaisesRegex(RuntimeError, 'Invalid observation timing'):
+            self.load_observations()
+        self.rewrite_receipt('instances', completed_at=self.completed)
+        pin(self.root, 'fresh/projection.json', {'cloud_authorized': False, 'changed': True})
+        with self.assertRaisesRegex(RuntimeError, 'run/projection differs'):
+            self.load_observations()
+
+    def test_historical_run_identity_is_rejected_before_projection_or_cloud_access(self):
+        pin(self.root, 'reference/registration.json',
+            dict(schema=fresh.PUBLIC_WORK_SCHEMA, identity={'run_id': self.old_run}))
+        pin(self.root, 'reference/plan.json', dict(schema=operator.public.SCHEMA, approved=True))
+        self.args.run_id = self.old_run
+        with patch.object(operator, '__file__', str(
+                self.root / 'scripts' / 'aws_eval' / 'public_work_operator_inputs.py')), \
+                patch.object(operator.subprocess, 'run') as runner:
+            with self.assertRaisesRegex(RuntimeError, 'Historical run authorization is not reusable'):
+                operator.context(self.args)
+            runner.assert_not_called()
+
+    def test_historical_observation_marker_cannot_be_reviewed_into_freshness(self):
+        _, ledger = self.collect()
+        ledger['old_observations_reused'] = True
+        self.args.observations_sha256 = pin(
+            self.root, 'fresh/operator-observations.json', ledger)['sha256']
+        with self.assertRaisesRegex(RuntimeError, 'run/projection differs'):
+            self.load_observations()
+
+    def test_historical_approvals_do_not_replace_explicit_fresh_grant(self):
+        for fresh_grant, cost_review in ((False, False), (False, True), (True, False)):
+            with self.subTest(fresh_grant=fresh_grant, cost_review=cost_review):
+                self.args.approve_fresh_one_run = fresh_grant
+                self.args.approve_ancillary_retention_network_cost_review = cost_review
+                with patch.object(operator, 'observations') as observations, \
+                        patch.object(operator.subprocess, 'run') as runner:
+                    with self.assertRaisesRegex(RuntimeError, 'Fresh one-run authorization'):
+                        operator.authorize(self.args, self.ctx)
+                    observations.assert_not_called()
+                    runner.assert_not_called()
+        self.assertFalse((self.run / 'authorization.json').exists())
+
+    def test_existing_grant_cannot_be_overwritten_even_with_fresh_flags(self):
+        self.args.approve_fresh_one_run = True
+        self.args.approve_ancillary_retention_network_cost_review = True
+        self.args.observations_sha256 = SHA
+        pin(self.root, 'fresh/authorization.json', {'approved': True, 'historical': True})
+        before = (self.run / 'authorization.json').read_bytes()
+        with patch.object(operator, 'observations') as observations:
+            with self.assertRaisesRegex(RuntimeError, 'never overwrite or replay a grant'):
+                operator.authorize(self.args, self.ctx)
+            observations.assert_not_called()
+        self.assertEqual((self.run / 'authorization.json').read_bytes(), before)
 
 
 class PublicEvidenceRegistrationBindingTests(unittest.TestCase):

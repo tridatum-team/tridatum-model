@@ -40,15 +40,15 @@ def item(index):
         identity=dict(id=f'row-{index}', source_sha256='a' * 64, source_line=index + 1))
 
 
-def plan_fixture():
-    return dict(schema=P.SCHEMA, recipe=dict(P.RECIPE),
+def plan_fixture(rows=530):
+    return dict(schema=P.SCHEMA, recipe=P.recipe_for_rows(rows),
         model=dict(id=P.MODEL_ID, revision=P.MODEL_REVISION),
         data=dict(train=dict(sha256='a' * 64), manifest=dict(path='public/training-manifest.json')))
 
 
 class PublicWorkWorkerTests(unittest.TestCase):
-    def observer(self, items, **changes):
-        observer, measured = W.training_observer(plan_fixture(), None, 1)
+    def observer(self, items, *, rows=530, **changes):
+        observer, measured = W.training_observer(plan_fixture(rows), None, 1)
         values = dict(args=SimpleNamespace(checkpoint_every=None, valid_every=0, init_adapter=None, merge=False),
                       train=items, valid=[], dropped=0, valid_dropped=0)
         values.update(changes)
@@ -56,7 +56,7 @@ class PublicWorkWorkerTests(unittest.TestCase):
         return observer, measured
 
     def test_exact_recipe_and_full_training_argv(self):
-        self.assertEqual(P.RECIPE, dict(rows=530, epochs=2, steps=530, batch_size=2, micro_batch_size=1,
+        self.assertEqual(P.recipe_for_rows(530), dict(rows=530, epochs=2, steps=530, batch_size=2, micro_batch_size=1,
             lr=5e-5, rank=16, alpha=32, dropout=0.0, context_tokens=4096, answer_tokens=768,
             seed=14, checkpoint_every=0, valid_every=0))
         argv = core.train_argv(plan_fixture(), Path('/owned'))
@@ -64,29 +64,60 @@ class PublicWorkWorkerTests(unittest.TestCase):
             '--model-id', P.MODEL_ID, '--model-revision', P.MODEL_REVISION, '--family', 'qwen3',
             '--manifest', '/owned/code/public/training-manifest.json', '--out', '/owned/output/training',
             '--steps', '530', '--batch-size', '2', '--micro-batch-size', '1', '--lr', '5e-05',
-            '--rank', '16', '--alpha', '32', '--dropout', str(P.RECIPE['dropout']), '--max-tokens', '4096',
+            '--rank', '16', '--alpha', '32', '--dropout', str(plan_fixture()['recipe']['dropout']), '--max-tokens', '4096',
             '--max-answer-tokens', '768', '--seed', '14', '--device', 'cuda', '--valid-every', '0'])
         self.assertNotIn('--checkpoint-every', argv)
         self.assertNotIn('--init-adapter', argv)
         self.assertNotIn('--merge', argv)
 
     def test_observer_requires_exactly_two_of_each_physical_row(self):
-        items = [item(i) for _ in range(2) for i in range(530)]
-        observer, measured = self.observer(items)
-        coverage = [row['identity'] for row in reversed(items)]
-        observer('completion', coverage=coverage, steps=530)
-        self.assertTrue(measured['coverage_exactly_twice'])
-        self.assertEqual(measured['masking']['rows'], 1060)
-        self.assertTrue(measured['masking']['eos_supervised'])
-        self.assertEqual(observer('report'), dict(checkpoint_every=0, valid_every=0))
-        for changed, steps in ((coverage[:-1], 530), (coverage[:-1] + [coverage[0]], 530), (coverage, 529)):
-            with self.subTest(steps=steps), self.assertRaises(ValueError):
-                observer('completion', coverage=changed, steps=steps)
+        for rows in (1, 7, 39, 40, 41, 530, 531):
+            with self.subTest(rows=rows):
+                recipe = plan_fixture(rows)['recipe']
+                items = [item(i) for _ in range(recipe['epochs']) for i in range(rows)]
+                observer, measured = self.observer(items, rows=rows)
+                coverage = [row['identity'] for row in reversed(items)]
+                observer('completion', coverage=coverage, steps=recipe['steps'])
+                self.assertTrue(measured['coverage_exactly_twice'])
+                self.assertEqual(measured['masking']['rows'], rows * recipe['epochs'])
+                self.assertTrue(measured['masking']['eos_supervised'])
+                self.assertEqual(observer('report'), dict(checkpoint_every=0, valid_every=0))
+                changed_line = copy.deepcopy(coverage)
+                changed_line[0]['source_line'] = rows + 1
+                for changed, steps in ((coverage[:-1], recipe['steps']),
+                        (changed_line, recipe['steps']), (coverage, recipe['steps'] - 1)):
+                    with self.subTest(steps=steps), self.assertRaises(ValueError):
+                        observer('completion', coverage=changed, steps=steps)
+                if rows > 1:
+                    with self.assertRaises(ValueError):
+                        observer('completion', coverage=coverage[:-1] + [coverage[0]], steps=recipe['steps'])
+
+    def test_dynamic_recipe_training_argv_and_tampering(self):
+        plan = plan_fixture(41)
+        argv = core.train_argv(plan, Path('/owned'))
+        self.assertEqual(argv[argv.index('--steps') + 1], '41')
+        self.assertEqual(argv[argv.index('--batch-size') + 1], '2')
+        self.assertEqual(argv[argv.index('--lr') + 1], '5e-05')
+        for field, value in (('rows', 0), ('rows', -1), ('rows', True), ('rows', 41.0),
+                ('steps', 40), ('steps', 530), ('epochs', 1), ('batch_size', 1),
+                ('lr', 1e-4), ('rank', 8), ('alpha', 16), ('seed', 0), ('extra', 1)):
+            changed = copy.deepcopy(plan)
+            changed['recipe'][field] = value
+            with self.subTest(field=field, value=value):
+                with self.assertRaises(ValueError):
+                    W.training_observer(changed, None, 1)
+                with self.assertRaises(ValueError):
+                    W.validate_training(Path('/unused'), changed)
+        del plan['recipe']['seed']
+        with self.assertRaises(ValueError):
+            W.training_observer(plan, None, 1)
+        with self.assertRaises(ValueError):
+            W.validate_training(Path('/unused'), plan)
 
     def test_observer_rejects_mask_eos_drop_repeat_and_nonsealed_options(self):
-        for failure in ('mask', 'eos', 'third_exposure', 'wrong_source', 'dropped', 'valid',
+        for failure in ('mask', 'eos', 'third_exposure', 'wrong_source', 'wrong_line', 'dropped', 'valid',
                         'checkpoint', 'validation', 'warm_start', 'merge'):
-            items = [item(i) for _ in range(2) for i in range(530)]
+            items = [item(i) for _ in range(2) for i in range(7)]
             changes = {}
             if failure == 'mask':
                 items[-1]['labels'][0] = 10
@@ -96,6 +127,9 @@ class PublicWorkWorkerTests(unittest.TestCase):
                 items[-1]['identity'] = copy.deepcopy(items[0]['identity'])
             elif failure == 'wrong_source':
                 items[-1]['identity']['source_sha256'] = 'b' * 64
+            elif failure == 'wrong_line':
+                for row in items:
+                    row['identity']['source_line'] += 1
             elif failure == 'dropped':
                 changes['dropped'] = 1
             elif failure == 'valid':
@@ -106,7 +140,7 @@ class PublicWorkWorkerTests(unittest.TestCase):
                       'warm_start': 'init_adapter', 'merge': 'merge'}[failure]] = 1
                 changes['args'] = SimpleNamespace(**args)
             with self.subTest(failure=failure), self.assertRaises(ValueError):
-                self.observer(items, **changes)
+                self.observer(items, rows=7, **changes)
         for field, value in (('steps', 265), ('rank', 8), ('epochs', 1), ('seed', 0)):
             plan = plan_fixture()
             plan['recipe'][field] = value
@@ -220,7 +254,7 @@ class PublicWorkGpuEvaluatorTests(unittest.TestCase):
         self.local_suite = Path(self.temp.name) / 'local/manifest.json'
         put(self.local_suite, self.manifest)
         source = dict(path='sources.json', bytes=12, sha256='d' * 64)
-        self.plan = dict(schema=P.SCHEMA, recipe=dict(P.RECIPE), identity=dict(run_id='fixture-run'),
+        self.plan = dict(schema=P.SCHEMA, recipe=P.recipe_for_rows(41), identity=dict(run_id='fixture-run'),
             runtime=dict(packages=P.RUNTIME_PACKAGES, torch_cuda='12.8'),
             model=dict(id=P.MODEL_ID, revision=P.MODEL_REVISION, files=files),
             workload=dict(source_manifest=source, evaluation_inputs=P.pin(inputs),
@@ -344,38 +378,52 @@ class PublicWorkGpuEvaluatorTests(unittest.TestCase):
                 self.records = original
                 self.publish()
 
-    def training_fixture(self):
+    def test_gpu_runtime_rejects_tampered_dynamic_recipe(self):
+        for field, value in (('rows', 0), ('steps', 530), ('epochs', 1), ('rank', 8), ('extra', 1)):
+            changed = copy.deepcopy(self.plan)
+            changed['recipe'][field] = value
+            put(self.root / 'plan.json', changed)
+            runtime = copy.deepcopy(self.runtime)
+            runtime['plan'] = W.relative_pin(self.root / 'plan.json', self.folder)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                W.validate_gpu_runtime(self.folder, runtime)
+
+    def training_fixture(self, rows=530):
+        self.plan['recipe'] = recipe = P.recipe_for_rows(rows)
+        steps, exposures = recipe['steps'], rows * recipe['epochs']
         self.plan['data'] = dict(train=dict(sha256='a' * 64), manifest=dict(sha256='b' * 64))
         put(self.root / 'plan.json', self.plan)
         plan_sha = P.pin(self.root / 'plan.json')['sha256']
         native = W.read_json(self.root / 'runtime.json')
         native['plan_sha256'] = plan_sha
         put(self.root / 'runtime.json', native)
-        put(self.root / 'admission.json', dict(training_ids=[f'row-{i}' for i in range(530)]))
+        put(self.root / 'admission.json', dict(training_ids=[f'row-{i}' for i in range(rows)]))
         targets = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']
         config = dict(r=16, lora_alpha=32, lora_dropout=0, peft_type='LORA', task_type='CAUSAL_LM',
                       bias='none', target_modules=targets)
         put(self.root / 'training/adapter/adapter_config.json', config)
         weights = self.root / 'training/adapter/adapter_model.safetensors'
         weights.write_bytes(b'opaque fixture bytes; never loaded as native weights')
+        warmup = max(1, steps // 20)
         def multiplier(step):
-            return (step + 1) / 26 if step < 26 else 0.5 * (1 + math.cos(math.pi * (step - 26) / 504))
-        report = dict(status='complete', steps=530, cumulative_steps=530, train_rows=1060, valid_rows=0,
+            return ((step + 1) / warmup if step < warmup else
+                    0.5 * (1 + math.cos(math.pi * (step - warmup) / max(1, steps - warmup))))
+        report = dict(status='complete', steps=steps, cumulative_steps=steps, train_rows=exposures, valid_rows=0,
             dropped_over_max_tokens=0, valid_dropped=0, init_adapter=None, device='cuda', dtype='torch.bfloat16',
             base_weights=dict(representation='hf-safetensors', dtype='torch.bfloat16'),
             manifest_sha256='b' * 64, base_model_id=P.MODEL_ID, base_revision=P.MODEL_REVISION,
             batch_size=2, micro_batch_size=1, lr=5e-5, seed=14, max_tokens=4096, max_answer_tokens=768,
             checkpoint_every=0, valid_every=0, lora=dict(rank=16, alpha=32, dropout=0, targets=targets),
-            coverage=[item(i)['identity'] for _ in range(2) for i in range(530)],
-            history=[dict(step=step, train_loss=1.0, applied_lr=5e-5 * multiplier(step - 1),
-                          next_lr=5e-5 * multiplier(step)) for step in range(1, 531)])
+            coverage=[item(i)['identity'] for _ in range(recipe['epochs']) for i in range(rows)],
+            history=[dict(step=step, train_loss=1.0, applied_lr=recipe['lr'] * multiplier(step - 1),
+                          next_lr=recipe['lr'] * multiplier(step)) for step in range(1, steps + 1)])
         put(self.root / 'training/training.json', report)
         provenance = dict(schema=P.ADAPTER_SCHEMA, run_id='fixture-run', plan_sha256=plan_sha,
             source_manifest=self.plan['workload']['source_manifest'],
             runtime=P.pin(self.root / 'runtime.json', self.root), fresh=True, merged=False,
             training=P.pin(self.root / 'training/training.json', self.root),
-            adapter=W.adapter_identity(self.root, self.plan), fresh_zero_b=True, observed_steps=530,
-            coverage_exactly_twice=True, masking=dict(rows=1060, all_prompt_tokens_masked=True,
+            adapter=W.adapter_identity(self.root, self.plan), fresh_zero_b=True, observed_steps=steps,
+            coverage_exactly_twice=True, masking=dict(rows=exposures, all_prompt_tokens_masked=True,
                 all_answer_tokens_supervised=True, eos_supervised=True, max_context_tokens=4, max_answer_tokens=2),
             parameter_inventory=dict(base={'torch.bfloat16': dict(tensors=1, elements=2, bytes=4)},
                                      adapter={'torch.float32': dict(tensors=1, elements=2, bytes=8)}))
@@ -383,32 +431,55 @@ class PublicWorkGpuEvaluatorTests(unittest.TestCase):
         return report, provenance
 
     def test_offline_training_acceptance_checks_actual_coverage_schedule_and_final_adapter(self):
-        report, provenance = self.training_fixture()
-        self.assertEqual(W.validate_training(self.root, self.plan)['steps'], 530)
-        for failure in ('coverage', 'schedule', 'loss', 'checkpoint', 'rank', 'merge', 'freshness'):
-            with self.subTest(failure=failure):
-                changed, observed = copy.deepcopy(report), copy.deepcopy(provenance)
-                if failure == 'coverage':
-                    changed['coverage'][-1] = copy.deepcopy(changed['coverage'][0])
-                elif failure == 'schedule':
-                    changed['history'][30]['applied_lr'] = 0.0
-                elif failure == 'loss':
-                    changed['history'][30]['train_loss'] = float('inf')
-                elif failure == 'checkpoint':
-                    changed['checkpoint_every'] = 10
-                elif failure == 'rank':
-                    changed['lora']['rank'] = 8
-                elif failure == 'merge':
-                    observed['merged'] = True
-                else:
-                    observed['fresh_zero_b'] = False
-                put(self.root / 'training/training.json', changed)
-                observed['training'] = P.pin(self.root / 'training/training.json', self.root)
-                put(self.root / 'training/provenance.json', observed)
-                with self.assertRaises(ValueError):
-                    W.validate_training(self.root, self.plan)
-        put(self.root / 'training/training.json', report)
-        put(self.root / 'training/provenance.json', provenance)
+        for rows in (1, 7, 39, 40, 41, 530, 531):
+            with self.subTest(rows=rows):
+                report, provenance = self.training_fixture(rows)
+                steps = self.plan['recipe']['steps']
+                self.assertEqual(W.validate_training(self.root, self.plan)['steps'], steps)
+                for failure in ('coverage', 'repeat', 'source_line', 'source_hash', 'schedule', 'next_lr',
+                        'legacy_warmup', 'loss', 'nan_loss', 'history', 'steps', 'cumulative_steps',
+                        'train_rows', 'observed_steps', 'masking_rows', 'checkpoint', 'rank', 'merge', 'freshness'):
+                    with self.subTest(failure=failure):
+                        changed, observed = copy.deepcopy(report), copy.deepcopy(provenance)
+                        if failure == 'coverage':
+                            changed['coverage'].pop()
+                        elif failure == 'repeat':
+                            changed['coverage'].append(copy.deepcopy(changed['coverage'][0]))
+                        elif failure == 'source_line':
+                            changed['coverage'][-1]['source_line'] = rows + 1
+                        elif failure == 'source_hash':
+                            changed['coverage'][-1]['source_sha256'] = 'c' * 64
+                        elif failure == 'schedule':
+                            changed['history'][0]['applied_lr'] = 0.0
+                        elif failure == 'next_lr':
+                            changed['history'][0]['next_lr'] *= 0.5
+                        elif failure == 'legacy_warmup':
+                            if max(1, steps // 20) == 26:
+                                continue
+                            changed['history'][0]['applied_lr'] = 5e-5 / 26
+                        elif failure in ('loss', 'nan_loss'):
+                            changed['history'][0]['train_loss'] = float('inf' if failure == 'loss' else 'nan')
+                        elif failure == 'history':
+                            changed['history'].pop()
+                        elif failure in ('steps', 'cumulative_steps', 'train_rows'):
+                            changed[failure] += 1
+                        elif failure == 'observed_steps':
+                            observed['observed_steps'] += 1
+                        elif failure == 'masking_rows':
+                            observed['masking']['rows'] += 1
+                        elif failure == 'checkpoint':
+                            changed['checkpoint_every'] = 10
+                        elif failure == 'rank':
+                            changed['lora']['rank'] = 8
+                        elif failure == 'merge':
+                            observed['merged'] = True
+                        else:
+                            observed['fresh_zero_b'] = False
+                        put(self.root / 'training/training.json', changed)
+                        observed['training'] = P.pin(self.root / 'training/training.json', self.root)
+                        put(self.root / 'training/provenance.json', observed)
+                        with self.assertRaises(ValueError):
+                            W.validate_training(self.root, self.plan)
 
 
 if __name__ == '__main__':

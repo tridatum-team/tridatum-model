@@ -1,0 +1,1045 @@
+{
+  "schema": "trid-public-work-development-batch-v1",
+  "batch": "r01",
+  "split": "train",
+  "business_group": "일반",
+  "institutions": [],
+  "cases": [
+    {
+      "id": "dev-r01-01",
+      "task": "general_dialogue",
+      "domain": "파일 전달",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-revision-deadline"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“오늘 오후 세 시까지 수정본 보내.”를 상대에게 하는 정중한 요청 한 문장으로 바꿔 줘. 내용과 기한은 그대로 두고 바꾼 문장만 써 줘.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "오늘 오후 세 시까지 수정본을 보내 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대에게 수정본을 오늘 오후 세 시까지 보내 달라고 요청한다."
+        ],
+        "forbidden_claims": [
+          "이미 수정본을 보내 줘서 감사하다고 바꾼다.",
+          "화자가 수정본을 보내겠다고 하거나 기한을 오늘 중으로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-02",
+      "task": "general_dialogue",
+      "domain": "첨부파일",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-missing-attachment"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "첨부가 계속 빠져서 답답해. 내 답답한 마음을 먼저 짧게 알아주고, 그다음 “누락된 첨부파일 다시 보내.”를 상대에게 정중하게 바꿔 줘. 공감 한 문장과 요청 한 문장, 총 두 문장으로.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "답답하셨겠습니다. 누락된 첨부파일을 다시 보내 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "첫 문장에서 사용자의 답답함을 짧게 인정한다.",
+          "둘째 문장에서 상대에게 누락된 첨부파일을 다시 보내 달라고 요청하며 전체를 정확히 두 문장으로 쓴다."
+        ],
+        "forbidden_claims": [
+          "파일을 이미 다시 보내 줬다는 감사로 바꾼다.",
+          "사용자가 첨부파일을 다시 보내겠다는 약속으로 바꾼다.",
+          "별도 인사나 해결 조언을 추가해 두 문장을 넘긴다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-03",
+      "task": "general_dialogue",
+      "domain": "일정 조율",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-cannot-meet-schedule"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“그 일정은 못 맞춰.”를 존댓말 한 문장으로 다듬어 줘. 못 맞춘다는 뜻을 유지하고, 다른 일정 제안은 넣지 마.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "해당 일정에는 맞출 수 없습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 화자가 해당 일정에 맞출 수 없다는 뜻을 유지한다."
+        ],
+        "forbidden_claims": [
+          "맞출 수 있도록 노력하겠다거나 맞출 수 있다고 바꾼다.",
+          "상대에게 일정을 맞춰 달라는 요청으로 바꾼다.",
+          "대체 일정이나 사과 이유를 새로 만든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-04",
+      "task": "general_dialogue",
+      "domain": "발표 요청",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-presentation-assignee"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "동료에게 부탁하려니 긴장되네. “네가 내일 발표 맡아.”를 공손한 요청 한 문장으로만 바꿔 줘. 내일이라는 시점과 누가 맡는지는 바뀌면 안 돼.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "내일 발표를 맡아 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대에게 내일 발표를 맡아 달라고 요청한다."
+        ],
+        "forbidden_claims": [
+          "화자가 내일 발표를 맡겠다고 한다.",
+          "이미 발표를 맡아 준 것에 감사하거나 내일을 다른 시점으로 바꾼다.",
+          "인사나 별도 감정 설명 문장을 덧붙인다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-05",
+      "task": "general_dialogue",
+      "domain": "자료 수정",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-number"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“이 수치는 쓰지 마.”를 정중한 한 문장으로 써 줘. 금지 요청을 확인 요청으로 바꾸지는 말아 줘.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이 수치는 사용하지 말아 주십시오.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대에게 이 수치를 사용하지 말라고 요청한다."
+        ],
+        "forbidden_claims": [
+          "이 수치를 확인해 달라거나 검토 후 사용해 달라고 바꾼다.",
+          "화자가 이 수치를 사용하지 않겠다는 약속으로 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-06",
+      "task": "general_dialogue",
+      "domain": "회의 조율",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-move-meeting"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "다음 말을 뜻 그대로 정중한 두 문장으로: “나는 수요일 회의에 참석 못 해. 목요일로 바꿔.” 첫 문장은 내 사정, 둘째 문장은 상대에게 하는 변경 요청이야.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "저는 수요일 회의에 참석할 수 없습니다. 회의를 목요일로 변경해 주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 쓰고 첫 문장은 화자가 수요일 회의에 참석할 수 없다는 사실을 전달한다.",
+          "둘째 문장은 상대에게 회의를 목요일로 변경해 달라는 요청으로 유지한다."
+        ],
+        "forbidden_claims": [
+          "상대가 수요일에 참석하지 못한다고 역할을 뒤집는다.",
+          "회의가 이미 목요일로 변경되었다고 단정한다.",
+          "참석 불가 이유나 다른 요일을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-07",
+      "task": "general_dialogue",
+      "domain": "배포 요청",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-approval-before-distribution"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“내 승인 전에는 안내문 배포하지 마.”를 부드럽지만 같은 뜻인 한 문장으로 고쳐 줘. 승인하는 사람은 나고 배포하는 사람은 상대야.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "제 승인 전에는 안내문을 배포하지 말아 주십시오.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 화자의 승인 전까지 상대에게 안내문을 배포하지 말라고 요청한다."
+        ],
+        "forbidden_claims": [
+          "상대의 승인을 받겠다고 승인 주체를 뒤집는다.",
+          "배포 후 승인을 받으라고 하거나 안내문을 영구히 배포하지 말라고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-08",
+      "task": "general_dialogue",
+      "domain": "물건 위치",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-ask-location"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“내 충전기 어디 뒀어?”를 정중한 질문 한 문장으로 바꿔 줘. 돌려달라는 요구를 보태지 말고 위치만 물어봐.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "제 충전기를 어디에 두셨습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대가 화자의 충전기를 어디에 두었는지 묻는다."
+        ],
+        "forbidden_claims": [
+          "충전기를 돌려 달라는 요청으로 바꾼다.",
+          "상대의 충전기 위치를 묻거나 화자가 충전기를 두었다고 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-09",
+      "task": "general_dialogue",
+      "domain": "연락 범위",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-no-weekend-contact"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "주말 연락이 이어져 지쳤어. 먼저 지친 마음을 한 문장으로 짧게 알아줘. 이어서 “주말에는 업무 연락하지 마.”를 정중한 요청 한 문장으로 써 줘. 합쳐서 두 문장만.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "많이 지치셨겠습니다. 주말에는 업무 연락을 하지 말아 주십시오.",
+      "rubric": {
+        "required_claims": [
+          "첫 문장에서 사용자의 지친 마음을 짧게 인정한다.",
+          "둘째 문장에서 상대에게 주말에는 업무 연락을 하지 말라고 요청하며 전체는 정확히 두 문장이다."
+        ],
+        "forbidden_claims": [
+          "화자가 주말 연락을 하지 않겠다고 역할을 뒤집는다.",
+          "긴급한 경우에는 연락해도 된다는 예외를 만든다.",
+          "주말 연락에 감사하거나 평일 연락까지 금지한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-10",
+      "task": "general_dialogue",
+      "domain": "명단 정리",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-delete-duplicate"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“중복된 이름만 지워.”를 정중하게 한 문장으로. 삭제 대상이 넓어지면 안 되고, 작업을 완료했다는 말로 바꾸면 안 돼.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "중복된 이름만 삭제해 주십시오.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대에게 중복된 이름만 삭제해 달라고 요청한다."
+        ],
+        "forbidden_claims": [
+          "명단 전체나 중복이 아닌 이름까지 삭제하라고 한다.",
+          "중복 이름을 이미 삭제했다고 보고한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-11",
+      "task": "general_dialogue",
+      "domain": "대여 물품",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-ask-return-date"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“빌려 간 책 언제 돌려줄 거야?”를 예의 있는 질문 한 문장으로 바꿔 줘. 내가 상대에게 빌려준 책이고, 반납 시점만 묻는 거야.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "빌려 가신 책은 언제 돌려주시겠습니까?",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 상대가 화자에게 빌려 간 책을 언제 돌려줄지 묻는다."
+        ],
+        "forbidden_claims": [
+          "화자가 책을 언제 돌려줄지 묻는 것으로 역할을 뒤집는다.",
+          "오늘이나 이번 주까지 반납하라는 기한을 만든다.",
+          "이미 반납한 책에 감사한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-12",
+      "task": "general_dialogue",
+      "domain": "당번 교대",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-decline-shift"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "“이번 토요일 당번은 대신 못 서.”라는 거절을 정중한 한 문장으로 다듬어 줘. 가능성을 열어 두거나 다른 날을 제안하지는 마.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이번 토요일 당번은 대신 맡을 수 없습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 화자가 이번 토요일 당번을 대신 맡을 수 없다는 거절을 유지한다."
+        ],
+        "forbidden_claims": [
+          "일정을 확인해 보겠다고 하여 가능성을 열어 둔다.",
+          "상대에게 대신 당번을 맡아 달라는 요청으로 뒤집는다.",
+          "다른 날에 대신 맡겠다는 제안을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-13",
+      "task": "general_dialogue",
+      "domain": "장소 변경",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-notice-room-change"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래 사실만으로 공지를 두 문장으로 써 줘. 인사말은 빼 줘. 사실: 독서모임은 6월 8일 오후 7시, 기존 장소는 2층 소회의실, 변경 장소는 1층 다목적실, 시작 시각은 그대로.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "6월 8일 독서모임 장소가 2층 소회의실에서 1층 다목적실로 변경됩니다. 시작 시각은 기존과 같은 오후 7시입니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 6월 8일 독서모임의 장소가 2층 소회의실에서 1층 다목적실로 변경된다고 알린다.",
+          "시작 시각은 오후 7시로 그대로임을 포함한다."
+        ],
+        "forbidden_claims": [
+          "오후 7시를 변경된 시각이라고 한다.",
+          "변경 이유, 참석 의무, 인사말 등 주어진 사실 밖의 내용을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-14",
+      "task": "general_dialogue",
+      "domain": "시설 점검",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-summary-repair"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "한 문장으로만 요약해 줘. 주어진 사실: 자전거 보관대 점검은 4월 12일 오전 10시부터 정오까지, 점검 중 보관대 이용 중단. 다른 내용은 넣지 마.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "자전거 보관대는 4월 12일 오전 10시부터 정오까지 점검으로 이용이 중단됩니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장에 4월 12일 오전 10시부터 정오까지의 자전거 보관대 점검과 그동안의 이용 중단을 담는다."
+        ],
+        "forbidden_claims": [
+          "건물 전체 이용이 중단된다고 범위를 넓힌다.",
+          "대체 보관 장소, 연도, 문의처를 만들어 넣거나 별도 안내 문장을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-15",
+      "task": "general_dialogue",
+      "domain": "제출 안내",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-notice-deadline-change"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "마감 안내를 써야 해서 좀 불안해. 아래 사실만 사용해서 두 문장으로 써 줘. 참가 신청 마감은 8월 19일에서 8월 21일로 변경, 신청 방법은 기존 온라인 양식 그대로. 인사나 부연은 필요 없어.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "참가 신청 마감이 8월 19일에서 8월 21일로 변경됩니다. 신청 방법은 기존 온라인 양식 그대로입니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 참가 신청 마감이 8월 19일에서 8월 21일로 변경됨과 기존 온라인 양식을 그대로 사용함을 전달한다."
+        ],
+        "forbidden_claims": [
+          "8월 19일을 새 마감으로 뒤집거나 새 신청 양식이 생겼다고 한다.",
+          "감정 공감, 변경 사유, 인사말을 별도 문장으로 붙이거나 마감 시각을 만든다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-16",
+      "task": "general_dialogue",
+      "domain": "수령 안내",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-summary-delivery"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "이 사실들을 한 문장으로 묶어 줘: 공동구매 물품 도착일 9월 3일, 수령 장소 관리실, 수령 가능 시간 오후 2시부터 오후 6시까지. 적힌 사실 외에는 추가하지 마.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "공동구매 물품은 9월 3일에 도착하며, 관리실에서 오후 2시부터 오후 6시까지 수령할 수 있습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 도착일 9월 3일, 수령 장소 관리실, 수령 가능 시간 오후 2시부터 오후 6시까지를 모두 전달한다."
+        ],
+        "forbidden_claims": [
+          "도착 시각을 오후 2시로 단정한다.",
+          "미수령 시 폐기, 준비물, 별도 수령 기한을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-17",
+      "task": "general_dialogue",
+      "domain": "강좌 안내",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-notice-class-cancel"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "두 문장으로 강좌 소식을 작성해 줘. 확인된 사실은 이것뿐이야: 10월 6일 사진 강좌 휴강, 보강일 10월 13일, 보강 시작 오전 11시, 보강 장소 3층 실습실. 휴강 이유는 제공되지 않았어.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "10월 6일 사진 강좌는 휴강합니다. 보강은 10월 13일 오전 11시에 3층 실습실에서 진행합니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 두 문장으로 10월 6일 사진 강좌 휴강과 10월 13일 오전 11시 3층 실습실 보강을 알린다."
+        ],
+        "forbidden_claims": [
+          "10월 13일도 휴강한다고 하거나 날짜와 장소를 바꾼다.",
+          "강사 사정 등 휴강 이유나 사과 문장을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-18",
+      "task": "general_dialogue",
+      "domain": "물품 현황",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-summary-stock"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "재고 상황을 한 문장으로 보고하려고 해. 사실은 검은색 수첩 품절, 초록색 수첩 12권 남음, 검은색 재입고일 미정이야. 이 세 사실만 담아 줘.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "검은색 수첩은 품절이고 재입고일은 미정이며, 초록색 수첩은 12권 남아 있습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 검은색 수첩 품절과 재입고일 미정, 초록색 수첩 12권 잔여를 모두 담는다."
+        ],
+        "forbidden_claims": [
+          "검은색 수첩이 다시 입고되지 않는다고 단정한다.",
+          "초록색 수첩을 품절로 바꾸거나 구매 권유를 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-19",
+      "task": "general_dialogue",
+      "domain": "접속 문제",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-troubleshooting"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "접속이 또 안 돼서 속상해. 내 속상함을 먼저 짧게 알아줘. 그 뒤에는 내가 알려 준 현상만 요약해 줘. 해결법은 말고. 현상: 로그인 화면은 뜨지만 확인 버튼을 누르면 빈 화면이 나와. 전체 두 문장으로 부탁해.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "속상하셨겠습니다. 로그인 화면은 표시되지만 확인 버튼을 누르면 빈 화면이 나타납니다.",
+      "rubric": {
+        "required_claims": [
+          "첫 문장에서 사용자의 속상함을 짧게 인정한다.",
+          "둘째 문장에서 로그인 화면은 뜨지만 확인 버튼을 누르면 빈 화면이 나온다는 현상만 요약하고 전체를 정확히 두 문장으로 쓴다."
+        ],
+        "forbidden_claims": [
+          "새로고침, 재접속, 브라우저 변경, 문의 등 해결법을 제시한다.",
+          "서버 장애나 비밀번호 오류를 원인으로 단정한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-20",
+      "task": "general_dialogue",
+      "domain": "업무 상황",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-advice"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "일이 겹쳐서 마음이 조급해. 조언은 빼고 지금 상황을 한 문장으로 정리해 줘. 오전에는 자료 검토를 했고, 오후에는 회의 두 건이 있으며, 회신 작성은 아직 시작하지 않았어.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "오전에는 자료를 검토했고 오후에는 회의 두 건이 있으며, 회신 작성은 아직 시작하지 않은 상태입니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 오전 자료 검토, 오후 회의 두 건, 회신 작성 미착수를 정리하고 조언은 하지 않는다."
+        ],
+        "forbidden_claims": [
+          "회신부터 처리하라거나 우선순위를 정하라는 조언을 넣는다.",
+          "회신 작성이 진행 중 또는 완료라고 바꾸거나 회의가 끝났다고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-21",
+      "task": "general_dialogue",
+      "domain": "결정 전달",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-reason"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "전달할 결정은 “이번 달 소모임은 열지 않는다”야. 이유는 말하지 말고, 그 결정만 정중한 한 문장으로 써 줘. 다음 일정도 제안하지 마.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "이번 달 소모임은 열지 않습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 이번 달 소모임을 열지 않는다는 결정만 전달하고 이유를 쓰지 않는다."
+        ],
+        "forbidden_claims": [
+          "인원 부족이나 운영 사정 등 이유를 만들어 넣는다.",
+          "소모임을 영구 폐지한다고 하거나 다음 달 개최를 약속한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-22",
+      "task": "general_dialogue",
+      "domain": "일상 정리",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-comfort-advice"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "약속이 갑자기 취소돼서 허탈해. 처음에 내 허탈함을 짧게 알아주고, 그다음 “오늘 저녁 약속이 취소됐다”는 사실만 말해 줘. 조언은 빼고 총 두 문장으로.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "허탈하셨겠습니다. 오늘 저녁 약속이 취소되었습니다.",
+      "rubric": {
+        "required_claims": [
+          "첫 문장에서 사용자의 허탈함을 짧게 인정한다.",
+          "둘째 문장에서 오늘 저녁 약속이 취소되었다는 사실만 전하며 정확히 두 문장으로 쓴다."
+        ],
+        "forbidden_claims": [
+          "쉬어 보라거나 다른 약속을 잡으라는 조언을 덧붙인다.",
+          "취소 이유나 상대의 마음을 추측하거나 약속이 연기되었다고 바꾼다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-23",
+      "task": "general_dialogue",
+      "domain": "물건 상태",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-repair"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "해결법은 말고 물건 상태만 한 문장으로 적어 줘. 스탠드는 전원이 켜지지만 밝기 조절 버튼은 반응하지 않아. 수리 접수용으로 쓸 거야.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "스탠드는 전원이 켜지지만 밝기 조절 버튼은 반응하지 않습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 스탠드 전원은 켜지고 밝기 조절 버튼은 반응하지 않는 상태만 적는다."
+        ],
+        "forbidden_claims": [
+          "전원이 켜지지 않는다고 증상을 바꾼다.",
+          "전원 재연결, 버튼 청소, 부품 교체 등 해결법이나 고장 원인을 제시한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-24",
+      "task": "general_dialogue",
+      "domain": "전달 시각",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-exclude-apology-reason"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "늦게 전달해서 미안한 마음이 있어. 하지만 문구에는 사과도 이유도 말하지 말고, “자료는 내일 오전에 전달하겠다”는 내 약속만 한 문장으로 정중하게 적어 줘.",
+      "output_contract": {
+        "format": "plain_text",
+        "citations_required": false
+      },
+      "target": "자료는 내일 오전에 전달하겠습니다.",
+      "rubric": {
+        "required_claims": [
+          "정확히 한 문장으로 화자가 자료를 내일 오전에 전달하겠다는 약속만 적고 사과와 이유를 제외한다."
+        ],
+        "forbidden_claims": [
+          "죄송하다는 사과나 지연 사유를 넣는다.",
+          "상대에게 내일 오전까지 자료를 보내 달라는 요청으로 뒤집는다.",
+          "오늘 전달하겠다고 바꾸거나 이미 전달했다고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-25",
+      "task": "general_dialogue",
+      "domain": "모임 확정사항",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-confirmed-event-list"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "아래는 가상 모임 채팅이야. 제안이나 미정은 빼고, 최종 확정된 사항만 글머리표 목록으로 적어 줘.\n진행자: 날짜는 5월 14일로 확정합니다.\n참가자: 장소는 옥상 어때요?\n진행자: 장소는 아직 정하지 않았습니다.\n진행자: 시작은 오후 6시로 확정합니다.\n참가자: 참가비는 5천 원쯤이면 될까요?\n진행자: 참가비도 미정입니다.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 날짜: 5월 14일\n- 시작 시각: 오후 6시",
+      "rubric": {
+        "required_claims": [
+          "글머리표 목록에 최종 확정된 날짜 5월 14일과 시작 시각 오후 6시만 추출한다."
+        ],
+        "forbidden_claims": [
+          "제안된 옥상을 확정 장소로 넣는다.",
+          "제안된 참가비 5천 원을 확정 금액으로 넣거나 미정 항목을 목록에 넣는다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-26",
+      "task": "general_dialogue",
+      "domain": "주문 확정사항",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-confirmed-order-table"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 주문 채팅에서 확정된 품목과 수량만 표로 뽑아 줘. 열은 품목, 수량 두 개만.\n담당A: 연필 20자루 주문을 확정합니다.\n담당B: 지우개도 10개 넣을까요?\n담당A: 지우개는 결정 전입니다.\n담당A: 연필 수량을 정정합니다. 최종 16자루입니다.\n담당A: 공책 8권 주문도 확정합니다.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 품목 | 수량 |\n| --- | --- |\n| 연필 | 16자루 |\n| 공책 | 8권 |",
+      "rubric": {
+        "required_claims": [
+          "품목과 수량 두 열의 표에 연필 16자루와 공책 8권만 담는다.",
+          "연필은 앞선 20자루가 아니라 정정된 최종 수량 16자루를 사용한다."
+        ],
+        "forbidden_claims": [
+          "미확정 지우개 10개를 포함한다.",
+          "연필 20자루와 16자루를 별개 주문으로 합치거나 가격을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-27",
+      "task": "general_dialogue",
+      "domain": "역할 분담",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-confirmed-owner-list"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 채팅에서 맡기로 확정된 사람과 역할만 목록으로 써 줘. 부탁만 받은 사람은 빼 줘.\n담당A: 안내 데스크는 제가 맡겠습니다.\n담당B: 담당C님, 사진 촬영을 맡아 주실 수 있나요?\n담당C: 아직 일정 확인이 필요해요.\n담당D: 저는 좌석 정리를 맡겠습니다.\n담당B: 그럼 안내 데스크 담당A, 좌석 정리 담당D로 확정합니다.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 담당A: 안내 데스크\n- 담당D: 좌석 정리",
+      "rubric": {
+        "required_claims": [
+          "확정된 담당A의 안내 데스크와 담당D의 좌석 정리만 목록으로 추출한다."
+        ],
+        "forbidden_claims": [
+          "질문만 받고 수락하지 않은 담당C를 사진 촬영 담당으로 넣는다.",
+          "사진 촬영을 요청한 담당B가 촬영을 맡았다고 한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-28",
+      "task": "general_dialogue",
+      "domain": "작업 완료",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-confirmed-completion-table"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 작업 채팅에서 완료가 확인된 작업만 표로 정리해 줘. 열은 작업, 완료 상태로 하고 예정이나 진행 중인 것은 빼.\n담당A: 명찰 인쇄를 완료했습니다.\n담당B: 봉투 포장은 진행 중입니다.\n담당C: 내일 안내판을 설치할 예정입니다.\n담당D: 좌석 번호 부착이 끝났습니다.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 작업 | 완료 상태 |\n| --- | --- |\n| 명찰 인쇄 | 완료 |\n| 좌석 번호 부착 | 완료 |",
+      "rubric": {
+        "required_claims": [
+          "작업과 완료 상태 두 열의 표에 완료가 확인된 명찰 인쇄와 좌석 번호 부착만 담는다."
+        ],
+        "forbidden_claims": [
+          "진행 중인 봉투 포장을 완료로 넣는다.",
+          "내일 예정인 안내판 설치를 완료로 넣거나 작업 예정까지 표에 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-29",
+      "task": "general_dialogue",
+      "domain": "선정 결과",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-confirmed-selection-list"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "가상 채팅을 보고 최종 선정된 항목만 목록으로 남겨 줘. 취소되거나 후보인 항목은 적지 마.\n진행자: 간식은 쌀과자로 확정합니다.\n참가자: 음료로 보리차를 제안해요.\n진행자: 음료는 아직 후보 검토 중입니다.\n진행자: 간식 쌀과자 선정은 취소합니다. 최종 간식은 귤입니다.\n진행자: 기념품은 책갈피로 확정합니다.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "- 간식: 귤\n- 기념품: 책갈피",
+      "rubric": {
+        "required_claims": [
+          "최종 선정된 간식 귤과 기념품 책갈피만 목록으로 추출한다."
+        ],
+        "forbidden_claims": [
+          "취소된 쌀과자를 최종 간식에 포함한다.",
+          "후보인 보리차를 확정 음료로 적거나 음료 검토 중이라는 항목을 추가한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    },
+    {
+      "id": "dev-r01-30",
+      "task": "general_dialogue",
+      "domain": "예약 확정사항",
+      "institution": "해당 없음(가상)",
+      "family_ids": [
+        "r01-confirmed-reservation-table"
+      ],
+      "documents": [],
+      "history": [],
+      "question": "다음 가상 채팅에서 예약이 확정된 건만 날짜, 시간, 장소 세 열의 표로 정리해 줘. 확정되지 않은 건은 행 자체를 빼 줘.\n예약담당: 7월 2일 오전 9시 연습실 가 예약은 확정됐습니다.\n이용자: 7월 3일 오후 2시 연습실 나도 가능할까요?\n예약담당: 그 건은 확인 중입니다.\n예약담당: 7월 4일 오후 4시 연습실 다 예약은 확정됐습니다.\n이용자: 연습실 가를 오전 10시로 옮기고 싶어요.\n예약담당: 시간 변경은 아직 확정되지 않았습니다.",
+      "output_contract": {
+        "format": "markdown",
+        "citations_required": false
+      },
+      "target": "| 날짜 | 시간 | 장소 |\n| --- | --- | --- |\n| 7월 2일 | 오전 9시 | 연습실 가 |\n| 7월 4일 | 오후 4시 | 연습실 다 |",
+      "rubric": {
+        "required_claims": [
+          "날짜, 시간, 장소 세 열의 표에 7월 2일 오전 9시 연습실 가와 7월 4일 오후 4시 연습실 다만 담는다.",
+          "연습실 가의 시간은 변경 요청이 미확정이므로 기존 확정 시각 오전 9시로 유지한다."
+        ],
+        "forbidden_claims": [
+          "확인 중인 7월 3일 오후 2시 연습실 나를 표에 넣는다.",
+          "변경 희망 시각인 오전 10시를 확정 시각으로 사용한다."
+        ],
+        "required_citations": [],
+        "calculation": null
+      },
+      "provenance": {
+        "kind": "synthetic_development",
+        "author": "AI author r01 (development batch v2)",
+        "historically_unseen": false,
+        "expert_reviewed": false
+      }
+    }
+  ]
+}

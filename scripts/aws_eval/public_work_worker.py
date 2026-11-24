@@ -70,14 +70,14 @@ def exposure_counts(rows):
 
 def training_observer(plan, torch, eos_token_id):
     """Check the real trainer's items and consumed identities, not planned counts."""
-    P.require(plan['recipe'] == P.RECIPE, 'Sealed public-work training recipe required')
+    recipe = P.validate_recipe(plan['recipe'])
     measured, expected = {}, Counter()
 
     def observe(event, **values):
         if event == 'admission':
             items, args = values['train'], values['args']
             P.require(not values['valid'] and values['dropped'] == values['valid_dropped'] == 0
-                      and len(items) == P.RECIPE['rows'] * P.RECIPE['epochs'],
+                      and len(items) == recipe['rows'] * recipe['epochs'],
                       'Trainer changed admitted exposure set')
             P.require(args.checkpoint_every is None and args.valid_every == 0
                       and args.init_adapter is None and not args.merge,
@@ -94,12 +94,12 @@ def training_observer(plan, torch, eos_token_id):
                 expected[(identity['id'], identity['source_sha256'], identity['source_line'])] += 1
                 maximum_context = max(maximum_context, len(ids))
                 maximum_answer = max(maximum_answer, len(ids) - first)
-            P.require(len(expected) == P.RECIPE['rows'] and set(expected.values()) == {2}
+            P.require(len(expected) == recipe['rows'] and set(expected.values()) == {recipe['epochs']}
                       and {key[1] for key in expected} == {plan['data']['train']['sha256']}
-                      and {key[2] for key in expected} == set(range(1, P.RECIPE['rows'] + 1)),
+                      and {key[2] for key in expected} == set(range(1, recipe['rows'] + 1)),
                       'Each admitted physical training row must appear exactly twice')
-            P.require(maximum_context <= P.RECIPE['context_tokens']
-                      and maximum_answer <= P.RECIPE['answer_tokens'], 'Tokenization exceeds envelope')
+            P.require(maximum_context <= recipe['context_tokens']
+                      and maximum_answer <= recipe['answer_tokens'], 'Tokenization exceeds envelope')
             measured['masking'] = dict(rows=len(items), all_prompt_tokens_masked=True,
                 all_answer_tokens_supervised=True, eos_supervised=True,
                 max_context_tokens=maximum_context, max_answer_tokens=maximum_answer)
@@ -114,7 +114,7 @@ def training_observer(plan, torch, eos_token_id):
             measured['fresh_zero_b'] = True
         elif event == 'completion':
             P.require(expected and exposure_counts(values['coverage']) == expected
-                      and values['steps'] == P.RECIPE['steps'], 'Training skipped or repeated exposures')
+                      and values['steps'] == recipe['steps'], 'Training skipped or repeated exposures')
             measured.update(observed_steps=values['steps'], coverage_exactly_twice=True)
         elif event == 'report':
             return dict(checkpoint_every=0, valid_every=0)
@@ -275,53 +275,60 @@ def evaluation_stage(core, plan, base, torch, arm):
 
 def validate_training(root, plan):
     root = Path(root)
-    P.require(plan['recipe'] == P.RECIPE, 'Sealed training recipe required')
+    recipe = P.validate_recipe(plan['recipe'])
+    steps, exposures = recipe['steps'], recipe['rows'] * recipe['epochs']
     report = read_json(root / 'training/training.json')
     provenance = read_json(root / 'training/provenance.json')
     P.output_provenance(root, plan, provenance)
     P.require(provenance['schema'] == P.ADAPTER_SCHEMA and provenance['run_id'] == plan['identity']['run_id']
         and provenance['fresh'] is True and provenance['merged'] is False
         and provenance['training'] == P.pin(root / 'training/training.json', root), 'Fresh adapter provenance differs')
-    P.require(report['status'] == 'complete' and report['steps'] == report['cumulative_steps'] == 530
-        and report['train_rows'] == 1060 and report['valid_rows'] == 0
+    P.require(report['status'] == 'complete' and report['steps'] == report['cumulative_steps'] == steps
+        and report['train_rows'] == exposures and report['valid_rows'] == 0
         and report['dropped_over_max_tokens'] == report['valid_dropped'] == 0
         and report['init_adapter'] is None and report['device'] == 'cuda' and report['dtype'] == 'torch.bfloat16'
         and report['base_weights'] == dict(representation='hf-safetensors', dtype='torch.bfloat16')
         and report['manifest_sha256'] == plan['data']['manifest']['sha256']
         and report['base_model_id'] == plan['model']['id'] and report['base_revision'] == plan['model']['revision'],
-        'Final530 numerical/data/base acceptance differs')
-    for key, expected in dict(batch_size=2, micro_batch_size=1, lr=5e-5, seed=14, max_tokens=4096,
-                              max_answer_tokens=768, checkpoint_every=0, valid_every=0).items():
-        P.require(report[key] == expected, 'Actual training recipe differs: ' + key)
+        'Final-step numerical/data/base acceptance differs')
+    for key, recipe_key in dict(batch_size='batch_size', micro_batch_size='micro_batch_size',
+            lr='lr', seed='seed', max_tokens='context_tokens', max_answer_tokens='answer_tokens',
+            checkpoint_every='checkpoint_every', valid_every='valid_every').items():
+        P.require(report[key] == recipe[recipe_key], 'Actual training recipe differs: ' + key)
     targets = {'q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'}
-    P.require(all(report['lora'][k] == P.RECIPE[k] for k in ('rank', 'alpha', 'dropout'))
+    P.require(all(report['lora'][k] == recipe[k] for k in ('rank', 'alpha', 'dropout'))
               and set(report['lora']['targets']) == targets, 'Actual LoRA recipe differs')
     admission = read_json(root / 'admission.json')
-    expected = Counter({(identifier, plan['data']['train']['sha256'], line): 2
+    expected = Counter({(identifier, plan['data']['train']['sha256'], line): recipe['epochs']
                         for line, identifier in enumerate(admission['training_ids'], 1)})
-    P.require(len(expected) == 530 and exposure_counts(report['coverage']) == expected,
+    P.require(len(expected) == recipe['rows'] and exposure_counts(report['coverage']) == expected,
               'Exactly-twice source line/id coverage failed')
     P.validate_inventory(provenance['parameter_inventory'])
     masking = provenance['masking']
-    P.require(provenance['fresh_zero_b'] is True and provenance['observed_steps'] == 530
-        and provenance['coverage_exactly_twice'] is True and masking['rows'] == 1060
+    P.require(provenance['fresh_zero_b'] is True and provenance['observed_steps'] == steps
+        and provenance['coverage_exactly_twice'] is True and masking['rows'] == exposures
         and all(masking[k] is True for k in ('all_prompt_tokens_masked', 'all_answer_tokens_supervised', 'eos_supervised'))
-        and 0 < masking['max_context_tokens'] <= 4096 and 0 < masking['max_answer_tokens'] <= 768,
+        and 0 < masking['max_context_tokens'] <= recipe['context_tokens']
+        and 0 < masking['max_answer_tokens'] <= recipe['answer_tokens'],
         'Observed initialization/masking/EOS/coverage differs')
-    P.require(len(report['history']) == 530, 'Incomplete optimizer history')
+    P.require(len(report['history']) == steps, 'Incomplete optimizer history')
+    # Match train_open_weight_lora.main's LambdaLR, including one-step runs.
+    warmup = max(1, steps // 20)
     def multiplier(step):
-        return (step + 1) / 26 if step < 26 else 0.5 * (1 + math.cos(math.pi * (step - 26) / 504))
+        return ((step + 1) / warmup if step < warmup else
+                0.5 * (1 + math.cos(math.pi * (step - warmup) / max(1, steps - warmup))))
     for step, row in enumerate(report['history'], 1):
         P.require(row['step'] == step and math.isfinite(row['train_loss'])
             and 'valid_loss_by_task' not in row
-            and math.isclose(row['applied_lr'], 5e-5 * multiplier(step - 1), rel_tol=1e-12, abs_tol=1e-15)
-            and math.isclose(row['next_lr'], 5e-5 * multiplier(step), rel_tol=1e-12, abs_tol=1e-15),
+            and math.isclose(row['applied_lr'], recipe['lr'] * multiplier(step - 1), rel_tol=1e-12, abs_tol=1e-15)
+            and math.isclose(row['next_lr'], recipe['lr'] * multiplier(step), rel_tol=1e-12, abs_tol=1e-15),
             'Numerical schedule/history differs')
     adapter = adapter_identity(root, plan)
     P.require(provenance['adapter'] == adapter, 'Final adapter file identity differs')
     P.generation_binding(plan, 'adapter', adapter)
     config = read_json(root / adapter['config']['path'])
-    P.require(config['r'] == 16 and config['lora_alpha'] == 32 and config['lora_dropout'] == 0
+    P.require(config['r'] == recipe['rank'] and config['lora_alpha'] == recipe['alpha']
+        and config['lora_dropout'] == recipe['dropout']
         and config['peft_type'] == 'LORA' and config['task_type'] == 'CAUSAL_LM'
         and config['bias'] == 'none' and not config.get('modules_to_save')
         and set(config['target_modules']) == targets
@@ -342,7 +349,8 @@ def validate_gpu_runtime(directory, runtime):
     plan_path = E.pinned_path(directory, runtime['plan'])
     P.require(plan_path.resolve() == root / 'plan.json', 'GPU plan location differs')
     plan = read_json(plan_path)
-    P.require(plan['schema'] == P.SCHEMA and plan['recipe'] == P.RECIPE
+    P.validate_recipe(plan['recipe'])
+    P.require(plan['schema'] == P.SCHEMA
               and plan['model']['id'] == P.MODEL_ID and plan['model']['revision'] == P.MODEL_REVISION,
               'Unsupported GPU public-work contract')
     arm, suite_name = directory.parent.name, directory.name

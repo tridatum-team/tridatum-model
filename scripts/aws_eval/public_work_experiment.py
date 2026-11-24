@@ -1,7 +1,11 @@
 """Sealed public_work_v1 GPU research contract; S3 contains public inputs only.
 
-Projection is offline admission, never permission to provision compute. Original
-suite manifests carry private-file *hashes*, not private source/reference bytes.
+Projection is offline admission, never permission to provision compute. Each run
+seals its admitted manifest, training bytes and revised suite manifest pins. Rows
+come from admission and are checked against train.jsonl; two epochs at batch two
+derive the final step and exactly-twice coverage. Public evaluation inputs remain
+the same 170 holdout and 24 diagnostic cases. Original suite manifests carry
+private-file *hashes*, not private source/reference bytes.
 """
 import argparse
 import json
@@ -9,6 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 import sys
+import unicodedata
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.aws_eval import public_evidence_experiment as evidence
@@ -28,21 +33,11 @@ PROFILE = 'public_work_v1'
 COMPLETION_SCOPE = 'public_work_training_and_paired_evaluation'
 MODEL_ID = evidence.MODEL_ID
 MODEL_REVISION = evidence.MODEL_REVISION
-TRAINING_ROWS = 530
 EVALUATION_ROWS = 194
-ADMITTED_SHA = 'a69e1bac2bbcb80fc4929e01690d8ea2a9ab4f1bc2062fb5c548ddf2200cd2d8'
-TRAIN_SHA = '95c44d5211f954411e17bcf89445678b8a8b68007446c2ed1e369cd223ff5af9'
 SUITES = {
     'holdout': (170, 'development_holdout', '8e6e6db9fb84a8b12a957175ca220f09a32978dbbaf69c64fce67c9f990c1e2f'),
     'diagnostic': (24, 'diagnostic', 'fbd2132d7ed28d9923e4bda96f4dfa78c8ad97a0b16d39590f89910ef2779130'),
 }
-SUITE_MANIFEST_SHAS = {
-    'holdout': 'c76942dc096c20a6f3d05bb2a5a0587e08a2feb9d04cd711aba73fda6683f1f2',
-    'diagnostic': '9f3b979e5d82b0f65db16ee5ee70bd4ead79899e4f35574d2e8a938b97a6de5b',
-}
-RECIPE = dict(rows=530, epochs=2, steps=530, batch_size=2, micro_batch_size=1,
-    lr=5e-5, rank=16, alpha=32, dropout=0.0, context_tokens=4096,
-    answer_tokens=768, seed=14, checkpoint_every=0, valid_every=0)
 GENERATION = dict(profile='public_work_greedy_v1', do_sample=False, num_beams=1,
     max_new_tokens=512, context_limit=4096, seed=0, seed_policy='constant',
     mode='evaluation', template_kwargs={'enable_thinking': False})
@@ -66,6 +61,22 @@ validate_public_rows = evidence.validate_public_rows
 validate_inventory = evidence.validate_inventory
 
 
+def recipe_for_rows(rows):
+    require(type(rows) is int and rows > 0, 'Positive admitted training row count required')
+    return dict(rows=rows, epochs=2, steps=rows * 2 // 2, batch_size=2, micro_batch_size=1,
+        lr=5e-5, rank=16, alpha=32, dropout=0.0, context_tokens=4096,
+        answer_tokens=768, seed=14, checkpoint_every=0, valid_every=0)
+
+
+def validate_recipe(recipe):
+    require(isinstance(recipe, dict) and recipe == recipe_for_rows(recipe.get('rows'))
+        and all(type(recipe[key]) is int for key in ('rows', 'epochs', 'steps', 'batch_size',
+            'micro_batch_size', 'rank', 'alpha', 'context_tokens', 'answer_tokens',
+            'seed', 'checkpoint_every', 'valid_every')),
+        'Exact admitted-row two-epoch recipe required')
+    return recipe
+
+
 def is_public(plan):
     return plan.get('schema') == SCHEMA
 
@@ -87,7 +98,7 @@ def validate_resources(root, plan, *, active=True):
         and auth.get('run_id') == plan['identity']['run_id']
         and auth.get('workload_sha256') == object_sha(plan['workload'])
         and auth.get('data_sha256') == object_sha(plan['data'])
-        and auth.get('recipe_sha256') == object_sha(RECIPE)
+        and auth.get('recipe_sha256') == object_sha(validate_recipe(plan['recipe']))
         and auth.get('source_manifest_sha256') == plan['workload']['source_manifest']['sha256']
         and auth.get('execution_started') is False and auth.get('additional_gpu_executions') == 1
         and all(auth.get(k) is False for k in ('automatic_retry', 'automatic_extension', 'deployment'))
@@ -124,7 +135,8 @@ def workload_pins(workload):
 
 
 def validate_workload(plan, bundled):
-    require(is_public(plan) and plan['recipe'] == RECIPE, 'Separate exact 530-row two-epoch recipe required')
+    require(is_public(plan), 'Separate public-work plan required')
+    validate_recipe(plan['recipe'])
     require(set(plan['phase_seconds']) == {'acquire', 'baseline', 'train', 'adapter'}
         and all(type(v) is int and v > 0 for v in plan['phase_seconds'].values())
         and sum(plan['phase_seconds'].values()) + 300 <= plan['limits']['lifetime_seconds'], 'Finite phase allocation differs')
@@ -135,10 +147,6 @@ def validate_workload(plan, bundled):
         and set(plan['workload']) == {'evaluation_inputs', 'source_manifest', 'acquisition_manifest', 'generation',
             'holdout_inputs', 'holdout_manifest', 'diagnostic_inputs', 'diagnostic_manifest'}
         and plan['workload']['generation'] == GENERATION, 'Public-work workload closure differs')
-    require(plan['data']['admitted_manifest']['sha256'] == ADMITTED_SHA
-        and plan['data']['train']['sha256'] == TRAIN_SHA, 'Original admitted corpus changed')
-    require(all(plan['workload'][name + '_manifest']['sha256'] == sha
-        for name, sha in SUITE_MANIFEST_SHAS.items()), 'Original public suite manifest changed')
     require(plan['workload']['acquisition_manifest']['sha256'] == ACQUISITION_SHA, 'Original model metadata required')
     records = [*plan['data'].values(), *workload_pins(plan['workload']),
         plan['authorization'], plan['resource_envelope'], plan['ancillary_evidence']]
@@ -154,9 +162,10 @@ def validate_workload(plan, bundled):
 def validate_admitted(manifest, train_record):
     require(manifest.get('schema') == 'trid-public-work-training-manifest-v1'
         and manifest.get('profile') == PROFILE and manifest.get('state') == 'ADMITTED_FOR_RESEARCH'
-        and manifest.get('training_ready') is True and manifest.get('rows') == TRAINING_ROWS
+        and manifest.get('training_ready') is True
+        and type(manifest.get('rows')) is int and manifest['rows'] > 0
         and manifest.get('valid') == [] and manifest.get('semantic_evaluated') is False
-        and manifest.get('expert_certified') is False, 'Admitted research-only 530-row manifest required')
+        and manifest.get('expert_certified') is False, 'Admitted research-only manifest required')
     require(manifest.get('train') == [dict(path='train.jsonl', bytes=train_record['bytes'],
         sha256=train_record['sha256'], adapter='grounded_messages', epochs=1, split='train')], 'Admitted training file differs')
     reviews = manifest.get('reviews')
@@ -179,17 +188,19 @@ def validate_suite(manifest, rows, name, inputs_pin):
     return validate_public_rows(rows, count)
 
 
-def minimal_manifest(train_pin):
-    return dict(id='public-work-gpu-530x2', profile=PROFILE, rows=530,
+def minimal_manifest(train_pin, rows):
+    recipe = recipe_for_rows(rows)
+    return dict(id=f'public-work-gpu-{rows}x2', profile=PROFILE, rows=rows,
         train=[dict(path='train.jsonl', bytes=train_pin['bytes'], sha256=train_pin['sha256'],
-                    adapter='grounded_messages', epochs=2)], valid=[], max_tokens=4096, max_answer_tokens=768)
+                    adapter='grounded_messages', epochs=recipe['epochs'])], valid=[],
+        max_tokens=recipe['context_tokens'], max_answer_tokens=recipe['answer_tokens'])
 
 
 def validate_admission(admission, data, workload, rows, admitted):
     expected = dict(schema=CLOUD_ADMISSION_SCHEMA, profile=PROFILE, state='ADMITTED_FOR_RESEARCH',
         training_ready=True, semantic_evaluated=False, expert_certified=False,
-        admitted_manifest=data['admitted_manifest'], train=data['train'], recipe=RECIPE,
-        evaluation_inputs=workload['evaluation_inputs'], training_rows=530, evaluation_rows=194,
+        admitted_manifest=data['admitted_manifest'], train=data['train'], recipe=recipe_for_rows(admitted['rows']),
+        evaluation_inputs=workload['evaluation_inputs'], training_rows=admitted['rows'], evaluation_rows=EVALUATION_ROWS,
         training_ids=[r['id'] for r in rows], review_sha256=[r['sha256'] for r in admitted['reviews']])
     require(admission == expected, 'Public admission/provenance differs')
 
@@ -214,18 +225,19 @@ def validate_data(root, plan):
     data, workload = plan['data'], plan['workload']
     admitted = load(root, data['admitted_manifest'])
     validate_admitted(admitted, data['train'])
+    require(plan['recipe'] == recipe_for_rows(admitted['rows']), 'Recipe/admitted row count differs')
     manifest = load(root, data['manifest'])
-    require(manifest == minimal_manifest(data['train'])
+    require(manifest == minimal_manifest(data['train'], admitted['rows'])
         and PurePosixPath(data['train']['path']).parent == PurePosixPath(data['manifest']['path']).parent,
         'Two-epoch training projection differs')
     rows = [json.loads(line) for line in bound(root, data['train']).read_text().splitlines()]
-    require(len(rows) == 530, 'Wrong training row count')
+    require(len(rows) == admitted['rows'], 'Wrong training row count')
     for row in rows:
         require(set(row) == {'id', 'task', 'split', 'messages', 'answer'} and row['split'] == 'train'
             and isinstance(row['task'], str) and row['task'].strip()
             and isinstance(row['answer'], str) and row['answer'].strip(), 'Invalid supervised training row')
         validate_public_rows([{'id': row['id'], 'messages': row['messages']}], 1)
-    require(len({r['id'] for r in rows}) == 530, 'Duplicate training IDs')
+    require(len({r['id'] for r in rows}) == admitted['rows'], 'Duplicate training IDs')
     combined, suites = [], {}
     for name in SUITES:
         suite = load(root, workload[name + '_manifest'])
@@ -270,26 +282,31 @@ def validate_plan(plan, base):
     return validate_data(base, plan)
 
 
+def resolved_path(path):
+    value = str(Path(path).resolve())
+    return Path(unicodedata.normalize('NFD', value) if sys.platform == 'darwin' else value)
+
+
 def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_manifest,
                        holdout_manifest, diagnostic_manifest):
-    root, source, output = Path(root).resolve(), Path(admitted_manifest).resolve(), Path(output).resolve()
+    root, source, output = map(resolved_path, (root, admitted_manifest, output))
     require(output.is_relative_to(root) and not output.exists(), 'New repository-local projection required')
-    require(pin(source)['sha256'] == ADMITTED_SHA, 'Original admitted manifest changed')
     admitted = read_json(source)
     train_record = {k: admitted['train'][0][k] for k in ('path', 'bytes', 'sha256')}
     validate_admitted(admitted, train_record)
     train_file = bound(source.parent, train_record)
     rows = [json.loads(line) for line in train_file.read_text().splitlines()]
-    require(len(rows) == TRAINING_ROWS and len({r['id'] for r in rows}) == TRAINING_ROWS, 'Wrong training coverage')
+    require(len(rows) == admitted['rows'] and len({r['id'] for r in rows}) == admitted['rows'],
+        'Wrong training coverage')
+    recipe = recipe_for_rows(admitted['rows'])
     for record in admitted['reviews']:
         review = Path(record['path'])
-        require(review.resolve().is_relative_to(root) and not review.is_symlink()
+        require(resolved_path(review).is_relative_to(root) and not review.is_symlink()
             and pin(review)['sha256'] == record['sha256'] and review.stat().st_size == record['bytes'], 'Review pin changed')
     public = {}
     combined = []
     for name, location in [('holdout', holdout_manifest), ('diagnostic', diagnostic_manifest)]:
-        location = Path(location).resolve()
-        require(pin(location)['sha256'] == SUITE_MANIFEST_SHAS[name], 'Original public suite manifest changed')
+        location = resolved_path(location)
         manifest = read_json(location)
         input_path = bound(location.parent, manifest['inputs'])
         inputs = read_json(input_path)
@@ -300,13 +317,13 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
     require(not set(ids).intersection(r['id'] for r in rows), 'Training/evaluation overlap')
     require(set(sources) == SOURCE_NAMES and len(sources) == len(SOURCE_NAMES), 'Exact executable source set required')
     source_records = [pin(safe_path(root, name), root) for name in sorted(sources)]
-    acquisition = pin(Path(acquisition_manifest).resolve(), root)
+    acquisition = pin(resolved_path(acquisition_manifest), root)
     require(acquisition['sha256'] == ACQUISITION_SHA, 'Original model metadata required')
     output.mkdir(parents=True)
     (output / 'admitted-manifest.json').write_bytes(source.read_bytes())
     (output / 'train.jsonl').write_bytes(train_file.read_bytes())
     train_pin = pin(output / 'train.jsonl', root)
-    write_json(output / 'training-manifest.json', minimal_manifest(train_pin))
+    write_json(output / 'training-manifest.json', minimal_manifest(train_pin, admitted['rows']))
     write_json(output / 'evaluation-inputs.json', combined)
     write_json(output / 'source-manifest.json', dict(schema=SOURCE_MANIFEST_SCHEMA, files=source_records))
     workload = dict(evaluation_inputs=pin(output / 'evaluation-inputs.json', root),
@@ -322,25 +339,27 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
         admitted_manifest=pin(output / 'admitted-manifest.json', root))
     admission = dict(schema=CLOUD_ADMISSION_SCHEMA, profile=PROFILE, state='ADMITTED_FOR_RESEARCH',
         training_ready=True, semantic_evaluated=False, expert_certified=False,
-        admitted_manifest=data['admitted_manifest'], train=train_pin, recipe=RECIPE,
-        evaluation_inputs=workload['evaluation_inputs'], training_rows=530, evaluation_rows=194,
+        admitted_manifest=data['admitted_manifest'], train=train_pin, recipe=recipe,
+        evaluation_inputs=workload['evaluation_inputs'], training_rows=admitted['rows'], evaluation_rows=EVALUATION_ROWS,
         training_ids=[r['id'] for r in rows], review_sha256=[r['sha256'] for r in admitted['reviews']])
     write_json(output / 'admission.json', admission)
     data['admission'] = pin(output / 'admission.json', root)
-    result = dict(schema=OFFLINE_PROJECTION_SCHEMA, cloud_authorized=False, recipe=RECIPE, data=data,
+    result = dict(schema=OFFLINE_PROJECTION_SCHEMA, cloud_authorized=False, recipe=recipe, data=data,
         workload=workload, sources={p['path']: p['sha256'] for p in source_records})
     write_json(output / 'execution-inputs.json', result)
     return result
 
 
 def generation_binding(plan, arm, adapter=None):
-    require(is_public(plan) and plan['recipe'] == RECIPE and arm in ('baseline', 'adapter'), 'Sealed generation recipe required')
+    require(is_public(plan) and arm in ('baseline', 'adapter'), 'Sealed generation recipe required')
+    recipe = validate_recipe(plan['recipe'])
     require((adapter is None) == (arm == 'baseline'), 'Adapter/base identity mismatch')
     if adapter is not None:
-        require(set(adapter) == {'config', 'weights', 'step'} and adapter['step'] == 530, 'Only final530 adapter admitted')
+        require(set(adapter) == {'config', 'weights', 'step'} and adapter['step'] == recipe['steps'],
+            'Only sealed final-step adapter admitted')
     return dict(schema=GENERATION_BINDING_SCHEMA, run_id=plan['identity']['run_id'], arm=arm,
         model=dict(id=MODEL_ID, revision=MODEL_REVISION), evaluation_inputs=plan['workload']['evaluation_inputs'],
-        source_manifest=plan['workload']['source_manifest'], recipe_sha256=object_sha(RECIPE), adapter=adapter)
+        source_manifest=plan['workload']['source_manifest'], recipe_sha256=object_sha(recipe), adapter=adapter)
 
 
 def output_members(plan=None):
@@ -361,7 +380,8 @@ def output_members(plan=None):
 
 
 def output_provenance(root, plan, record):
-    require(is_public(plan) and plan['recipe'] == RECIPE, 'Sealed output recipe required')
+    require(is_public(plan), 'Sealed output plan required')
+    validate_recipe(plan['recipe'])
     require(record['plan_sha256'] == pin(Path(root) / 'plan.json')['sha256']
         and record['source_manifest'] == plan['workload']['source_manifest'], 'Worker plan/source provenance differs')
     runtime = load(root, record['runtime'])
