@@ -43,7 +43,7 @@ timeout 150 aws s3api get-object --endpoint-url "https://s3.${REGION}.amazonaws.
   --range "bytes=0-$((BUNDLE_BYTES-1))" --cli-connect-timeout 5 --cli-read-timeout 30 bundle.tar >/dev/null
 printf '%s  %s\n' "$BUNDLE_SHA" bundle.tar | sha256sum --check --status
 # This small stdlib verifier runs before any bundle import; no tar extraction API.
-python3 -I -B - "$BUNDLE_BYTES" "${ABSOLUTE_WORK_DEADLINE:-}" <<'PY'
+python3 -I -B - "$BUNDLE_BYTES" "${ABSOLUTE_WORK_DEADLINE:-}" "$BUNDLE_MAX_BYTES" <<'PY'
 import datetime, hashlib, json, pathlib, sys, tarfile, time
 p = json.loads(pathlib.Path('plan.json').read_text())
 b = p['bundle']
@@ -51,7 +51,13 @@ assert p.get('schema') in ('trid-grounded-hf-v1', 'trid-ordered-hf-inference-v1'
     'trid-hf14-followup-v1', 'trid-eight-sft-experiment-v1',
     'trid-fresh-eight-training-experiment-v2', 'trid-fresh-eight-cuda-evaluation-v1',
     'trid-public-evidence-gpu-plan-v2', 'trid-public-work-gpu-plan-v1')
-assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= 128 * 1024**2
+# The authenticated controller derives this immutable cap from the complete
+# original comparator spec; its pinned worker revalidates that spec after import.
+bundle_max_bytes = int(sys.argv[3])
+assert bundle_max_bytes in (128 * 1024**2, 256 * 1024**2)
+comparator = p.get('schema') == 'trid-public-work-gpu-plan-v1' and 'prior_adapter' in p.get('workload', {})
+assert bundle_max_bytes == (256 if comparator else 128) * 1024**2
+assert pathlib.Path('bundle.tar').stat().st_size == int(sys.argv[1]) == b['bytes'] <= bundle_max_bytes
 if p.get('schema') == 'trid-fresh-eight-training-experiment-v2':
     lease, limits, cost = p['lifetime'], p['limits'], p['cost']
     assert lease == dict(total_seconds=2700, termination_grace_seconds=900, automatic_extension=False)

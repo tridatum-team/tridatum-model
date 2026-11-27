@@ -875,7 +875,8 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
     for row in wheels.values():
         require(row['url'].startswith('https://') and row['url'].split('/')[2] in runtime['download_hosts'],
                 'Unapproved wheel origin')
-    require(plan['bundle']['bytes'] <= 128 * 1024**2
+    bundle_max_bytes = public_contract_module(plan).bundle_bytes_max(plan) if public_work_mode(plan) else 128 * 1024**2
+    require(plan['bundle']['bytes'] <= bundle_max_bytes
             and plan['bundle']['unpacked_bytes'] <= 256 * 1024**2, 'Code/data bundle too large')
     bundled = pins(plan['bundle']['files'], plan['bundle']['unpacked_bytes'])
     if fresh_mode(plan):
@@ -945,7 +946,7 @@ def validate_plan(plan, approval, plan_sha, *, now=None):
                 and sum(plan['phase_seconds'].values()) <= 14400 - 1800 - 600,
                 'Phase budgets must leave boot and final export/stop reserve')
     require(sum(model['max_bytes'] for model in models.values()) + 2 * runtime['max_bytes'] + plan['disk_os_reserve_bytes']
-            + 4 * GIB + 128 * 1024**2 + plan['bundle']['unpacked_bytes'] < 120 * GIB
+            + 4 * GIB + bundle_max_bytes + plan['bundle']['unpacked_bytes'] < 120 * GIB
             and plan['disk_os_reserve_bytes'] >= 20 * GIB, 'Root disk envelope insufficient')
     require(plan['cost']['download_requests'] >= 6 * (file_count + len(wheels) + 1),
             'Redirect/download request envelope insufficient')
@@ -1987,7 +1988,9 @@ def bootstrap_text(plan, plan_sha, root):
     values = dict(RUN=plan['identity']['run_id'], BUCKET=plan['identity']['bucket'],
                   REGION=plan['identity']['region'], CODE_PREFIX=plan['identity']['code_prefix'],
                   PLAN_SHA=plan_sha, BUNDLE_SHA=plan['bundle']['sha256'],
-                  BUNDLE_BYTES=str(plan['bundle']['bytes']))
+                  BUNDLE_BYTES=str(plan['bundle']['bytes']),
+                  BUNDLE_MAX_BYTES=str(public_contract_module(plan).bundle_bytes_max(plan)
+                                       if public_work_mode(plan) else 128 * 1024**2))
     if sampling_mode(plan) or public_contract_mode(plan):
         grace = plan['cost']['termination_grace_seconds'] if public_contract_mode(plan) else 900
         values['ABSOLUTE_WORK_DEADLINE'] = str(int(absolute_deadline(plan) - grace))

@@ -42,11 +42,14 @@ resource creation, launch, or upload exists here. AWS_MAX_ATTEMPTS=1 is enforced
 No request/response from the old run is relabeled as a fresh observation.
 
 The reference supplies fixed same-AMI dependency pins, infrastructure constraints,
-policies and finite resource/cost limits only. Current projection data, recipe and
-source pins replace old ones. This generator deliberately retains the reference
-subnet/AZ, eight-hour envelope, phase limits and <=$30 cap; a new infrastructure
+policies and finite resource/cost limits only. Current projection data, recipe,
+dynamic suites, optional prior comparator and source pins replace old ones.
+This generator deliberately retains the reference subnet/AZ, eight-hour envelope,
+phase limits and <=$30 cap; a new infrastructure
 or resource envelope needs a separately reviewed contract. Price rates are always
 recomputed from the freshly returned products, never copied from history.
+Only the exactly pinned original prior adapter permits a 256 MiB input bundle;
+other workloads retain 128 MiB, and output/resource/time/cost ceilings are unchanged.
 
 After authorize, next-commands.json contains exact prepare (offline),
 prepare-prerequisites (MUTATES AWS), and finalize (offline) argv. Finalize takes
@@ -312,9 +315,9 @@ def authorize(args, ctx):
         'schema', 'instance_type', 'architecture', 'vcpus', 'host_mib', 'disk_os_reserve_bytes',
         'model', 'runtime', 'limits', 'lifetime', 'phase_seconds')}
     plan.update(identity=identity, controller_arn=caller['Arn'], checked_at=checked,
-                absolute_termination_deadline=args.absolute_deadline_utc,
-                output_allowlist=sorted(public.output_members()))
+                absolute_termination_deadline=args.absolute_deadline_utc)
     plan.update({key: projection[key] for key in ('data', 'workload', 'recipe', 'sources')})
+    plan['output_allowlist'] = sorted(public.output_members(plan))
     plan['cost'] = {key: copy.deepcopy(value) for key, value in reference_plan['cost'].items()
                     if key not in ('rates', 'bucket_lifecycle_configuration')}
     require(0 < plan['cost']['cap_usd'] <= 30, 'Maximum USD30 cap required')
@@ -394,7 +397,7 @@ def authorize(args, ctx):
     lifecycle.validate_lifecycle_configuration(plan, plan['cost']['bucket_lifecycle_configuration'])
     # Price the sealed maximum before the bundle exists; finalization replaces
     # this planning bound with the actual authenticated prepare receipt.
-    bundle_bytes_upper_bound = 128 * 1024**2
+    bundle_bytes_upper_bound = public.bundle_bytes_max(plan)
     bound_cost = public.cost_bound(dict(plan, bundle={'bytes': bundle_bytes_upper_bound}))
     approval_intent = save(root, run / 'approval-intent.json', dict(
         schema='trid-public-work-operator-intent-v1', approved=True, run_id=identity['run_id'],
@@ -419,7 +422,8 @@ def authorize(args, ctx):
         independent_review=approval_intent, billing_hard_cap=False))
     envelope = fresh.bound_json(root, reference_reg['resource_envelope'])
     envelope.update(identity=identity, authorization=plan['authorization'], cost_evidence=cost_evidence,
-                    absolute_termination_deadline=args.absolute_deadline_utc)
+                    absolute_termination_deadline=args.absolute_deadline_utc,
+                    bundle_bytes_max=bundle_bytes_upper_bound)
     plan['resource_envelope'] = save(root, run / 'resource-envelope.json', envelope)
     admission = dict(schema='trid-grounded-hf-cost-admission-v1', status='admitted',
         run_id=identity['run_id'], account=identity['account'], region=identity['region'],

@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 from scripts.aws_eval import fresh_eight_launch as fresh
 from scripts.aws_eval import public_work_operator_inputs as operator
+from trid.service.public_work import TASKS
 
 
 SHA = 'a' * 64
@@ -435,6 +436,68 @@ class PublicWorkOperatorSafetyTests(unittest.TestCase):
                 operator.authorize(self.args, self.ctx)
             observations.assert_not_called()
         self.assertEqual((self.run / 'authorization.json').read_bytes(), before)
+
+    def test_authorize_projects_dynamic_outputs_before_unchanged_resource_checks(self):
+        self.args.approve_fresh_one_run = True
+        self.args.approve_ancillary_retention_network_cost_review = True
+        self.args.observations_sha256 = SHA
+        workload = dict(suites={
+            name: dict(manifest={}, inputs={}, case_count=count,
+                       scope='development_holdout', expected_tasks=list(TASKS))
+            for name, count in [('fresh_audit', 3), ('fresh_uncertainty', 2)]},
+            prior_adapter=dict(run_id=operator.public.PRIOR_RUN_ID, step=530,
+                model=dict(id=operator.public.MODEL_ID, revision=operator.public.MODEL_REVISION),
+                files={name: dict(path='prior/' + name,
+                    bytes=operator.public.PRIOR_WEIGHTS_BYTES
+                        if name == operator.public.PRIOR_WEIGHT_PATH else 1,
+                    sha256=operator.public.PRIOR_WEIGHTS_SHA
+                        if name == operator.public.PRIOR_WEIGHT_PATH
+                        else operator.public.PRIOR_RECEIPT_SHA[name])
+                    for name in operator.public.PRIOR_FILES}))
+        projection = dict(data={'current': True}, workload=workload,
+                          recipe=operator.public.recipe_for_rows(731), sources={})
+        reference = dict(schema=operator.public.SCHEMA, instance_type='g6e.2xlarge',
+            architecture='x86_64', vcpus=8, host_mib=65536, disk_os_reserve_bytes=1,
+            model={}, runtime={}, limits={'output_bytes': 512 * 1024**2},
+            lifetime={'total_seconds': 28800},
+            phase_seconds={'acquire': 900, 'baseline': 7200, 'train': 10800, 'adapter': 7200},
+            cost={'cap_usd': 30, 'export_bytes': 512 * 1024**2, 'rates': {'stale': 1}})
+        rows = {
+            'enabled_regions': dict(exit_code=0, response={'Regions': [
+                {'RegionName': self.identity['region'], 'OptInStatus': 'opt-in-not-required'}]}),
+            'caller_identity': dict(exit_code=0, response={
+                'Account': self.identity['account'], 'Arn': 'arn:aws:iam::123456789012:user/operator'}),
+            'new_security_group_absent': dict(exit_code=0, response={'SecurityGroups': []})}
+        for name in ('instance_role_absent', 'scheduler_role_absent', 'instance_profile_absent',
+                     'schedule_absent', 'schedule_group_absent'):
+            rows[name] = dict(exit_code=254, error_code='NoSuchEntity')
+        for prefix in ('code_prefix', 'output_prefix'):
+            rows[prefix + '_empty'] = dict(exit_code=0, response={})
+            rows[prefix + '_multipart'] = dict(exit_code=0, response={})
+        historical_regions = {'response': {'Regions': [{'RegionName': self.identity['region']}]}}
+        ctx = (self.root, self.run, {}, reference, self.identity, {}, projection,
+               {'observations': {'enabled_regions': {}}})
+        with patch.object(operator, 'observations', return_value=(
+                {}, {}, rows, self.started, self.completed)), \
+                patch.object(fresh, 'bound_json', return_value=historical_regions), \
+                patch.object(operator.public, 'validate_limits',
+                             side_effect=RuntimeError('resource admission boundary')) as limits, \
+                patch.object(operator.subprocess, 'run') as runner:
+            with self.assertRaisesRegex(RuntimeError, 'resource admission boundary'):
+                operator.authorize(self.args, ctx)
+            runner.assert_not_called()
+        plan = limits.call_args.args[0]
+        self.assertEqual(plan['workload'], workload)
+        self.assertEqual(plan['recipe'], projection['recipe'])
+        self.assertEqual(plan['phase_seconds'], reference['phase_seconds'])
+        self.assertEqual(plan['limits'], reference['limits'])
+        self.assertEqual(plan['lifetime'], reference['lifetime'])
+        self.assertEqual(plan['cost']['export_bytes'], 512 * 1024**2)
+        self.assertNotIn('rates', plan['cost'])
+        self.assertEqual(set(plan['output_allowlist']), operator.public.output_members(plan))
+        self.assertIn('prior_adapter/fresh_audit/responses.jsonl', plan['output_allowlist'])
+        self.assertNotIn('baseline/holdout/responses.jsonl', plan['output_allowlist'])
+        self.assertFalse((self.run / 'authorization.json').exists())
 
 
 class PublicEvidenceRegistrationBindingTests(unittest.TestCase):
@@ -903,6 +966,80 @@ class CudaEvaluationPreparationTests(unittest.TestCase):
         self.reg['bundle']['local_path'] = 'oversized.tar'
         with self.assertRaisesRegex(RuntimeError, 'Bundle too large'):
             fresh.prepare_bundle(self.reg, self.root, self.state)
+
+
+class PublicWorkBundlePreparationTests(unittest.TestCase):
+    """Exercise real tar/authentication and cap dispatch without a 175 MB fixture."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.state = self.root / 'state'
+        self.state.mkdir()
+        public = operator.public
+        prior = dict(run_id=public.PRIOR_RUN_ID, step=530,
+            model=dict(id=public.MODEL_ID, revision=public.MODEL_REVISION),
+            files={name: dict(path='prior/' + name,
+                bytes=public.PRIOR_WEIGHTS_BYTES if name == public.PRIOR_WEIGHT_PATH else 1,
+                sha256=public.PRIOR_WEIGHTS_SHA if name == public.PRIOR_WEIGHT_PATH
+                    else public.PRIOR_RECEIPT_SHA[name]) for name in public.PRIOR_FILES})
+        self.reg = dict(schema=fresh.PUBLIC_WORK_SCHEMA, workload={'prior_adapter': prior},
+            resource_envelope=pin(self.root, 'envelope.json', {'bundle_bytes_max': 256 * 1024**2}),
+            bundle=dict(local_path='bundle.tar',
+                        files=[pin(self.root, 'inputs/public.json', {'synthetic': True})]))
+        # Full prior-file admission is tested separately with its pinned artifacts.
+        # Only that unrelated validator is replaced; cap/spec validation, file
+        # authentication, USTAR creation and prepared receipts remain real.
+        validation = patch.object(public, 'validate_registration_bundle')
+        self.registration_validation = validation.start()
+        self.addCleanup(validation.stop)
+
+    def test_exact_prior_allows_256_mib_envelope_with_authenticated_ustar(self):
+        bundle = fresh.prepare_bundle(self.reg, self.root, self.state)
+        shell = dict(self.reg, schema=operator.public.SCHEMA)
+        self.registration_validation.assert_called_once_with(
+            self.root, self.reg, {record['path']: record for record in self.reg['bundle']['files']})
+        self.assertEqual(operator.public.bundle_bytes_max(shell), 256 * 1024**2)
+        self.assertLess(bundle['bytes'], 128 * 1024**2)
+        archive_path = self.root / bundle['local_path']
+        self.assertEqual(archive_path.read_bytes()[257:265], b'ustar\x0000')
+        with tarfile.open(archive_path) as archive:
+            self.assertEqual(archive.getnames(), ['inputs/public.json'])
+            member = archive.getmember('inputs/public.json')
+            self.assertTrue(member.isfile())
+            self.assertEqual((member.uid, member.gid, member.mtime), (0, 0, 0))
+            self.assertEqual(archive.extractfile(member).read(),
+                             (self.root / 'inputs/public.json').read_bytes())
+        self.assertEqual(fresh.load(self.state / 'bundle-prepared.json'), bundle)
+
+    def test_without_prior_rejects_256_mib_envelope_but_accepts_128_mib(self):
+        self.reg['workload'] = {}
+        with self.assertRaisesRegex(RuntimeError, 'Bundle too large'):
+            fresh.prepare_bundle(self.reg, self.root, self.state)
+        self.assertFalse((self.state / 'bundle-prepared.json').exists())
+        self.reg['resource_envelope'] = pin(
+            self.root, 'ordinary-envelope.json', {'bundle_bytes_max': 128 * 1024**2})
+        self.reg['bundle']['local_path'] = 'ordinary.tar'
+        bundle = fresh.prepare_bundle(self.reg, self.root, self.state)
+        self.assertEqual(fresh.load(self.state / 'bundle-prepared.json'), bundle)
+
+    def test_tampered_prior_cannot_unlock_comparator_bundle_cap(self):
+        original = copy.deepcopy(self.reg['workload']['prior_adapter'])
+        altered = []
+        altered.append(dict(original, run_id='different-prior-run'))
+        altered.append(dict(original, step=531))
+        for name in (operator.public.PRIOR_WEIGHT_PATH, 'plan.json'):
+            changed = copy.deepcopy(original)
+            changed['files'][name]['sha256'] = '0' * 64
+            altered.append(changed)
+        for index, prior in enumerate(altered):
+            with self.subTest(index=index):
+                self.reg['workload']['prior_adapter'] = prior
+                self.reg['bundle']['local_path'] = f'tampered-{index}.tar'
+                with self.assertRaisesRegex((ValueError, RuntimeError), 'Original first-adapter'):
+                    fresh.prepare_bundle(self.reg, self.root, self.state)
+                self.assertFalse((self.state / 'bundle-prepared.json').exists())
 
 
 class FreshPreparationTests(unittest.TestCase):

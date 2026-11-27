@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts.aws_eval import public_evidence_experiment as P
+from scripts.aws_eval import public_work_experiment as W
 
 
 def save(root, name, value):
@@ -42,6 +43,32 @@ def safety_plan():
         cost=dict(cap_usd=30, termination_grace_seconds=900, contingency_usd=1.0),
         data=dict(train=dict(path='train.jsonl', bytes=1, sha256='3'*64)),
         workload=dict(source_manifest=dict(path='sources.json', bytes=1, sha256='a'*64)))
+
+
+def cost_plan():
+    plan = safety_plan()
+    plan['bundle'] = dict(bytes=1024)
+    plan['network'] = dict(egress_byte_cap=P.GIB)
+    plan['cost'].update(export_bytes=512*1024**2, controller_retrieval_bytes=P.GIB,
+        network_egress_bytes=3*P.GIB, retained_bytes=P.GIB, retention_days=30,
+        get_requests=4608, put_requests=4608, control_requests=4608,
+        scheduler_invocations=10000, tax_rate=0.10, ancillary_bound_usd=1,
+        rates=dict(ec2_hour=2, ipv4_hour=0.005, ebs_gb_month=0.08, s3_gb_month=0.025,
+            egress_gb=0.1, s3_get=0.000001, s3_put=0.000005, scheduler_invocation=0.000001))
+    return plan
+
+
+def comparator_cost_plan():
+    plan = cost_plan()
+    plan['schema'] = W.SCHEMA
+    plan['bundle']['bytes'] = 256 * 1024**2
+    plan['workload']['prior_adapter'] = dict(run_id=W.PRIOR_RUN_ID, step=530,
+        model=dict(id=W.MODEL_ID, revision=W.MODEL_REVISION),
+        files={name: dict(path='prior/' + name,
+            bytes=W.PRIOR_WEIGHTS_BYTES if name == W.PRIOR_WEIGHT_PATH else 1,
+            sha256=W.PRIOR_WEIGHTS_SHA if name == W.PRIOR_WEIGHT_PATH else W.PRIOR_RECEIPT_SHA[name])
+            for name in W.PRIOR_FILES})
+    return plan
 
 
 def resources(root, plan):
@@ -424,15 +451,7 @@ class PublicEvidenceContractTests(unittest.TestCase):
                     P.validate_resources(Path(tmp), plan)
 
     def test_cost_ceiling_still_requires_the_all_in_bound_to_fit(self):
-        plan = safety_plan()
-        plan['bundle'] = dict(bytes=1024)
-        plan['network'] = dict(egress_byte_cap=P.GIB)
-        plan['cost'].update(export_bytes=512*1024**2, controller_retrieval_bytes=P.GIB,
-            network_egress_bytes=3*P.GIB, retained_bytes=P.GIB, retention_days=30,
-            get_requests=4608, put_requests=4608, control_requests=4608,
-            scheduler_invocations=10000, tax_rate=0.10, ancillary_bound_usd=1,
-            rates=dict(ec2_hour=2, ipv4_hour=0.005, ebs_gb_month=0.08, s3_gb_month=0.025,
-                egress_gb=0.1, s3_get=0.000001, s3_put=0.000005, scheduler_invocation=0.000001))
+        plan = cost_plan()
         result = P.cost_bound(plan)
         self.assertLessEqual(float(result['all_in_bound_usd']), 30)
         plan['cost']['cap_usd'] = 1
@@ -441,6 +460,116 @@ class PublicEvidenceContractTests(unittest.TestCase):
         plan['cost']['cap_usd'] = 30
         plan['cost']['rates']['ec2_hour'] = 4
         with self.assertRaises(ValueError):
+            P.cost_bound(plan)
+
+    def test_evidence_costing_does_not_import_unbundled_public_work(self):
+        original_import = __import__
+
+        def without_public_work(name, globals=None, locals=None, fromlist=(), level=0):
+            if name.endswith('public_work_experiment') or 'public_work_experiment' in (fromlist or ()):
+                raise ModuleNotFoundError('public_work_experiment is absent from evidence bundle')
+            return original_import(name, globals, locals, fromlist, level)
+
+        plan = cost_plan()
+        plan['bundle']['bytes'] = 128 * 1024**2
+        comparator = comparator_cost_plan()
+        with patch('builtins.__import__', side_effect=without_public_work):
+            result = P.cost_bound(plan)
+            self.assertLessEqual(float(result['all_in_bound_usd']), 30)
+            plan['bundle']['bytes'] += 1
+            with self.assertRaisesRegex(ValueError, 'storage/network/request/tax'):
+                P.cost_bound(plan)
+            with self.assertRaisesRegex(ModuleNotFoundError, 'absent from evidence bundle'):
+                P.cost_bound(comparator)
+
+    def test_bundle_cap_cannot_be_supplied_by_caller(self):
+        plan = cost_plan()
+        plan['bundle'].update(bytes=128 * 1024**2 + 1, bytes_max=P.GIB)
+        plan['cost']['bundle_bytes_max'] = P.GIB
+        plan['bundle_bytes_max'] = P.GIB
+        with self.assertRaisesRegex(ValueError, 'storage/network/request/tax'):
+            P.cost_bound(plan)
+        with self.assertRaises(TypeError):
+            P.cost_bound(plan, bundle_bytes_max=P.GIB)
+
+    def test_bundle_cap_requires_exact_public_work_comparator(self):
+        for schema in (P.SCHEMA, W.SCHEMA, W.OFFLINE_PROJECTION_SCHEMA,
+                       'trid-public-work-prerequisites-v1', 'unknown'):
+            plan = cost_plan()
+            plan['schema'] = schema
+            plan['bundle']['bytes'] = 128 * 1024**2
+            with self.subTest(schema=schema):
+                P.cost_bound(plan)
+                plan['bundle']['bytes'] += 1
+                with self.assertRaisesRegex(ValueError, 'storage/network/request/tax'):
+                    P.cost_bound(plan)
+        comparator = comparator_cost_plan()
+        legacy = cost_plan()
+        legacy['bundle']['bytes'] = 128 * 1024**2
+        self.assertEqual(P.cost_bound(comparator), P.cost_bound(legacy))
+        self.assertEqual(W.cost_bound(comparator), P.cost_bound(comparator))
+        comparator['bundle']['bytes'] += 1
+        with self.assertRaisesRegex(ValueError, 'storage/network/request/tax'):
+            P.cost_bound(comparator)
+        for schema in (P.SCHEMA, W.OFFLINE_PROJECTION_SCHEMA,
+                       'trid-public-work-prerequisites-v1', 'unknown'):
+            plan = comparator_cost_plan()
+            plan['schema'] = schema
+            with self.subTest(schema=schema), self.assertRaisesRegex(ValueError, 'storage/network/request/tax'):
+                P.cost_bound(plan)
+
+    def test_comparator_bundle_allowance_rejects_tampered_original(self):
+        mutations = [
+            ('run_id', lambda spec: spec.update(run_id='different-run')),
+            ('step', lambda spec: spec.update(step=531)),
+            ('model', lambda spec: spec['model'].update(id='different-model')),
+            ('revision', lambda spec: spec['model'].update(revision='0'*40)),
+            ('inventory', lambda spec: spec['files'].pop(W.PRIOR_WEIGHT_PATH)),
+            ('weight_bytes', lambda spec: spec['files'][W.PRIOR_WEIGHT_PATH].update(bytes=1)),
+            ('weight_sha', lambda spec: spec['files'][W.PRIOR_WEIGHT_PATH].update(sha256='0'*64)),
+        ]
+        mutations += [(name, lambda spec, name=name: spec['files'][name].update(sha256='0'*64))
+            for name in W.PRIOR_RECEIPT_SHA]
+        for name, mutate in mutations:
+            for bundle_bytes in (128 * 1024**2, 256 * 1024**2):
+                plan = comparator_cost_plan()
+                plan['bundle']['bytes'] = bundle_bytes
+                mutate(plan['workload']['prior_adapter'])
+                with self.subTest(field=name, bundle_bytes=bundle_bytes), self.assertRaisesRegex(
+                        ValueError, 'Original first-adapter'):
+                    P.cost_bound(plan)
+
+    def test_comparator_bundle_keeps_storage_network_and_budget_guards(self):
+        minimum_retained = (256 + 512 + 8) * 1024**2
+        plan = comparator_cost_plan()
+        plan['cost']['retained_bytes'] = minimum_retained
+        P.cost_bound(plan)
+        for section, key, value in (
+            ('cost', 'retained_bytes', minimum_retained - 1),
+            ('cost', 'retained_bytes', 2 * P.GIB + 1),
+            ('cost', 'retention_days', 31),
+            ('cost', 'network_egress_bytes', 2 * P.GIB),
+            ('cost', 'controller_retrieval_bytes', (512 + 121) * 1024**2 - 1),
+            ('cost', 'controller_retrieval_bytes', P.GIB + 1),
+            ('cost', 'export_bytes', 512 * 1024**2 + 1),
+            ('network', 'egress_byte_cap', (512 + 16) * 1024**2 - 1),
+            ('network', 'egress_byte_cap', 2 * P.GIB + 1),
+        ):
+            plan = comparator_cost_plan()
+            plan[section][key] = value
+            with self.subTest(field=key, value=value), self.assertRaisesRegex(
+                    ValueError, 'storage/network/request/tax'):
+                P.cost_bound(plan)
+        plan = comparator_cost_plan()
+        plan['cost']['cap_usd'] = 1
+        with self.assertRaisesRegex(ValueError, 'All-in bound exceeds'):
+            P.cost_bound(plan)
+        plan['cost']['cap_usd'] = 30.01
+        with self.assertRaisesRegex(ValueError, 'finite positive JSON number'):
+            P.cost_bound(plan)
+        plan['cost']['cap_usd'] = 30
+        plan['cost']['rates']['ec2_hour'] = 4
+        with self.assertRaisesRegex(ValueError, 'All-in bound exceeds'):
             P.cost_bound(plan)
 
     def test_host_limit_and_budget_cannot_expand(self):

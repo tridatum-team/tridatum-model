@@ -13,6 +13,7 @@ from scripts.aws_eval import public_work_experiment as P
 from scripts.aws_eval import public_evidence_experiment as evidence
 from scripts.aws_eval import fresh_eight_launch as launch
 from scripts import evaluate_public_model as cpu
+from trid.service.public_work import TASKS
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMITTED = ROOT / 'runs/public-work-development-20261123/admitted/manifest.json'
@@ -38,7 +39,8 @@ class PublicWorkContractTests(unittest.TestCase):
 
     def projection(self, output, admitted=ADMITTED):
         return P.prepare_projection(admitted, output, root=ROOT, sources=sorted(P.SOURCE_NAMES),
-            acquisition_manifest=ACQUISITION, holdout_manifest=HOLDOUT, diagnostic_manifest=DIAGNOSTIC)
+            acquisition_manifest=ACQUISITION,
+            suite_manifests={'holdout': HOLDOUT, 'diagnostic': DIAGNOSTIC})
 
     def test_generation_is_exact_cpu_requested_policy(self):
         self.assertEqual(P.GENERATION, cpu.requested_policy(512, 4096))
@@ -109,9 +111,9 @@ class PublicWorkContractTests(unittest.TestCase):
                 self.assertEqual(set(stream.getnames()), names)
                 self.assertFalse(any('references.private' in n or 'source.private' in n for n in stream.getnames()))
             for name in ('holdout', 'diagnostic'):
-                suite = P.load(ROOT, result['workload'][name + '_manifest'])
+                suite = P.load(ROOT, result['workload']['suites'][name]['manifest'])
                 self.assertIn('references', suite)  # metadata pins allowed, never private file bytes
-                public = P.load(ROOT, result['workload'][name + '_inputs'])
+                public = P.load(ROOT, result['workload']['suites'][name]['inputs'])
                 self.assertTrue(all(set(r) == {'id', 'messages'} for r in public))
 
     def test_private_fields_and_wrong_suite_counts_refused(self):
@@ -120,10 +122,11 @@ class PublicWorkContractTests(unittest.TestCase):
             P.validate_public_rows([dict(row, target='private')], 1)
         manifest = P.read_json(HOLDOUT)
         rows = P.read_json(HOLDOUT.parent / 'inputs.json')
+        contract = {key: manifest[key] for key in ('case_count', 'scope', 'expected_tasks')}
         with self.assertRaises((ValueError, RuntimeError)):
-            P.validate_suite(manifest, rows[:-1], 'holdout', manifest['inputs'])
+            P.validate_suite(manifest, rows[:-1], 'holdout', manifest['inputs'], contract)
         with self.assertRaises((ValueError, RuntimeError)):
-            P.validate_suite(dict(manifest, targets=['private']), rows, 'holdout', manifest['inputs'])
+            P.validate_suite(dict(manifest, targets=['private']), rows, 'holdout', manifest['inputs'], contract)
 
     def test_modified_suite_manifest_cannot_smuggle_private_metadata(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'runs') as tmp:
@@ -134,11 +137,19 @@ class PublicWorkContractTests(unittest.TestCase):
             with self.assertRaises((ValueError, RuntimeError)):
                 P.prepare_projection(ADMITTED, Path(tmp) / 'projection', root=ROOT,
                     sources=sorted(P.SOURCE_NAMES), acquisition_manifest=ACQUISITION,
-                    holdout_manifest=changed, diagnostic_manifest=DIAGNOSTIC)
+                    suite_manifests={'holdout': changed, 'diagnostic': DIAGNOSTIC})
             self.assertFalse((Path(tmp) / 'projection').exists())
 
     def test_export_allowlist_has_adapter_not_base(self):
-        members = P.output_members()
+        plan = dict(workload={'suites': {
+            name: dict(manifest={}, inputs={}, case_count=1,
+                       scope='development_holdout', expected_tasks=list(TASKS))
+            for name in ('holdout', 'fresh_audit')}})
+        members = P.output_members(plan)
+        with self.assertRaises(TypeError):
+            P.output_members()
+        self.assertEqual(P.evaluation_rows(plan), 2)
+        self.assertEqual(P.evaluation_arms(plan), ('baseline', 'adapter'))
         self.assertIn('training/adapter/adapter_model.safetensors', members)
         self.assertIn('training/provenance.json', members)
         self.assertNotIn('model/model-00001-of-00005.safetensors', members)
@@ -146,7 +157,7 @@ class PublicWorkContractTests(unittest.TestCase):
         self.assertEqual({n for n in members if n.endswith('.safetensors')},
                          {'training/adapter/adapter_model.safetensors'})
         for arm in ('baseline', 'adapter'):
-            for suite in ('holdout', 'diagnostic'):
+            for suite in plan['workload']['suites']:
                 self.assertIn(f'{arm}/{suite}/responses.jsonl', members)
                 self.assertIn(f'{arm}/{suite}/runtime.json', members)
                 self.assertIn(f'{arm}/{suite}/completion.json', members)
@@ -190,11 +201,11 @@ class PublicWorkContractTests(unittest.TestCase):
             (suite_dir / 'inputs.json').write_bytes((HOLDOUT.parent / 'inputs.json').read_bytes())
             result = P.prepare_projection(directory / 'manifest.json', directory / 'projection',
                 root=ROOT, sources=sorted(P.SOURCE_NAMES), acquisition_manifest=ACQUISITION,
-                holdout_manifest=suite_dir / 'manifest.json', diagnostic_manifest=DIAGNOSTIC)
+                suite_manifests={'holdout': suite_dir / 'manifest.json', 'diagnostic': DIAGNOSTIC})
             self.assertEqual(result['recipe'], P.recipe_for_rows(admitted['rows']))
             self.assertEqual(P.load(ROOT, result['data']['admission'])['training_rows'], admitted['rows'])
             self.assertEqual(P.load(ROOT, result['data']['manifest'])['rows'], admitted['rows'])
-            self.assertEqual(result['workload']['holdout_manifest']['sha256'],
+            self.assertEqual(result['workload']['suites']['holdout']['manifest']['sha256'],
                              P.pin(suite_dir / 'manifest.json')['sha256'])
             plan = dict(result, schema=P.SCHEMA, identity={'run_id': 'new-run'})
             adapter = dict(config={}, weights={}, step=result['recipe']['steps'])
@@ -217,7 +228,7 @@ class PublicWorkContractTests(unittest.TestCase):
             result = P.prepare_projection(directory / 'manifest.json', directory / 'projection',
                 root=Path(unicodedata.normalize('NFC', str(ROOT))), sources=sorted(P.SOURCE_NAMES),
                 acquisition_manifest=Path(unicodedata.normalize('NFC', str(ACQUISITION))),
-                holdout_manifest=HOLDOUT, diagnostic_manifest=DIAGNOSTIC)
+                suite_manifests={'holdout': HOLDOUT, 'diagnostic': DIAGNOSTIC})
             self.assertEqual(result['recipe']['rows'], manifest['rows'])
 
     def test_original_plan_recipe_and_workload(self):
@@ -272,10 +283,21 @@ class PublicWorkContractTests(unittest.TestCase):
             P.write_json(run / 'registration.json', reg)
             reg_pin = P.pin(run / 'registration.json', ROOT)
             P.write_json(run / 'cloud-evidence.json', {'observations': {}})
+            workload = dict(suites={
+                name: dict(manifest={}, inputs={}, case_count=count,
+                           scope='development_holdout', expected_tasks=list(TASKS))
+                for name, count in [('fresh_audit', 3), ('fresh_uncertainty', 2)]},
+                prior_adapter=dict(run_id=P.PRIOR_RUN_ID, step=530,
+                    model=dict(id=P.MODEL_ID, revision=P.MODEL_REVISION),
+                    files={name: dict(path='prior/' + name,
+                        bytes=P.PRIOR_WEIGHTS_BYTES if name == P.PRIOR_WEIGHT_PATH else 1,
+                        sha256=P.PRIOR_WEIGHTS_SHA if name == P.PRIOR_WEIGHT_PATH
+                        else P.PRIOR_RECEIPT_SHA[name]) for name in P.PRIOR_FILES}))
             fields = dict(schema=P.SCHEMA, network={}, cost={'cap_usd': 30},
-                          workload={}, authorization={'sha256': 'a' * 64}, limits={},
+                          workload=workload, authorization={'sha256': 'a' * 64}, limits={},
                           ebs_kms_key_arn='synthetic-key', absolute_termination_deadline='2099-01-01T00:00:00Z',
                           checked_at='2026-01-01T00:00:00Z')
+            fields['output_allowlist'] = sorted(P.output_members(fields))
             provisional = dict(registration=reg_pin, plan_fields=fields,
                 cloud_evidence=P.pin(run / 'cloud-evidence.json', ROOT),
                 observations_expire_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat())
@@ -298,6 +320,17 @@ class PublicWorkContractTests(unittest.TestCase):
                 provisional['observations_expire_at'] = (
                     datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
                 P.write_json(run / 'provisional-plan.json', provisional)
+                original_outputs = fields['output_allowlist']
+                for invalid in (original_outputs[:-1], original_outputs + [original_outputs[0]],
+                                original_outputs + ['baseline/holdout/responses.jsonl']):
+                    fields['output_allowlist'] = invalid
+                    P.write_json(run / 'provisional-plan.json', provisional)
+                    with self.assertRaisesRegex((ValueError, RuntimeError), 'output allowlist'):
+                        finalize.finalize(run, state, reg_pin['sha256'], root=ROOT)
+                    self.assertFalse((run / 'approval.json').exists())
+                    self.assertFalse((run / 'plan.json').exists())
+                fields['output_allowlist'] = original_outputs
+                P.write_json(run / 'provisional-plan.json', provisional)
                 result = finalize.finalize(run, state, reg_pin['sha256'], root=ROOT)
                 validate.assert_called_once()
                 self.assertEqual(result['cloud_mutations'], 0)
@@ -306,6 +339,16 @@ class PublicWorkContractTests(unittest.TestCase):
                 self.assertEqual(plan['bundle'], {'sealed': 'bundle'})
                 self.assertEqual(plan['network']['security_group_id'], 'sg-synthetic')
                 self.assertEqual(P.read_json(run / 'approval.json')['plan_sha256'], result['plan']['sha256'])
+                approval = P.read_json(run / 'approval.json')
+                self.assertEqual(approval['workload_sha256'], P.object_sha(workload))
+                self.assertEqual(set(plan['output_allowlist']), P.output_members(plan))
+                self.assertIn('prior_adapter/fresh_audit/responses.jsonl', plan['output_allowlist'])
+                self.assertNotIn('baseline/holdout/responses.jsonl', plan['output_allowlist'])
+                changed = dict(workload, prior_adapter=dict(workload['prior_adapter'], step=531))
+                self.assertNotEqual(approval['workload_sha256'], P.object_sha(changed))
+                changed = dict(workload, suites=dict(workload['suites'], fresh_audit=dict(
+                    workload['suites']['fresh_audit'], case_count=4)))
+                self.assertNotEqual(approval['workload_sha256'], P.object_sha(changed))
                 with self.assertRaises((ValueError, RuntimeError)):
                     finalize.finalize(run, state, reg_pin['sha256'], root=ROOT)
 

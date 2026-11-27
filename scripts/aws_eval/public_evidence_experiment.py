@@ -137,7 +137,12 @@ def validate_approval(plan, approval, plan_sha, key_arn):
 
 
 def cost_bound(plan):
+    """Price the unchanged envelope; only validated public-work comparators get 256 MiB."""
     validate_limits(plan)
+    bundle_bytes_max = 128 * 1024**2
+    if plan.get('schema') == 'trid-public-work-gpu-plan-v1':
+        from scripts.aws_eval import public_work_experiment
+        bundle_bytes_max = public_work_experiment.bundle_bytes_max(plan)
     cost, network = plan['cost'], plan['network']
     cap = Decimal(str(cost['cap_usd']))
     require(cap.is_finite() and cap > 0, 'Explicit positive operator budget required')
@@ -146,7 +151,7 @@ def cost_bound(plan):
         and cost['export_bytes'] + 121 * 1024**2 <= cost['controller_retrieval_bytes'] <= GIB
         and type(network['egress_byte_cap']) is int
         and cost['export_bytes'] + 16 * 1024**2 <= network['egress_byte_cap'] <= 2 * GIB
-        and cost['network_egress_bytes'] == 3 * GIB and plan['bundle']['bytes'] <= 128 * 1024**2
+        and cost['network_egress_bytes'] == 3 * GIB and plan['bundle']['bytes'] <= bundle_bytes_max
         and plan['bundle']['bytes'] + cost['export_bytes'] + 8 * 1024**2 <= cost['retained_bytes'] <= 2 * GIB
         and cost['retention_days'] == 30
         and all(type(cost[k]) is int and 4608 <= cost[k] <= 10000 for k in ('get_requests', 'put_requests', 'control_requests'))

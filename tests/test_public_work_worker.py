@@ -8,7 +8,9 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+from trid.service.public_work import TASKS
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -168,7 +170,11 @@ class PublicWorkWorkerTests(unittest.TestCase):
                 self.assertEqual(json.loads(path.read_text())['id'], 'attempt')
             with self.assertRaises(FileExistsError):
                 W.save_new(path, {})
-        names = P.output_members()
+        plan = plan_fixture()
+        plan['workload'] = dict(suites={name: dict(manifest={}, inputs={}, case_count=count,
+            scope=scope, expected_tasks=list(TASKS)) for name, count, scope in (
+                ('holdout', 170, 'development_holdout'), ('diagnostic', 24, 'diagnostic'))})
+        names = P.output_members(plan)
         self.assertIn('training/adapter/adapter_model.safetensors', names)
         self.assertIn('baseline/holdout/responses.jsonl', names)
         self.assertIn('adapter/diagnostic/completion.json', names)
@@ -184,9 +190,11 @@ class PublicWorkWorkerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             W.child_stage(None, plan_fixture(), Path('/unused'), 'capacity')
 
-    def test_supervised_order_is_acquire_baseline_train_adapter_without_capacity(self):
-        for fail_baseline in (False, True):
-            with self.subTest(fail_baseline=fail_baseline), tempfile.TemporaryDirectory() as tmp:
+    def test_supervised_comparators_are_frozen_before_training(self):
+        for with_prior, failure in ((False, None), (False, 'baseline'),
+                                    (True, None), (True, 'baseline'), (True, 'prior_adapter'),
+                                    (True, 'raw_digest'), (True, 'raw_size')):
+            with self.subTest(prior=with_prior, failure=failure), tempfile.TemporaryDirectory() as tmp:
                 base = Path(tmp)
                 (base / 'output').mkdir()
                 (base / 'model').mkdir()
@@ -198,34 +206,196 @@ class PublicWorkWorkerTests(unittest.TestCase):
                 put(source, {})
                 data_pin = P.pin(source, base / 'code')
                 plan['data']['admission'] = data_pin
-                plan['workload'] = {name: data_pin for name in ('source_manifest', 'evaluation_inputs',
-                    'holdout_inputs', 'holdout_manifest', 'diagnostic_inputs', 'diagnostic_manifest')}
+                plan['workload'] = dict(source_manifest=data_pin, evaluation_inputs=data_pin,
+                    suites=dict(fresh=dict(manifest=data_pin, inputs=data_pin, case_count=3,
+                        scope='development_holdout', expected_tasks=list(TASKS)),
+                        controls=dict(manifest=data_pin, inputs=data_pin, case_count=2,
+                            scope='development_holdout', expected_tasks=list(TASKS))))
+                weights_path = P.PRIOR_WEIGHT_PATH
+                raw_failure = failure in ('raw_digest', 'raw_size')
+                if with_prior:
+                    files = {}
+                    for name in sorted(P.PRIOR_FILES):
+                        source = base / 'code/prior' / name
+                        if name == weights_path:
+                            source.parent.mkdir(parents=True, exist_ok=True)
+                            source.write_bytes(b'weights')
+                        else:
+                            put(source, {'adapter': {}} if name == 'training/provenance.json' else {})
+                        files[name] = P.pin(source, base / 'code')
+                    plan['workload']['prior_adapter'] = dict(files=files)
+                    if raw_failure:
+                        (base / 'code/prior' / weights_path).write_bytes(
+                            b'changed' if failure == 'raw_digest' else b'truncated')
                 put(base / 'plan.json', plan)
                 put(base / 'output/runtime.json', {})
-                phases = []
+                phases, accepted, frozen = [], [], []
+                def freeze(path):
+                    frozen.append(Path(path).relative_to(base / 'output').as_posix())
+                def metadata(artifact_root, spec):
+                    self.assertEqual(artifact_root, base / 'output/prior_adapter_artifact')
+                    self.assertEqual(spec, plan['workload']['prior_adapter'])
+                    self.assertNotIn('prior_adapter_artifact', frozen)
+                    for name, record in spec['files'].items():
+                        self.assertEqual((artifact_root / name).read_bytes(),
+                                         (base / 'code' / record['path']).read_bytes())
+                    return plan
                 def supervise(plan, base, phase, *args):
                     phases.append(phase)
+                    if with_prior:
+                        self.assertIn('prior_adapter_artifact', frozen)
+                        self.assertEqual((base / 'output/prior_adapter_artifact' / weights_path).read_bytes(),
+                                         b'weights')
+                    if phase == 'train':
+                        self.assertIn('baseline', frozen)
+                        if with_prior:
+                            self.assertIn('prior_adapter', frozen)
                     return dict(phase=phase, cleanup_verified=True)
                 def accept(root, plan, arm):
-                    if fail_baseline and arm == 'baseline':
-                        raise ValueError('fixture baseline failure')
+                    accepted.append(arm)
+                    if arm == failure:
+                        raise ValueError('fixture comparator failure')
                 transport = SimpleNamespace(download=lambda *args: phases.append('acquire'),
                     validate_model=lambda *args: None, digest=core.digest, supervise_phase=supervise)
                 report = dict(stages=[])
-                with patch.object(W.os, 'chown'), patch.object(W.shared, 'freeze'), \
+                with patch.object(W.os, 'chown'), patch.object(W.shared, 'freeze', side_effect=freeze), \
                         patch.object(W, 'validate_outputs', side_effect=accept), \
-                        patch.object(W, 'validate_training'):
-                    if fail_baseline:
-                        with self.assertRaisesRegex(ValueError, 'fixture baseline failure'):
+                        patch.object(W, 'validate_training'), \
+                        patch.object(W, 'copy_new', wraps=W.copy_new) as copied, \
+                        patch.object(P, 'validate_prior_metadata', side_effect=metadata), \
+                        patch.object(P, 'validate_training'), \
+                        patch.object(P, 'validate_prior_adapter', wraps=P.validate_prior_adapter) as validate:
+                    if failure:
+                        message = 'Pinned artifact changed' if raw_failure else 'fixture comparator failure'
+                        with self.assertRaisesRegex(ValueError, message):
                             W.run_experiment(transport, plan, base, report, {}, SimpleNamespace(pw_uid=1, pw_gid=1),
                                              100, 90, {}, set(), [])
                     else:
                         W.run_experiment(transport, plan, base, report, {}, SimpleNamespace(pw_uid=1, pw_gid=1),
                                          100, 90, {}, set(), [])
-                self.assertEqual(phases, ['acquire', 'baseline'] if fail_baseline
-                                 else ['acquire', 'baseline', 'train', 'adapter'])
+                        result = W.read_json(base / 'output/worker-result.json')
+                        self.assertEqual(result['assessment_answers'], 15 if with_prior else 10)
+                        self.assertEqual(accepted, list(P.evaluation_arms(plan)))
+                    self.assertEqual(validate.call_count, int(with_prior))
+                    if with_prior:
+                        for name, record in files.items():
+                            copied.assert_any_call(base / 'code' / record['path'],
+                                                   base / 'output/prior_adapter_artifact' / name)
+                if raw_failure:
+                    self.assertEqual(phases, ['acquire'])
+                    self.assertEqual(accepted, [])
+                    self.assertNotIn('prior_adapter_artifact', frozen)
+                    self.assertFalse((base / 'output/worker-result.json').exists())
+                else:
+                    self.assertEqual(phases, ['acquire', 'baseline'] if failure
+                                     else ['acquire', 'baseline', 'train', 'adapter'])
                 self.assertFalse((base / 'output/model').exists())
                 self.assertFalse((base / 'output/capacity').exists())
+
+    def test_baseline_child_runs_prior_sequentially_in_the_same_phase(self):
+        for with_prior in (False, True):
+            plan = plan_fixture()
+            plan['workload'] = {'prior_adapter': {}} if with_prior else {}
+            transport = SimpleNamespace(validate_model=Mock(), native_runtime=Mock(return_value='cuda-fixture'))
+            with patch.object(W, 'evaluation_stage') as evaluate:
+                W.child_stage(transport, plan, Path('/owned'), 'baseline')
+            self.assertEqual([call.args[-1] for call in evaluate.call_args_list],
+                             ['baseline', 'prior_adapter'] if with_prior else ['baseline'])
+            self.assertTrue(all(call.args[-2] == 'cuda-fixture' for call in evaluate.call_args_list))
+
+    def test_training_requires_prior_acceptance_before_loading_tokenizer(self):
+        plan = plan_fixture()
+        plan['workload'] = dict(prior_adapter={})
+        tokenizer = Mock()
+        accepted = []
+        def accept(root, plan, arm):
+            accepted.append(arm)
+            if arm == 'prior_adapter':
+                raise ValueError('prior comparator incomplete')
+        with patch.dict(sys.modules, transformers=SimpleNamespace(AutoTokenizer=tokenizer)), \
+                patch.object(W, 'validate_outputs', side_effect=accept):
+            with self.assertRaisesRegex(ValueError, 'prior comparator incomplete'):
+                W.train_stage(None, plan, Path('/owned'), None)
+        self.assertEqual(accepted, ['baseline', 'prior_adapter'])
+        tokenizer.from_pretrained.assert_not_called()
+
+    def test_prior_evaluation_loads_preserved_weights_and_releases_cuda(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = base / 'output'
+            artifact = root / 'prior_adapter_artifact'
+            training = artifact / 'training'
+            plan = plan_fixture(41)
+            plan['identity'] = dict(run_id='current-run')
+            plan['model']['files'] = []
+            rows = [dict(id='fresh-case', messages=[dict(role='user', content='question')])]
+            inputs = root / 'suites/fresh/inputs.json'
+            manifest = root / 'suites/fresh/manifest.json'
+            put(inputs, rows)
+            put(manifest, dict(scope='development_holdout', source={}))
+            put(training / 'adapter/adapter_config.json', {})
+            weights = training / 'adapter/adapter_model.safetensors'
+            weights.write_bytes(b'fixture adapter bytes')
+            put(training / 'provenance.json', dict(original=True))
+            put(training / 'training.json', dict(steps=530))
+            identity = dict(config=P.pin(training / 'adapter/adapter_config.json', root),
+                            weights=P.pin(weights, root), step=530)
+            plan['workload'] = dict(source_manifest={}, prior_adapter=dict(step=530),
+                suites=dict(fresh=dict(manifest=P.pin(manifest), inputs=P.pin(inputs),
+                    scope='development_holdout', case_count=1, expected_tasks=list(TASKS))))
+            put(base / 'plan.json', plan)
+            put(root / 'plan.json', plan)
+            put(root / 'runtime.json', {})
+            put(root / 'model-acquisition.json', {})
+            put(base / 'release.json', dict(gpu=dict(uuid='GPU-fixture'), instance_id='i-fixture'))
+            prepared = [dict(id='fresh-case')]
+            events = []
+            tokenizer = Mock()
+            tokenizer.get_chat_template.return_value = 'official template'
+            model = Mock()
+            model.config.max_position_embeddings = 4096
+            model.config._attn_implementation = 'sdpa'
+            models = Mock()
+            models.from_pretrained.return_value = model
+            peft = Mock()
+            peft.from_pretrained.return_value = model
+            tokenizers = Mock()
+            tokenizers.from_pretrained.return_value = tokenizer
+            torch = SimpleNamespace(bfloat16='bf16',
+                cuda=SimpleNamespace(empty_cache=lambda: events.append('empty_cache')))
+            inventory = dict(base={'torch.bfloat16': {}}, adapter={'torch.float32': {}})
+            binding = dict(arm='prior_adapter', adapter=identity)
+            def responses(model, tokenizer, rows, prepared, path, *, binding):
+                path.write_text('')
+                return dict(rows=1, exception_rows=0, length_rows=0)
+            helper = SimpleNamespace(preflight_prompts=lambda *args, **kwargs: prepared,
+                                     requested_policy=lambda *args: P.GENERATION)
+            with patch.dict(sys.modules, transformers=SimpleNamespace(
+                    AutoModelForCausalLM=models, AutoTokenizer=tokenizers),
+                    peft=SimpleNamespace(PeftModel=peft)), \
+                    patch.object(W, 'helpers', return_value=helper), \
+                    patch.object(W, 'read_json', side_effect=lambda path: json.loads(Path(path).read_text())), \
+                    patch.object(P, 'validate_data', return_value=dict(evaluation_inputs=rows)), \
+                    patch.object(P, 'validate_prior_adapter') as prior_validation, \
+                    patch.object(P, 'prior_adapter_identity', return_value=identity), \
+                    patch.object(P, 'generation_binding', return_value=binding) as bind, \
+                    patch.object(W.shared, 'parameter_inventory', return_value=inventory), \
+                    patch.object(W.shared, 'verify_loaded_adapter') as verify, \
+                    patch.object(W, 'stream_responses', side_effect=responses), \
+                    patch.object(W, 'validate_outputs', side_effect=lambda *args: events.append('accepted')), \
+                    patch.object(W.gc, 'collect', side_effect=lambda: events.append('collect')):
+                W.evaluation_stage(SimpleNamespace(digest=core.digest), plan, base, torch, 'prior_adapter')
+            prior_validation.assert_called_once_with(artifact, plan['workload']['prior_adapter'])
+            peft.from_pretrained.assert_called_once_with(model, training / 'adapter', is_trainable=False,
+                                                       local_files_only=True, autocast_adapter_dtype=True)
+            verify.assert_called_once_with(model, weights, torch)
+            bind.assert_called_once_with(plan, 'prior_adapter', identity)
+            runtime = W.read_json(root / 'prior_adapter/fresh/runtime.json')
+            self.assertEqual(runtime['adapter']['steps'], 530)
+            for key in ('provenance', 'training'):
+                resolved = (root / 'prior_adapter/fresh' / runtime['adapter'][key]['path']).resolve()
+                self.assertEqual(resolved, (training / (key + '.json')).resolve())
+            self.assertEqual(events, ['accepted', 'collect', 'empty_cache'])
 
 
 class PublicWorkGpuEvaluatorTests(unittest.TestCase):
@@ -258,7 +428,8 @@ class PublicWorkGpuEvaluatorTests(unittest.TestCase):
             runtime=dict(packages=P.RUNTIME_PACKAGES, torch_cuda='12.8'),
             model=dict(id=P.MODEL_ID, revision=P.MODEL_REVISION, files=files),
             workload=dict(source_manifest=source, evaluation_inputs=P.pin(inputs),
-                diagnostic_manifest=P.pin(self.suite_path), diagnostic_inputs=P.pin(inputs)))
+                suites=dict(diagnostic=dict(manifest=P.pin(self.suite_path), inputs=P.pin(inputs),
+                    case_count=24, scope='diagnostic', expected_tasks=list(TASKS)))))
         put(self.root / 'plan.json', self.plan)
         plan_sha = P.pin(self.root / 'plan.json')['sha256']
         put(self.root / 'runtime.json', dict(name='NVIDIA L40S', count=1, bf16=True,
@@ -321,6 +492,79 @@ class PublicWorkGpuEvaluatorTests(unittest.TestCase):
         self.assertTrue(completion['complete'])
         self.assertFalse((self.suite_path.parent / 'source.private.json').exists())
         self.assertNotIn('guard', runtime)
+
+    def test_prior_receipts_load_with_preserved_provenance_root(self):
+        # Authentication of the historical export belongs to the experiment
+        # helper; this fixture exercises the worker and unmodified arm loader.
+        from aws_eval import public_work_experiment as packaged_P
+        artifact = self.root / 'prior_adapter_artifact'
+        training = artifact / 'training'
+        put(training / 'adapter/adapter_config.json', {})
+        weights = training / 'adapter/adapter_model.safetensors'
+        weights.write_bytes(b'opaque fixture adapter')
+        original = dict(step=530, config=P.pin(training / 'adapter/adapter_config.json', artifact),
+                        weights=P.pin(weights, artifact))
+        put(training / 'training.json', dict(base_model_id=P.MODEL_ID, base_revision=P.MODEL_REVISION))
+        put(training / 'provenance.json', dict(schema=P.ADAPTER_SCHEMA, fresh=True, merged=False,
+            training=P.pin(training / 'training.json', artifact), adapter=original, observed_steps=530))
+        spec = dict(step=530, files={pin['path']: pin for pin in (original['config'], original['weights'])})
+        self.plan['workload']['prior_adapter'] = spec
+        put(self.root / 'plan.json', self.plan)
+        plan_sha = P.pin(self.root / 'plan.json')['sha256']
+        native = W.read_json(self.root / 'runtime.json')
+        native['plan_sha256'] = plan_sha
+        put(self.root / 'runtime.json', native)
+        acquisition = W.read_json(self.root / 'model-acquisition.json')
+        acquisition['plan_sha256'] = plan_sha
+        put(self.root / 'model-acquisition.json', acquisition)
+        self.folder = self.root / 'prior_adapter/diagnostic'
+        self.folder.mkdir(parents=True)
+        self.loaded_path = self.folder.parent / 'loaded-runtime.json'
+        identity = dict(step=530, **{key: dict(original[key],
+            path='prior_adapter_artifact/' + original[key]['path']) for key in ('config', 'weights')})
+        self.loaded.update(adapter=identity, adapter_reload_equal=True, plan_sha256=plan_sha,
+            runtime=P.pin(self.root / 'runtime.json', self.root))
+        self.loaded['parameter_inventory']['adapter'] = {'torch.float32': dict(tensors=1, elements=2, bytes=8)}
+        put(self.loaded_path, self.loaded)
+        self.runtime.update(plan=W.relative_pin(self.root / 'plan.json', self.folder),
+            loaded_runtime=W.relative_pin(self.loaded_path, self.folder),
+            model_manifest=W.relative_pin(self.root / 'model-acquisition.json', self.folder),
+            adapter=dict(provenance=W.relative_pin(training / 'provenance.json', self.folder),
+                training=W.relative_pin(training / 'training.json', self.folder),
+                files=[W.relative_pin(artifact / original[key]['path'], self.folder) for key in ('config', 'weights')],
+                steps=530, representation='unmerged_peft', model_identity=self.runtime['model_identity']))
+        with patch.object(P, 'validate_prior_spec'), patch.object(packaged_P, 'validate_prior_spec'), \
+                patch.object(packaged_P, 'validate_prior_adapter', return_value=original) as authenticate:
+            self.binding = P.generation_binding(self.plan, 'prior_adapter', identity)
+            self.runtime['binding'] = self.binding
+            for row in self.records:
+                row['binding'] = self.binding
+            self.publish()
+            records, runtime, completion, _ = self.load()
+            self.assertEqual(len(records), 24)
+            self.assertTrue(completion['complete'])
+            self.assertEqual(runtime['adapter']['steps'], 530)
+            authenticate.assert_called_once_with(artifact.resolve(), spec)
+            self.runtime['adapter']['steps'] = self.plan['recipe']['steps']
+            self.publish()
+            with self.assertRaisesRegex(ValueError, 'step identity'):
+                self.load()
+
+    def test_dynamic_suite_output_counts_and_suite_set_are_enforced(self):
+        put(self.root / 'evaluation-inputs.json', self.rows)
+        put(self.folder.parent / 'prompt-preflight.json', dict(status='passed',
+            all_cases_preflighted_before_weights=True, truncation=False,
+            prompts=[dict(id=row['id']) for row in self.rows]))
+        completion = dict(status='complete', arm='baseline', rows=24, exception_rows=0,
+            length_rows=0, quality_accepted=False,
+            suites=dict(diagnostic=P.pin(self.folder / 'completion.json', self.root)))
+        put(self.folder.parent / 'completion.json', completion)
+        self.assertEqual(len(W.validate_outputs(self.root, self.plan, 'baseline')), 24)
+        for changed in (dict(completion, rows=194),
+                        dict(completion, suites=dict(completion['suites'], stale={}))):
+            put(self.folder.parent / 'completion.json', changed)
+            with self.assertRaises(ValueError):
+                W.validate_outputs(self.root, self.plan, 'baseline')
 
     def test_cpu_gpu_schema_cross_contamination_rejected(self):
         for target in ('completion', 'runtime', 'receipt'):

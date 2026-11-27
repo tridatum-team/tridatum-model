@@ -2,6 +2,8 @@
 
 No AWS client, subprocess, network, cloud mutation, refresh or retry. Existing
 final files are never replaced; original observation timestamps are preserved.
+Dynamic suite and optional prior-comparator outputs must match the sealed workload;
+finalization never repairs a stale provisional output allowlist.
 """
 import argparse
 import copy
@@ -53,6 +55,10 @@ def finalize(run_dir, state, registration_sha256, *, root):
         fresh.require(resources[key]['inventory'] == reg['iam'][key],
                       'Actual role readback differs from registration: ' + key)
     plan = copy.deepcopy(provisional['plan_fields'])
+    expected_outputs = public.output_members(plan)
+    fresh.require(set(plan['output_allowlist']) == expected_outputs
+                  and len(plan['output_allowlist']) == len(expected_outputs),
+                  'Provisional output allowlist differs from sealed workload')
     plan['bundle'] = bundle
     plan['network'].update(security_group_id=resources['security_group']['GroupId'],
                            security_group_observation=resources['security_group'])

@@ -400,6 +400,8 @@ def prepare_bundle(reg, root, state):
                   unpacked_bytes=sum(p['bytes'] for p in files.values()))
     envelope = bound_json(root, reg['resource_envelope'])
     cap = 128 * 1024**2 if evaluation_registration(reg) or public_contract_registration(reg) else 32 * 1024**2
+    if public_work_registration(reg):
+        cap = lifecycle.public_contract_module(shell).bundle_bytes_max(shell)
     require(bundle['bytes'] <= envelope['bundle_bytes_max'] <= cap, 'Bundle too large')
     lifecycle.authenticate_archive(target, bundle)
     return record(Path(state) / 'bundle-prepared.json', bundle)

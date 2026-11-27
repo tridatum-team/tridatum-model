@@ -103,17 +103,25 @@ class PublicEvidenceBootstrapGateTests(unittest.TestCase):
                       tax_rate=0.10, contingency_usd=1),
             network={'egress_byte_cap': 2 * L.GIB})
 
-    def verify(self, plan):
+    def verify(self, plan, *, bundle_max_bytes=128 * 1024**2, archive_bytes=None,
+               injected_bytes_delta=0, plan_bytes_delta=0, unpacked_bytes=0):
         script = Path(L.__file__).with_name('grounded_hf_bootstrap.sh')
         verifier = script.read_text().split("<<'PY'\n", 1)[1].split('\nPY\n', 1)[0]
         with tempfile.TemporaryDirectory() as temp, chdir(temp):
             with tarfile.open('bundle.tar', 'w'):
                 pass
+            # Sparse zero padding exercises real raw-tar sizes without allocating
+            # large fixture payloads. This is transport-only, not a model receipt.
+            if archive_bytes is not None:
+                with Path('bundle.tar').open('r+b') as archive:
+                    archive.truncate(archive_bytes)
             size = Path('bundle.tar').stat().st_size
-            plan = dict(plan, bundle=dict(bytes=size, files=[], unpacked_bytes=0))
+            plan = dict(plan, bundle=dict(bytes=size + plan_bytes_delta, files=[],
+                                         unpacked_bytes=unpacked_bytes))
             Path('plan.json').write_text(json.dumps(plan))
             deadline = int(L.timestamp('2030-01-02T00:00:00Z') - 900)
-            with patch.object(sys, 'argv', ['-', str(size), str(deadline)]), \
+            with patch.object(sys, 'argv', ['-', str(size + injected_bytes_delta), str(deadline),
+                                          str(bundle_max_bytes)]), \
                     patch.object(L.time, 'time', return_value=deadline - 30000):
                 exec(compile(verifier, str(script) + ':verifier', 'exec'), {})
             self.assertTrue(Path('code').is_dir())
@@ -148,6 +156,80 @@ class PublicEvidenceBootstrapGateTests(unittest.TestCase):
         plan['lifetime']['automatic_extension'] = True
         with self.assertRaises(AssertionError):
             self.verify(plan)
+
+    def comparator_plan(self):
+        public = L.public_contract_module({'schema': L.PUBLIC_WORK_SCHEMA})
+        files = {name: dict(path='prior_adapter_artifact/' + name, bytes=1, sha256=sha)
+                 for name, sha in public.PRIOR_RECEIPT_SHA.items()}
+        files[public.PRIOR_WEIGHT_PATH] = dict(
+            path='prior_adapter_artifact/' + public.PRIOR_WEIGHT_PATH,
+            bytes=public.PRIOR_WEIGHTS_BYTES, sha256=public.PRIOR_WEIGHTS_SHA)
+        return dict(self.plan(), schema=L.PUBLIC_WORK_SCHEMA,
+                    workload={'prior_adapter': dict(run_id=public.PRIOR_RUN_ID, step=530,
+                        model=dict(id=public.MODEL_ID, revision=public.MODEL_REVISION), files=files)})
+
+    def test_controller_injects_only_exact_original_comparator_allowance(self):
+        root = Path(L.__file__).resolve().parents[2]
+        name = 'scripts/aws_eval/grounded_hf_bootstrap.sh'
+        plan = dict(self.comparator_plan(), identity=identity(),
+                    sources={name: L.digest(root / name)},
+                    bundle=dict(sha256='a' * 64, bytes=174665728))
+        self.assertIn('BUNDLE_MAX_BYTES=268435456\n', L.bootstrap_text(plan, 'b' * 64, root))
+        changes = (
+            lambda spec: spec.update(run_id='another-run'),
+            lambda spec: spec.update(step=529),
+            lambda spec: spec['model'].update(revision='f' * 40),
+            lambda spec: spec['files'].pop('runtime.json'),
+            lambda spec: spec['files']['runtime.json'].update(sha256='f' * 64),
+            lambda spec: spec['files']['training/adapter/adapter_model.safetensors'].update(bytes=1),
+        )
+        for change in changes:
+            current = copy.deepcopy(plan)
+            change(current['workload']['prior_adapter'])
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                L.bootstrap_text(current, 'b' * 64, root)
+        plan['workload'] = {}
+        self.assertIn('BUNDLE_MAX_BYTES=134217728\n', L.bootstrap_text(plan, 'b' * 64, root))
+        for schema in (L.PUBLIC_EVIDENCE_SCHEMA, 'trid-grounded-hf-v1',
+                       'trid-fresh-eight-training-experiment-v2'):
+            plan['schema'] = schema
+            with self.subTest(schema=schema):
+                self.assertIn('BUNDLE_MAX_BYTES=134217728\n', L.bootstrap_text(plan, 'b' * 64, root))
+
+    def test_original_comparator_raw_tar_uses_scoped_256_mib_limit(self):
+        plan = self.comparator_plan()
+        self.verify(plan, archive_bytes=174665728, bundle_max_bytes=256 * 1024**2)
+        self.verify(plan, archive_bytes=256 * 1024**2, bundle_max_bytes=256 * 1024**2)
+        with self.assertRaises(AssertionError):
+            self.verify(plan, archive_bytes=256 * 1024**2 + 1, bundle_max_bytes=256 * 1024**2)
+        for schema in (L.PUBLIC_WORK_SCHEMA, L.PUBLIC_EVIDENCE_SCHEMA, 'trid-grounded-hf-v1'):
+            plan = dict(self.plan(), schema=schema, workload={})
+            with self.subTest(schema=schema), self.assertRaises(AssertionError):
+                self.verify(plan, archive_bytes=128 * 1024**2 + 1)
+
+    def test_injected_cap_and_size_tampering_fail_preimport(self):
+        for cap in (0, 32 * 1024**2, 128 * 1024**2 + 1, 256 * 1024**2, 512 * 1024**2):
+            with self.subTest(cap=cap), self.assertRaises(AssertionError):
+                self.verify(self.plan(), bundle_max_bytes=cap)
+        with self.assertRaises(AssertionError):
+            self.verify(self.comparator_plan(), bundle_max_bytes=128 * 1024**2)
+        for field in ('injected_bytes_delta', 'plan_bytes_delta'):
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                self.verify(self.comparator_plan(), bundle_max_bytes=256 * 1024**2, **{field: 1})
+        with self.assertRaises(AssertionError):
+            self.verify(self.comparator_plan(), bundle_max_bytes=256 * 1024**2,
+                        unpacked_bytes=256 * 1024**2 + 1)
+
+    def test_fresh_training_retains_32_mib_raw_limit(self):
+        plan = dict(self.plan(), schema='trid-fresh-eight-training-experiment-v2',
+                    cloud_evaluation=False,
+                    workflow='cuda_capacity_train_export_only_then_local_mps_evaluation')
+        plan['lifetime']['total_seconds'] = 2700
+        plan['limits']['lifetime_seconds'] = 1800
+        plan['cost']['cap_usd'] = 4.11
+        self.verify(plan, archive_bytes=32 * 1024**2)
+        with self.assertRaises(AssertionError):
+            self.verify(plan, archive_bytes=32 * 1024**2 + 1)
 
 
 class Clock:

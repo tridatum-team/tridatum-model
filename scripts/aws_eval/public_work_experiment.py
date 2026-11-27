@@ -3,11 +3,12 @@
 Projection is offline admission, never permission to provision compute. Each run
 seals its admitted manifest, training bytes and revised suite manifest pins. Rows
 come from admission and are checked against train.jsonl; two epochs at batch two
-derive the final step and exactly-twice coverage. Public evaluation inputs remain
-the same 170 holdout and 24 diagnostic cases. Original suite manifests carry
+derive the final step and exactly-twice coverage. Public evaluation inputs
+are sealed from supplied public suite manifests. Original suite manifests carry
 private-file *hashes*, not private source/reference bytes.
 """
 import argparse
+import shutil
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -33,10 +34,23 @@ PROFILE = 'public_work_v1'
 COMPLETION_SCOPE = 'public_work_training_and_paired_evaluation'
 MODEL_ID = evidence.MODEL_ID
 MODEL_REVISION = evidence.MODEL_REVISION
-EVALUATION_ROWS = 194
-SUITES = {
+LEGACY_SUITES = {
     'holdout': (170, 'development_holdout', '8e6e6db9fb84a8b12a957175ca220f09a32978dbbaf69c64fce67c9f990c1e2f'),
     'diagnostic': (24, 'diagnostic', 'fbd2132d7ed28d9923e4bda96f4dfa78c8ad97a0b16d39590f89910ef2779130'),
+}
+PRIOR_RUN_ID = 'public-work-gpu-20261123-054203'
+PRIOR_WEIGHT_PATH = 'training/adapter/adapter_model.safetensors'
+PRIOR_FILES = frozenset(('plan.json', 'runtime.json', 'admission.json', 'training/training.json',
+    'training/provenance.json', 'training/adapter/adapter_config.json', PRIOR_WEIGHT_PATH))
+PRIOR_WEIGHTS_SHA = '7bfe02bc385decdd37a3adf0a868d2392dd907a5efa6831411bd8bc9f918a63d'
+PRIOR_WEIGHTS_BYTES = 174655536
+PRIOR_RECEIPT_SHA = {
+    'plan.json': '634eabdd076bbf769ae3e0c74260928fa5370b35640e57de0a1f9f84dade051d',
+    'runtime.json': 'aa907912dcb768df4489aa117bc438f67cdc2d0fb41a89f329b07f636fb3c233',
+    'admission.json': '3a25eb37e08f8bc9d1980f4f2385b8a9b3fbfaf4033b8d67b46d73c2e5cd767e',
+    'training/training.json': '15df36302ec387515b529522634e1e8f03a74ae17bdb3564a4947315599ad494',
+    'training/provenance.json': '55197a0360df321b24579b85afaf7dd713e5e0ab6de46ba9a73353f45436c6c2',
+    'training/adapter/adapter_config.json': 'd194be191606f8b3e8697f93f68bde2383e15118515e8854318c6813caf51e32',
 }
 GENERATION = dict(profile='public_work_greedy_v1', do_sample=False, num_beams=1,
     max_new_tokens=512, context_limit=4096, seed=0, seed_policy='constant',
@@ -116,7 +130,7 @@ def validate_resources(root, plan, *, active=True):
         termination_grace_seconds_max=900, total_billable_lifetime_seconds_max=plan['lifetime']['total_seconds'],
         whole_host_egress_bytes_max=2 * GIB, controller_retrieval_bytes_max=GIB,
         priced_egress_bytes=3 * GIB, combined_retained_s3_bytes_max=2 * GIB,
-        output_archive_bytes_max=512 * 1024**2, bundle_bytes_max=128 * 1024**2,
+        output_archive_bytes_max=512 * 1024**2, bundle_bytes_max=bundle_bytes_max(plan),
         s3_expiration_days=30, multipart_abort_days=1, scheduler_invocations_max=10000,
         billing_hard_cap=False, absolute_termination_deadline=plan['absolute_termination_deadline'],
         automatic_retry=False, automatic_extension=False)
@@ -130,8 +144,58 @@ def validate_resources(root, plan, *, active=True):
     return envelope
 
 
+def suite_contracts(plan):
+    from trid.service.public_work import TASKS
+    workload = plan['workload']
+    if 'suites' not in workload:
+        # Historical receipts are admitted only under their complete original contract.
+        require(set(workload) == {'evaluation_inputs', 'source_manifest', 'acquisition_manifest', 'generation',
+            'holdout_inputs', 'holdout_manifest', 'diagnostic_inputs', 'diagnostic_manifest'}
+            and workload['generation'] == GENERATION, 'Unknown historical suite contract')
+        result = {}
+        for name, (count, scope, sha) in LEGACY_SUITES.items():
+            require(workload[name + '_inputs']['sha256'] == sha, 'Historical suite pin differs')
+            result[name] = dict(inputs=workload[name + '_inputs'], manifest=workload[name + '_manifest'],
+                case_count=count, scope=scope, expected_tasks=None)
+        return result
+    suites = workload['suites']
+    require(isinstance(suites, dict) and suites, 'Nonempty sealed suite map required')
+    for name, contract in suites.items():
+        require(isinstance(name, str) and name.isascii() and name.replace('_', '').isalnum()
+            and name not in ('baseline', 'adapter', 'prior_adapter')
+            and set(contract) == {'inputs', 'manifest', 'case_count', 'scope', 'expected_tasks'}
+            and type(contract['case_count']) is int and contract['case_count'] > 0
+            and contract['scope'] in ('development_holdout', 'diagnostic')
+            and contract['expected_tasks'] == list(TASKS)
+            and (contract['scope'] != 'diagnostic' or contract['case_count'] == 24),
+            'Invalid sealed suite contract')
+    return suites
+
+
+def evaluation_rows(plan):
+    return sum(suite['case_count'] for suite in suite_contracts(plan).values())
+
+
+def evaluation_arms(plan):
+    return ('baseline', 'prior_adapter', 'adapter') if 'prior_adapter' in plan['workload'] else ('baseline', 'adapter')
+
+
+def bundle_bytes_max(plan):
+    if 'prior_adapter' not in plan.get('workload', {}):
+        return 128 * 1024**2
+    require(plan.get('schema') in (SCHEMA, 'trid-public-work-prerequisites-v1', OFFLINE_PROJECTION_SCHEMA),
+        'Comparator bundle allowance requires public-work contract')
+    validate_prior_spec(plan['workload']['prior_adapter'])
+    return 256 * 1024**2
+
+
 def workload_pins(workload):
-    return [value for key, value in workload.items() if key != 'generation']
+    records = [value for key, value in workload.items() if key not in ('generation', 'suites', 'prior_adapter')]
+    for suite in workload.get('suites', {}).values():
+        records.extend((suite['manifest'], suite['inputs']))
+    if 'prior_adapter' in workload:
+        records.extend(workload['prior_adapter']['files'].values())
+    return records
 
 
 def validate_workload(plan, bundled):
@@ -143,9 +207,12 @@ def validate_workload(plan, bundled):
     require(plan['model']['id'] == MODEL_ID and plan['model']['revision'] == MODEL_REVISION
         and plan['model']['trust_remote_code'] is False, 'Official pinned Qwen3-8B required')
     require(plan['runtime']['packages'] == RUNTIME_PACKAGES and plan['runtime']['torch_cuda'] == '12.8', 'Pinned runtime differs')
+    suite_contracts(plan)
+    workload_keys = {'evaluation_inputs', 'source_manifest', 'acquisition_manifest', 'generation', 'suites'}
+    if 'prior_adapter' in plan['workload']:
+        workload_keys.add('prior_adapter')
     require(set(plan['data']) == {'manifest', 'train', 'admission', 'admitted_manifest'}
-        and set(plan['workload']) == {'evaluation_inputs', 'source_manifest', 'acquisition_manifest', 'generation',
-            'holdout_inputs', 'holdout_manifest', 'diagnostic_inputs', 'diagnostic_manifest'}
+        and ('suites' not in plan['workload'] or set(plan['workload']) == workload_keys)
         and plan['workload']['generation'] == GENERATION, 'Public-work workload closure differs')
     require(plan['workload']['acquisition_manifest']['sha256'] == ACQUISITION_SHA, 'Original model metadata required')
     records = [*plan['data'].values(), *workload_pins(plan['workload']),
@@ -176,15 +243,20 @@ def validate_admitted(manifest, train_record):
             and all(c in '0123456789abcdef' for c in r['sha256']) for r in reviews), 'Two distinct review pins required')
 
 
-def validate_suite(manifest, rows, name, inputs_pin):
-    count, scope, sha = SUITES[name]
+def validate_suite(manifest, rows, name, inputs_pin, contract):
+    count, scope = contract['case_count'], contract['scope']
     require(set(manifest) == {'case_count', 'expected_tasks', 'expert_reviewed', 'historically_unseen',
         'inputs', 'profile', 'quality_accepted', 'references', 'schema', 'scope', 'source', 'training_ready'},
         'Private/unapproved suite metadata fields forbidden')
     require(manifest.get('schema') == 'trid-public-work-suite-v1' and manifest.get('profile') == PROFILE
         and manifest.get('case_count') == count and manifest.get('scope') == scope
-        and manifest.get('training_ready') is False and inputs_pin['sha256'] == sha
-        and manifest['inputs'] == dict(inputs_pin, path='inputs.json'), 'Pinned public suite differs')
+        and manifest.get('training_ready') is False
+        and manifest['inputs'] == dict(inputs_pin, path='inputs.json')
+        and (contract['expected_tasks'] is None or manifest['expected_tasks'] == contract['expected_tasks']),
+        'Pinned public suite differs')
+    from trid.service.public_work import TASKS
+    require(manifest['expected_tasks'] == list(TASKS)
+        and (scope != 'diagnostic' or count == 24), 'Unsupported expected task/count contract')
     return validate_public_rows(rows, count)
 
 
@@ -200,7 +272,8 @@ def validate_admission(admission, data, workload, rows, admitted):
     expected = dict(schema=CLOUD_ADMISSION_SCHEMA, profile=PROFILE, state='ADMITTED_FOR_RESEARCH',
         training_ready=True, semantic_evaluated=False, expert_certified=False,
         admitted_manifest=data['admitted_manifest'], train=data['train'], recipe=recipe_for_rows(admitted['rows']),
-        evaluation_inputs=workload['evaluation_inputs'], training_rows=admitted['rows'], evaluation_rows=EVALUATION_ROWS,
+        evaluation_inputs=workload['evaluation_inputs'], training_rows=admitted['rows'],
+        evaluation_rows=evaluation_rows(dict(workload=workload)),
         training_ids=[r['id'] for r in rows], review_sha256=[r['sha256'] for r in admitted['reviews']])
     require(admission == expected, 'Public admission/provenance differs')
 
@@ -213,7 +286,7 @@ def validate_registration_bundle(root, reg, files):
         bundle=dict(files=list(files.values())),
         model=dict(id=MODEL_ID, revision=MODEL_REVISION, trust_remote_code=False, files=acquisition['files']),
         runtime=dict(packages=RUNTIME_PACKAGES, torch_cuda='12.8', bootstrap=dict(admission=reg['bootstrap_admission'])),
-        output_allowlist=sorted(output_members()))
+        output_allowlist=sorted(output_members(reg)))
     require(len(shell['sources']) == len(reg['sources']), 'Duplicate source pins')
     return validate_data(root, shell)
 
@@ -239,18 +312,20 @@ def validate_data(root, plan):
         validate_public_rows([{'id': row['id'], 'messages': row['messages']}], 1)
     require(len({r['id'] for r in rows}) == admitted['rows'], 'Duplicate training IDs')
     combined, suites = [], {}
-    for name in SUITES:
-        suite = load(root, workload[name + '_manifest'])
-        inputs = load(root, workload[name + '_inputs'])
-        validate_suite(suite, inputs, name, workload[name + '_inputs'])
+    for name, contract in suite_contracts(plan).items():
+        suite = load(root, contract['manifest'])
+        inputs = load(root, contract['inputs'])
+        validate_suite(suite, inputs, name, contract['inputs'], contract)
         combined.extend(inputs)
-        suites[name] = dict(inputs=workload[name + '_inputs'], suite_manifest=workload[name + '_manifest'], source=suite['source'])
+        suites[name] = dict(inputs=contract['inputs'], suite_manifest=contract['manifest'], source=suite['source'])
     inputs = load(root, workload['evaluation_inputs'])
     require(inputs == combined, 'Combined public evaluation differs')
-    ids = validate_public_rows(inputs, 194)
+    ids = validate_public_rows(inputs, evaluation_rows(plan))
     require(not set(ids).intersection(r['id'] for r in rows), 'Training/evaluation overlap')
     admission = load(root, data['admission'])
     validate_admission(admission, data, workload, rows, admitted)
+    if 'prior_adapter' in workload:
+        validate_prior_bundle(root, workload['prior_adapter'])
     acquisition = load(root, workload['acquisition_manifest'])
     require(acquisition['repo_id'] == MODEL_ID and acquisition['revision'] == MODEL_REVISION
         and [{k: p[k] for k in ('path', 'bytes', 'sha256')} for p in acquisition['files']] ==
@@ -287,8 +362,100 @@ def resolved_path(path):
     return Path(unicodedata.normalize('NFD', value) if sys.platform == 'darwin' else value)
 
 
+def validate_prior_spec(spec):
+    require(set(spec) == {'run_id', 'step', 'model', 'files'}
+        and spec['run_id'] == PRIOR_RUN_ID and type(spec['step']) is int and spec['step'] == 530
+        and spec['model'] == dict(id=MODEL_ID, revision=MODEL_REVISION)
+        and set(spec['files']) == PRIOR_FILES, 'Original first-adapter inventory required')
+    weights = spec['files'][PRIOR_WEIGHT_PATH]
+    require(weights['bytes'] == PRIOR_WEIGHTS_BYTES and weights['sha256'] == PRIOR_WEIGHTS_SHA,
+        'Original first-adapter weights required; conversion forbidden')
+    require(all(spec['files'][name]['sha256'] == sha for name, sha in PRIOR_RECEIPT_SHA.items()),
+        'Original first-adapter metadata required')
+
+
+def prior_adapter_identity(plan):
+    spec = plan['workload']['prior_adapter']
+    validate_prior_spec(spec)
+    return dict(step=spec['step'], **{key: dict(spec['files'][name],
+        path='prior_adapter_artifact/' + name) for key, name in (
+            ('config', 'training/adapter/adapter_config.json'), ('weights', PRIOR_WEIGHT_PATH))})
+
+
+def validate_prior_metadata(root, spec, *, bundled=False):
+    validate_prior_spec(spec)
+    def artifact(name):
+        record = spec['files'][name]
+        return load(root, record if bundled else dict(record, path=name))
+    plan = artifact('plan.json')
+    require(plan.get('schema') == SCHEMA and plan['identity']['run_id'] == PRIOR_RUN_ID
+        and plan['recipe'] == recipe_for_rows(530) and 'prior_adapter' not in plan['workload']
+        and plan['model']['id'] == MODEL_ID and plan['model']['revision'] == MODEL_REVISION
+        and plan['model']['trust_remote_code'] is False, 'Original first-run plan differs')
+    suite_contracts(plan)
+    provenance = artifact('training/provenance.json')
+    training = artifact('training/training.json')
+    runtime = artifact('runtime.json')
+    admission = artifact('admission.json')
+    config = artifact('training/adapter/adapter_config.json')
+    require(provenance['schema'] == ADAPTER_SCHEMA and provenance['run_id'] == PRIOR_RUN_ID
+        and provenance['plan_sha256'] == spec['files']['plan.json']['sha256']
+        and provenance['source_manifest'] == plan['workload']['source_manifest']
+        and provenance['fresh'] is True and provenance['merged'] is False
+        and provenance['observed_steps'] == 530, 'Original adapter provenance differs')
+    for field, name in (('training', 'training/training.json'), ('runtime', 'runtime.json')):
+        require(provenance[field] == dict(spec['files'][name], path=name), 'Original receipt pin differs')
+    require(provenance['adapter'] == dict(step=530,
+        config=dict(spec['files']['training/adapter/adapter_config.json'], path='training/adapter/adapter_config.json'),
+        weights=dict(spec['files'][PRIOR_WEIGHT_PATH], path=PRIOR_WEIGHT_PATH)), 'Original adapter pins differ')
+    require(runtime['run_id'] == PRIOR_RUN_ID and runtime['plan_sha256'] == provenance['plan_sha256']
+        and runtime['packages'] == RUNTIME_PACKAGES and runtime['cuda'] == '12.8'
+        and runtime['name'] == 'NVIDIA L40S' and runtime['count'] == 1 and runtime['bf16'] is True,
+        'Original CUDA receipt differs')
+    require(training['status'] == 'complete' and training['steps'] == training['cumulative_steps'] == 530
+        and training['init_adapter'] is None and training['base_model_id'] == MODEL_ID
+        and training['base_revision'] == MODEL_REVISION and training['train_rows'] == 1060
+        and training['manifest_sha256'] == plan['data']['manifest']['sha256']
+        and admission['training_rows'] == 530 and len(admission['training_ids']) == 530,
+        'Original training receipt differs')
+    require(config['r'] == 16 and config['lora_alpha'] == 32 and config['lora_dropout'] == 0
+        and config['peft_type'] == 'LORA' and config['task_type'] == 'CAUSAL_LM',
+        'Original adapter configuration differs')
+    return plan
+
+
+def validate_prior_adapter(root, spec):
+    plan = validate_prior_metadata(root, spec)
+    bound(root, dict(spec['files'][PRIOR_WEIGHT_PATH], path=PRIOR_WEIGHT_PATH))
+    validate_training(root, plan)
+    return read_json(Path(root) / 'training/provenance.json')['adapter']
+
+
+def validate_prior_bundle(root, spec):
+    validate_prior_metadata(root, spec, bundled=True)
+    bound(root, spec['files'][PRIOR_WEIGHT_PATH])
+
+
+def prepare_prior_adapter(source, output, root):
+    source = resolved_path(source)
+    files = {name: pin(safe_path(source, name), source) for name in sorted(PRIOR_FILES)}
+    spec = dict(run_id=PRIOR_RUN_ID, step=530, model=dict(id=MODEL_ID, revision=MODEL_REVISION),
+        files=files)
+    validate_prior_adapter(source, spec)
+    destination = output / 'prior_adapter_artifact'
+    for name in sorted(PRIOR_FILES):
+        path = destination / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(safe_path(source, name), path)
+        files[name] = pin(path, root)
+    validate_prior_bundle(root, spec)
+    require(sum(record['bytes'] for record in files.values()) < 256 * 1024**2,
+        'Original prior adapter exceeds comparator bundle cap')
+    return spec
+
+
 def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_manifest,
-                       holdout_manifest, diagnostic_manifest):
+                       suite_manifests, prior_adapter_export=None):
     root, source, output = map(resolved_path, (root, admitted_manifest, output))
     require(output.is_relative_to(root) and not output.exists(), 'New repository-local projection required')
     admitted = read_json(source)
@@ -305,15 +472,19 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
             and pin(review)['sha256'] == record['sha256'] and review.stat().st_size == record['bytes'], 'Review pin changed')
     public = {}
     combined = []
-    for name, location in [('holdout', holdout_manifest), ('diagnostic', diagnostic_manifest)]:
+    require(isinstance(suite_manifests, dict) and suite_manifests, 'Explicit public suite manifests required')
+    for name, location in sorted(suite_manifests.items()):
         location = resolved_path(location)
         manifest = read_json(location)
         input_path = bound(location.parent, manifest['inputs'])
         inputs = read_json(input_path)
-        validate_suite(manifest, inputs, name, manifest['inputs'])
-        public[name] = (location, input_path)
+        contract = dict(case_count=manifest['case_count'], scope=manifest['scope'],
+            expected_tasks=manifest['expected_tasks'], inputs=manifest['inputs'], manifest=pin(location, root))
+        suite_contracts(dict(workload=dict(suites={name: contract})))
+        validate_suite(manifest, inputs, name, manifest['inputs'], contract)
+        public[name] = (location, input_path, contract)
         combined.extend(inputs)
-    ids = validate_public_rows(combined, EVALUATION_ROWS)
+    ids = validate_public_rows(combined, sum(item[2]['case_count'] for item in public.values()))
     require(not set(ids).intersection(r['id'] for r in rows), 'Training/evaluation overlap')
     require(set(sources) == SOURCE_NAMES and len(sources) == len(SOURCE_NAMES), 'Exact executable source set required')
     source_records = [pin(safe_path(root, name), root) for name in sorted(sources)]
@@ -327,20 +498,24 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
     write_json(output / 'evaluation-inputs.json', combined)
     write_json(output / 'source-manifest.json', dict(schema=SOURCE_MANIFEST_SCHEMA, files=source_records))
     workload = dict(evaluation_inputs=pin(output / 'evaluation-inputs.json', root),
-        source_manifest=pin(output / 'source-manifest.json', root), acquisition_manifest=acquisition, generation=GENERATION)
-    for name, (manifest_path, inputs_path) in public.items():
+        source_manifest=pin(output / 'source-manifest.json', root), acquisition_manifest=acquisition,
+        generation=GENERATION, suites={})
+    for name, (manifest_path, inputs_path, contract) in public.items():
         directory = output / name
         directory.mkdir()
         (directory / 'manifest.json').write_bytes(manifest_path.read_bytes())
         (directory / 'inputs.json').write_bytes(inputs_path.read_bytes())
-        workload[name + '_manifest'] = pin(directory / 'manifest.json', root)
-        workload[name + '_inputs'] = pin(directory / 'inputs.json', root)
+        workload['suites'][name] = dict(contract, manifest=pin(directory / 'manifest.json', root),
+            inputs=pin(directory / 'inputs.json', root))
+    if prior_adapter_export is not None:
+        workload['prior_adapter'] = prepare_prior_adapter(prior_adapter_export, output, root)
     data = dict(manifest=pin(output / 'training-manifest.json', root), train=train_pin,
         admitted_manifest=pin(output / 'admitted-manifest.json', root))
     admission = dict(schema=CLOUD_ADMISSION_SCHEMA, profile=PROFILE, state='ADMITTED_FOR_RESEARCH',
         training_ready=True, semantic_evaluated=False, expert_certified=False,
         admitted_manifest=data['admitted_manifest'], train=train_pin, recipe=recipe,
-        evaluation_inputs=workload['evaluation_inputs'], training_rows=admitted['rows'], evaluation_rows=EVALUATION_ROWS,
+        evaluation_inputs=workload['evaluation_inputs'], training_rows=admitted['rows'],
+        evaluation_rows=evaluation_rows(dict(workload=workload)),
         training_ids=[r['id'] for r in rows], review_sha256=[r['sha256'] for r in admitted['reviews']])
     write_json(output / 'admission.json', admission)
     data['admission'] = pin(output / 'admission.json', root)
@@ -351,10 +526,13 @@ def prepare_projection(admitted_manifest, output, *, root, sources, acquisition_
 
 
 def generation_binding(plan, arm, adapter=None):
-    require(is_public(plan) and arm in ('baseline', 'adapter'), 'Sealed generation recipe required')
+    require(is_public(plan), 'Sealed generation recipe required')
     recipe = validate_recipe(plan['recipe'])
+    require(arm in evaluation_arms(plan), 'Sealed generation recipe required')
     require((adapter is None) == (arm == 'baseline'), 'Adapter/base identity mismatch')
-    if adapter is not None:
+    if arm == 'prior_adapter':
+        require(adapter == prior_adapter_identity(plan), 'Sealed prior adapter identity differs')
+    elif adapter is not None:
         require(set(adapter) == {'config', 'weights', 'step'} and adapter['step'] == recipe['steps'],
             'Only sealed final-step adapter admitted')
     return dict(schema=GENERATION_BINDING_SCHEMA, run_id=plan['identity']['run_id'], arm=arm,
@@ -362,19 +540,21 @@ def generation_binding(plan, arm, adapter=None):
         source_manifest=plan['workload']['source_manifest'], recipe_sha256=object_sha(recipe), adapter=adapter)
 
 
-def output_members(plan=None):
+def output_members(plan):
     names = {'plan.json', 'runtime.json', 'runtime.log', 'model-acquisition.json', 'source-manifest.json',
         'admission.json', 'evaluation-inputs.json', 'worker-result.json', 'training/training.json',
         'training/provenance.json', 'training/adapter/adapter_config.json',
         'training/adapter/adapter_model.safetensors', 'training/adapter/README.md'}
     names.update(phase + '.log' for phase in ('acquire', 'baseline', 'train', 'adapter'))
-    for name in SUITES:
+    for name in suite_contracts(plan):
         names.update('suites/' + name + '/' + filename for filename in ('manifest.json', 'inputs.json'))
     names.update('tokenizer/' + name for name in ('tokenizer.json', 'tokenizer_config.json',
         'chat_template.jinja', 'special_tokens_map.json', 'vocab.json', 'merges.txt', 'added_tokens.json'))
-    for arm in ('baseline', 'adapter'):
+    if 'prior_adapter' in plan['workload']:
+        names.update('prior_adapter_artifact/' + name for name in PRIOR_FILES)
+    for arm in evaluation_arms(plan):
         names.update(arm + '/' + name for name in ('prompt-preflight.json', 'loaded-runtime.json', 'completion.json'))
-        for suite in SUITES:
+        for suite in suite_contracts(plan):
             names.update(arm + '/' + suite + '/' + name for name in ('responses.jsonl', 'runtime.json', 'completion.json'))
     return names
 
@@ -416,10 +596,11 @@ def validate_terminal(plan, plan_sha, instance_id, completion):
 
 def validate_export(root, plan):
     root = Path(root)
-    optional = {n for n in output_members() if n.endswith('.log') or n.endswith('/README.md') or n.startswith('tokenizer/')}
-    required = output_members() - optional | {'tokenizer/tokenizer.json', 'tokenizer/tokenizer_config.json'}
+    members = output_members(plan)
+    optional = {n for n in members if n.endswith('.log') or n.endswith('/README.md') or n.startswith('tokenizer/')}
+    required = members - optional | {'tokenizer/tokenizer.json', 'tokenizer/tokenizer_config.json'}
     require(all((root / n).is_file() and not (root / n).is_symlink() for n in required), 'Successful export missing evidence')
-    require({p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()} <= output_members() | {'export-manifest.json'},
+    require({p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()} <= members | {'export-manifest.json'},
         'Forbidden export payload')
     require(read_json(root / 'plan.json') == plan, 'Export plan differs')
     for name, record in [('admission.json', plan['data']['admission']), ('evaluation-inputs.json', plan['workload']['evaluation_inputs']),
@@ -430,11 +611,14 @@ def validate_export(root, plan):
         and acquisition['revision'] == MODEL_REVISION and acquisition['files'] ==
         [{k: row[k] for k in ('path', 'bytes', 'sha256')} for row in plan['model']['files']], 'Actual model acquisition differs')
     validate_training(root, plan)
-    for arm in ('baseline', 'adapter'):
+    if 'prior_adapter' in plan['workload']:
+        validate_prior_adapter(root / 'prior_adapter_artifact', plan['workload']['prior_adapter'])
+    for arm in evaluation_arms(plan):
         validate_outputs(root, plan, arm)
     worker = read_json(root / 'worker-result.json')
+    answers = evaluation_rows(plan) * len(evaluation_arms(plan))
     require(worker['status'] == 'complete' and worker['run_id'] == plan['identity']['run_id']
-        and worker['plan_sha256'] == pin(root / 'plan.json')['sha256'] and worker['assessment_answers'] == 388
+        and worker['plan_sha256'] == pin(root / 'plan.json')['sha256'] and worker['assessment_answers'] == answers
         and worker['quality_accepted'] is False, 'Incomplete worker outcome')
     runtime = read_json(root / 'runtime.json')
     require([s['phase'] for s in worker['stages']] == ['baseline', 'train', 'adapter'], 'Wrong supervised phase order')
@@ -445,18 +629,25 @@ def validate_export(root, plan):
             and stage['unit'] == plan['identity']['run_id'] + '-' + stage['phase']
             and stage['stopped_state']['ActiveState'] in ('inactive', 'failed') and stage['gpu'], 'Owned export cleanup differs')
     return dict(status='complete', public_work_success=True, training_success=True, evaluation_success=True,
-        assessment_answers=388, completion_scope=COMPLETION_SCOPE, quality_accepted=False)
+        assessment_answers=answers, completion_scope=COMPLETION_SCOPE, quality_accepted=False)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('admitted-manifest', 'output', 'root', 'acquisition-manifest', 'holdout-manifest', 'diagnostic-manifest'):
+    for name in ('admitted-manifest', 'output', 'root', 'acquisition-manifest'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--source', action='append', required=True)
+    parser.add_argument('--suite', action='append', required=True, metavar='NAME=MANIFEST')
+    parser.add_argument('--prior-adapter-export', type=Path)
     args = parser.parse_args(argv)
+    suites = {}
+    for value in args.suite:
+        name, separator, path = value.partition('=')
+        require(separator and name and path and name not in suites, 'Unique NAME=MANIFEST suite arguments required')
+        suites[name] = Path(path)
     result = prepare_projection(args.admitted_manifest, args.output, root=args.root, sources=args.source,
-        acquisition_manifest=args.acquisition_manifest, holdout_manifest=args.holdout_manifest,
-        diagnostic_manifest=args.diagnostic_manifest)
+        acquisition_manifest=args.acquisition_manifest, suite_manifests=suites,
+        prior_adapter_export=args.prior_adapter_export)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

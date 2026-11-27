@@ -1,10 +1,11 @@
 """Sealed public_work_v1 CUDA execution; never a CPU guard/authentication receipt.
 
-Acquire pinned public weights, generate both full suites on the base, train exactly
-two exposures of each admitted row, then generate the same suites with final LoRA.
+Acquire pinned public weights, evaluate the base and optional original adapter,
+train exactly two exposures of each admitted row, then evaluate the fresh LoRA.
 The shared root supervisor owns resource enforcement, freezing, export and shutdown.
 """
 from collections import Counter
+import gc
 import hashlib
 import json
 import math
@@ -24,7 +25,6 @@ else:
 RUNTIME_SCHEMA = 'public_work_gpu_runtime_v1'
 COMPLETION_SCHEMA = 'public_work_gpu_completion_v1'
 RECEIPT_SCHEMA = 'public_work_gpu_hf_v1'
-SUITES = {'holdout': ('development_holdout', 170), 'diagnostic': ('diagnostic', 24)}
 TOKENIZER_FILES = frozenset(('tokenizer.json', 'tokenizer_config.json', 'chat_template.jinja',
                              'special_tokens_map.json', 'vocab.json', 'merges.txt', 'added_tokens.json'))
 save_new = shared.save_new
@@ -129,8 +129,10 @@ def train_stage(core, plan, base, torch):
     from transformers import AutoTokenizer
     base = Path(base)
     root = base / 'output'
-    # Baseline acceptance is a prerequisite, never inferred from the phase name.
-    validate_outputs(root, plan, 'baseline')
+    # Both frozen comparators must pass before any fresh training begins.
+    for arm in P.evaluation_arms(plan):
+        if arm != 'adapter':
+            validate_outputs(root, plan, arm)
     tokenizer = AutoTokenizer.from_pretrained(base / 'model', local_files_only=True, trust_remote_code=False)
     observer, measured = training_observer(plan, torch, tokenizer.eos_token_id)
     argv = core.train_argv(plan, base)
@@ -193,7 +195,7 @@ def evaluation_stage(core, plan, base, torch, arm):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     base = Path(base)
     root, E = base / 'output', helpers()
-    P.require(arm in ('baseline', 'adapter'), 'Unknown public-work evaluation arm')
+    P.require(arm in P.evaluation_arms(plan), 'Unknown public-work evaluation arm')
     cases = P.validate_data(base / 'code', plan)['evaluation_inputs']
     folder = root / arm
     folder.mkdir(mode=0o700)
@@ -204,21 +206,27 @@ def evaluation_stage(core, plan, base, torch, arm):
     save_new(folder / 'prompt-preflight.json', dict(status='passed', all_cases_preflighted_before_weights=True,
         truncation=False, prompts=prepared))
     adapter = None
+    training_root = root / 'training'
     if arm == 'adapter':
         validate_training(root, plan)
         adapter = adapter_identity(root, plan)
+    elif arm == 'prior_adapter':
+        artifact_root = root / 'prior_adapter_artifact'
+        P.validate_prior_adapter(artifact_root, plan['workload']['prior_adapter'])
+        adapter = P.prior_adapter_identity(plan)
+        training_root = artifact_root / 'training'
     model = AutoModelForCausalLM.from_pretrained(base / 'model', torch_dtype=torch.bfloat16,
         local_files_only=True, trust_remote_code=False, device_map={'': 'cuda:0'}, attn_implementation='sdpa')
     P.require(model.config.max_position_embeddings >= 4096, 'Requested context exceeds model limit')
     if adapter is not None:
         from peft import PeftModel
-        model = PeftModel.from_pretrained(model, root / 'training/adapter', is_trainable=False,
+        model = PeftModel.from_pretrained(model, training_root / 'adapter', is_trainable=False,
                                          local_files_only=True, autocast_adapter_dtype=True)
-        shared.verify_loaded_adapter(model, root / 'training/adapter/adapter_model.safetensors', torch)
+        shared.verify_loaded_adapter(model, training_root / 'adapter/adapter_model.safetensors', torch)
     model.requires_grad_(False)
     model.eval()
     inventory = shared.parameter_inventory(model, torch)
-    P.require(bool(inventory['adapter']) == (arm == 'adapter'), 'Wrong adapter loaded for arm')
+    P.require(bool(inventory['adapter']) == (adapter is not None), 'Wrong adapter loaded for arm')
     release = read_json(base / 'release.json')
     loaded = dict(device='cuda', dtype='torch.bfloat16', frozen=True, adapter_merged=False,
         parameter_inventory=inventory, adapter=adapter, cpu_fallback=False,
@@ -232,7 +240,8 @@ def evaluation_stage(core, plan, base, torch, arm):
     binding = P.generation_binding(plan, arm, adapter)
     totals = dict(rows=0, exception_rows=0, length_rows=0)
     completions = {}
-    for name, (scope, count) in SUITES.items():
+    for name, contract in P.suite_contracts(plan).items():
+        scope, count = contract['scope'], contract['case_count']
         suite_folder = folder / name
         suite_folder.mkdir(mode=0o700)
         suite_path = root / 'suites' / name / 'manifest.json'
@@ -242,10 +251,10 @@ def evaluation_stage(core, plan, base, torch, arm):
         P.require(suite['scope'] == scope and len(rows) == count, 'Sealed suite identity differs')
         identity = dict(repo_id=plan['model']['id'], revision=plan['model']['revision'])
         runtime_adapter = None if adapter is None else dict(
-            provenance=relative_pin(root / 'training/provenance.json', suite_folder),
-            training=relative_pin(root / 'training/training.json', suite_folder),
+            provenance=relative_pin(training_root / 'provenance.json', suite_folder),
+            training=relative_pin(training_root / 'training.json', suite_folder),
             files=[relative_pin(root / adapter[k]['path'], suite_folder) for k in ('config', 'weights')],
-            model_identity=identity, representation='unmerged_peft', steps=plan['recipe']['steps'])
+            model_identity=identity, representation='unmerged_peft', steps=adapter['step'])
         runtime = dict(schema=RUNTIME_SCHEMA, suite_scope=scope,
             suite_manifest=relative_pin(suite_path, suite_folder), source=suite['source'],
             inputs=relative_pin(inputs_path, suite_folder), model_identity=identity,
@@ -271,6 +280,11 @@ def evaluation_stage(core, plan, base, torch, arm):
     save_new(folder / 'completion.json', dict(status='complete', arm=arm, **totals,
                                             suites=completions, quality_accepted=False))
     validate_outputs(root, plan, arm)
+    # The baseline child evaluates the prior arm next in this same GPU phase.
+    # Drop every model reference before releasing cached CUDA allocations.
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 def validate_training(root, plan):
@@ -354,7 +368,8 @@ def validate_gpu_runtime(directory, runtime):
               and plan['model']['id'] == P.MODEL_ID and plan['model']['revision'] == P.MODEL_REVISION,
               'Unsupported GPU public-work contract')
     arm, suite_name = directory.parent.name, directory.name
-    P.require(arm in ('baseline', 'adapter') and suite_name in SUITES, 'Unknown GPU suite/arm')
+    contracts = P.suite_contracts(plan)
+    P.require(arm in P.evaluation_arms(plan) and suite_name in contracts, 'Unknown GPU suite/arm')
     P.require(runtime['schema'] == RUNTIME_SCHEMA and runtime['device'] == 'cuda'
         and runtime['cpu_fallback'] is False and runtime['research_only'] is True
         and runtime['quality_accepted'] is False
@@ -380,10 +395,14 @@ def validate_gpu_runtime(directory, runtime):
         and value['elements'] > 0 and value['bytes'] == value['elements'] * 2
         for key, value in inventory['base'].items()), 'Actual CUDA base precision differs')
     adapter = None
-    if arm == 'adapter':
-        validate_training(root, plan)
+    if arm != 'baseline':
+        if arm == 'prior_adapter':
+            P.validate_prior_adapter(root / 'prior_adapter_artifact', plan['workload']['prior_adapter'])
+            adapter = P.prior_adapter_identity(plan)
+        else:
+            validate_training(root, plan)
+            adapter = adapter_identity(root, plan)
         P.validate_inventory(inventory)
-        adapter = adapter_identity(root, plan)
         P.require(loaded['adapter_reload_equal'] is True and runtime['adapter'] is not None,
                   'Missing actual adapter reload proof')
     else:
@@ -396,11 +415,12 @@ def validate_gpu_runtime(directory, runtime):
     acquisition = read_json(acquisition_path)
     P.require(acquisition['files'] == expected_files and acquisition['status'] == 'authenticated'
               and acquisition['plan_sha256'] == P.pin(plan_path)['sha256'], 'GPU acquisition inventory differs')
-    for key, field in (('suite_manifest', suite_name + '_manifest'), ('inputs', suite_name + '_inputs')):
+    contract = contracts[suite_name]
+    for key, field in (('suite_manifest', 'manifest'), ('inputs', 'inputs')):
         actual = P.pin(E.pinned_path(directory, runtime[key]))
-        P.require(all(actual[k] == plan['workload'][field][k] for k in ('sha256', 'bytes')),
+        P.require(all(actual[k] == contract[field][k] for k in ('sha256', 'bytes')),
                   'GPU suite not bound to sealed plan')
-    scope, count = SUITES[suite_name]
+    scope, count = contract['scope'], contract['case_count']
     suite = read_json(E.pinned_path(directory, runtime['suite_manifest']))
     rows = helpers().validate_public_rows(read_json(E.pinned_path(directory, runtime['inputs'])))
     P.require(runtime['suite_scope'] == suite['scope'] == scope and len(rows) == count,
@@ -409,18 +429,21 @@ def validate_gpu_runtime(directory, runtime):
 
 
 def validate_outputs(root, plan, arm, *, smoke=False):
-    P.require(not smoke and arm in ('baseline', 'adapter'), 'Only complete GPU paired evaluation admitted')
+    P.require(not smoke and arm in P.evaluation_arms(plan), 'Only complete GPU evaluation admitted')
     root, E = Path(root), evaluator()
     completion = read_json(root / arm / 'completion.json')
     preflight = read_json(root / arm / 'prompt-preflight.json')
     cases = helpers().validate_public_rows(read_json(root / 'evaluation-inputs.json'))
     P.require(preflight['status'] == 'passed' and preflight['all_cases_preflighted_before_weights'] is True
-              and preflight['truncation'] is False and len(cases) == 194
+              and preflight['truncation'] is False and len(cases) == P.evaluation_rows(plan)
               and [p['id'] for p in preflight['prompts']] == [c['id'] for c in cases],
               'Complete preweight prompt admission missing')
     prepared = {p['id']: p for p in preflight['prompts']}
     observed, exceptions, lengths = [], 0, 0
-    for name, (scope, count) in SUITES.items():
+    contracts = P.suite_contracts(plan)
+    P.require(set(completion['suites']) == set(contracts), 'GPU completion suite set differs')
+    for name, contract in contracts.items():
+        scope, count = contract['scope'], contract['case_count']
         folder = root / arm / name
         suite_path = root / 'suites' / name / 'manifest.json'
         suite = read_json(suite_path)
@@ -439,7 +462,7 @@ def validate_outputs(root, plan, arm, *, smoke=False):
             lengths += record['finish_reason'] == 'length'
     P.require([r['id'] for r in observed] == [c['id'] for c in cases]
         and completion['status'] == 'complete' and completion['arm'] == arm
-        and completion['rows'] == 194 and completion['exception_rows'] == exceptions == 0
+        and completion['rows'] == P.evaluation_rows(plan) and completion['exception_rows'] == exceptions == 0
         and completion['length_rows'] == lengths and completion['quality_accepted'] is False,
         'Full ordered paired generation acceptance differs')
     return observed
@@ -455,6 +478,8 @@ def child_stage(core, plan, base, phase):
         train_stage(core, plan, base, torch)
     else:
         evaluation_stage(core, plan, base, torch, phase)
+        if phase == 'baseline' and 'prior_adapter' in P.evaluation_arms(plan):
+            evaluation_stage(core, plan, base, torch, 'prior_adapter')
 
 
 def run_experiment(core, plan, base, report, gpu, account, work_deadline,
@@ -476,9 +501,8 @@ def run_experiment(core, plan, base, report, gpu, account, work_deadline,
         (base / 'code' / plan['workload']['source_manifest']['path'], 'source-manifest.json'),
         (base / 'code' / plan['workload']['evaluation_inputs']['path'], 'evaluation-inputs.json'),
         (base / 'code' / plan['data']['admission']['path'], 'admission.json')]
-    for name in SUITES:
-        copies.extend((base / 'code' / plan['workload'][name + '_' + key]['path'],
-                       'suites/' + name + '/' + target)
+    for name, contract in P.suite_contracts(plan).items():
+        copies.extend((base / 'code' / contract[key]['path'], 'suites/' + name + '/' + target)
                       for key, target in (('manifest', 'manifest.json'), ('inputs', 'inputs.json')))
     copies.extend((base / 'model' / p['path'], 'tokenizer/' + p['path'])
                   for p in plan['model']['files'] if p['path'] in TOKENIZER_FILES)
@@ -487,6 +511,13 @@ def run_experiment(core, plan, base, report, gpu, account, work_deadline,
         shared.freeze(root / target)
     for name in ('model-acquisition.json', 'suites', 'tokenizer'):
         shared.freeze(root / name)
+    prior = plan['workload'].get('prior_adapter')
+    if prior is not None:
+        artifact_root = root / 'prior_adapter_artifact'
+        for original, pin in prior['files'].items():
+            copy_new(base / 'code' / pin['path'], artifact_root / original)
+        P.validate_prior_adapter(artifact_root, prior)
+        shared.freeze(artifact_root)
     for phase in ('baseline', 'train', 'adapter'):
         unit = core.supervise_phase(plan, base, phase, gpu, account.pw_uid, account.pw_gid,
                                     work_deadline, units)
@@ -496,9 +527,12 @@ def run_experiment(core, plan, base, report, gpu, account, work_deadline,
             validate_training(root, plan)
             shared.freeze(root / 'training')
         else:
-            validate_outputs(root, plan, phase)
-            shared.freeze(root / phase)
+            arms = P.evaluation_arms(plan)[:-1] if phase == 'baseline' else ('adapter',)
+            for arm in arms:
+                validate_outputs(root, plan, arm)
+                shared.freeze(root / arm)
     save_new(root / 'worker-result.json', dict(status='complete', run_id=plan['identity']['run_id'],
-        plan_sha256=core.digest(base / 'plan.json'), assessment_answers=388,
+        plan_sha256=core.digest(base / 'plan.json'),
+        assessment_answers=P.evaluation_rows(plan) * len(P.evaluation_arms(plan)),
         quality_accepted=False, stages=report['stages']))
     shared.freeze(root / 'worker-result.json')
